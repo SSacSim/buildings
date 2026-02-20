@@ -702,6 +702,10 @@ class CustomerCreate(BaseModel):
     intro_properties: List[CustomerIntroProperty] = Field(default_factory=list)
 
 
+class CustomerDeleteRequest(BaseModel):
+    customer_number: int
+
+
 def insert_intro_properties(cur, customer_number: int, intro_properties: List[CustomerIntroProperty]):
     for item in intro_properties:
         cur.execute(
@@ -776,6 +780,58 @@ async def create_customer(data: CustomerCreate):
             conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.post("/api/customer/delete")
+def delete_customer(req: CustomerDeleteRequest):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        customer_number = req.customer_number
+
+        cur.execute(
+            """
+            UPDATE customer_info
+            SET delete_flag = TRUE, update_time = CURRENT_TIMESTAMP
+            WHERE customer_number = %s
+            """,
+            (customer_number,)
+        )
+
+        cur.execute(
+            """
+            UPDATE customer_intro_property
+            SET delete_flag = TRUE, update_time = CURRENT_TIMESTAMP
+            WHERE customer_number = %s AND delete_flag = FALSE
+            """,
+            (customer_number,)
+        )
+
+        # customer_id 테이블이 있으면 함께 soft-delete
+        cur.execute(
+            """
+            UPDATE customer_id
+            SET delete_flag = TRUE
+            WHERE customer_number = %s
+            """,
+            (customer_number,)
+        )
+
+        conn.commit()
+        return {"status": "deleted", "customer_number": customer_number}
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur:
             cur.close()

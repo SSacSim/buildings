@@ -388,7 +388,7 @@ function deleteBuilding() {
         })
         .then(() => {
             alert("삭제 완료");
-            location.reload();
+            location.href = "/customer/new";
         })
         .catch(err => {
             console.error(err);
