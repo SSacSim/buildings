@@ -1,0 +1,3 @@
+ALTER TABLE customer_intro_property
+ADD COLUMN IF NOT EXISTS manager_name VARCHAR(255);
+

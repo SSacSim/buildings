@@ -1,0 +1,63 @@
+CREATE TABLE building_info (
+    bd_number                          INTEGER PRIMARY KEY,
+    bd_name                            VARCHAR(255),
+
+    address                            VARCHAR(255),
+    address_detail                     VARCHAR(255),
+    nearby_station                     VARCHAR(255),
+
+    deposit_price                      INTEGER,
+    other_sale_price                  INTEGER,
+    sale_price                         INTEGER,
+    yield_rate                         INTEGER,
+    security_deposit                  INTEGER,
+    price_per_pyeong                  INTEGER,
+    monthly_rent_fee                  INTEGER,
+
+    maintenance_expense               INTEGER,
+    maintenance_fee                   INTEGER,
+    maintenance_other_fee             INTEGER,
+
+    loan_status                        BOOLEAN,
+
+    land_category                     VARCHAR(255),
+    zoning_type                       VARCHAR(255),
+
+    land_area_pyeong                  INTEGER,
+    land_area_sqm                     INTEGER,
+
+    official_price_per_sqm_won         INTEGER,
+    official_price_per_pyeong_million INTEGER,
+    official_price_total_million      INTEGER,
+
+    road_access                       VARCHAR(255),
+    approval_date                     TIMESTAMP,
+
+    heating_cooling                   VARCHAR(255),
+
+    gross_area_pyeong                 INTEGER,
+    gross_area_sqm                    INTEGER,
+
+    underground_floors                INTEGER,
+    aboveground_floors                INTEGER,
+    elevator                          INTEGER,
+
+    building_coverage_ratio           INTEGER,
+    floor_area_ratio                  INTEGER,
+
+    parking_type                      VARCHAR(255),
+    parking_capacity                  INTEGER,
+
+    client_name                       VARCHAR(255),
+    mobile_phone                      VARCHAR(255),
+    email                             VARCHAR(255),
+    office_phone                      VARCHAR(255),
+    home_phone                        VARCHAR(255),
+
+    orientation                       VARCHAR(255),
+
+    CONSTRAINT fk_building_info_id
+        FOREIGN KEY (bd_number)
+        REFERENCES building_id (bd_number)
+        ON DELETE CASCADE
+);

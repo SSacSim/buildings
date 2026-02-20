@@ -1,0 +1,32 @@
+
+--- 저장 시도 시간: 2026-01-04 01:39:25.963604 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [LeaseDetail(floor='0', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0'), LeaseDetail(floor='0', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0')]
+
+--- 저장 시도 시간: 2026-01-04 01:39:33.792649 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [LeaseDetail(floor='0', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0')]
+
+--- 저장 시도 시간: 2026-01-04 01:42:40.102848 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [LeaseDetail(floor='333', business_type='44234', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0'), LeaseDetail(floor='555', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0'), LeaseDetail(floor='3333', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0')]
+
+--- 저장 시도 시간: 2026-01-04 01:42:40.102848 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [LeaseDetail(floor='333', business_type='44234', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0'), LeaseDetail(floor='555', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0'), LeaseDetail(floor='3333', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0')]
+
+--- 저장 시도 시간: 2026-01-04 01:42:40.103849 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [LeaseDetail(floor='333', business_type='44234', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0'), LeaseDetail(floor='555', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0'), LeaseDetail(floor='3333', business_type='0', deposit='0', monthly_rent='0', maintenance_fee='0', area='0', remark='0')]
+
+--- 저장 시도 시간: 2026-01-04 01:42:40.103849 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [historyDetail(writer='작성자', write_time='26-01-04 오전 1:39', memo='류륳류')]
+
+--- 저장 시도 시간: 2026-01-04 01:43:03.672780 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [historyDetail(writer='작성자', write_time='26-01-04 오전 1:39', memo='류륳류')]
+
+--- 저장 시도 시간: 2026-01-04 01:43:14.951773 ---
+전체 데이터 타입: <class 'list'>
+전체 데이터 내용: [historyDetail(writer='ㅂㄷㅈㅂㅈㄷㅂ', write_time='26-01-04 오전 1:43', memo='융류ㅠㅎ류'), historyDetail(writer='작성자', write_time='26-01-04 오전 1:39', memo='류륳류')]

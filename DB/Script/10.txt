@@ -1,0 +1,5 @@
+ALTER TABLE building_info
+ADD COLUMN parking_outdoor_mechanical VARCHAR,
+ADD COLUMN parking_outdoor_self VARCHAR,
+ADD COLUMN parking_indoor_mechanical VARCHAR,
+ADD COLUMN parking_indoor_self VARCHAR;

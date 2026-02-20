@@ -1,0 +1,27 @@
+CREATE TABLE image_info (
+    img_number SERIAL PRIMARY KEY,           -- 고유 넘버 (자동 증가)
+
+    bd_number INTEGER,           -- 제품 번호
+    section VARCHAR(50),             -- main / sub
+    section_index INTEGER,       -- 0~5 (문자열로 저장)
+    
+    root_path VARCHAR(255),          -- bd_number 이전까지 경로
+    img_name VARCHAR(255),           -- 파일명 (확장자 포함)
+
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delete_flag BOOLEAN DEFAULT FALSE         -- 삭제 여부 플래그
+);
+
+CREATE OR REPLACE FUNCTION update_modified_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_time
+BEFORE UPDATE ON image_info
+FOR EACH ROW
+EXECUTE FUNCTION update_modified_time();

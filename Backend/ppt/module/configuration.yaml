@@ -1,0 +1,23 @@
+main_person:
+  - "유지혜 Director"
+  - ""
+  - "D 02. 6003. 5070"
+  - "M 010. 6321. 4987"
+  - "yu2233@erakorea.com"
+
+sub_person:
+  - "이태훈 Senior Manager"
+  - ""
+  - "D 02. 6003. 5072"
+  - "M 010. 4009. 2545"
+  - "peter072@erakorea.com"
+
+path:
+  C:/Users/sim/Desktop/Building/Backend
+
+
+ppt_template_path:
+  C:/Users/sim/Desktop/Building/Backend/ppt/statics/template.pptx
+
+  
+

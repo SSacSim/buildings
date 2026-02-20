@@ -1,0 +1,18 @@
+Backend/save_file/
+
+# Binary assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+*.svg
+*.tif
+*.tiff
+*.ico
+*.pptx
+*.xlsx
+
+# Local runtime config
+settings.yaml

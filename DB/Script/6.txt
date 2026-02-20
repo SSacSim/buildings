@@ -1,0 +1,29 @@
+CREATE TABLE working_history (
+    -- 자동 생성 및 고유 번호 (기존 타입 유지)
+    wh_number SERIAL PRIMARY KEY,
+    bd_number INT NOT NULL,
+    
+    writer VARCHAR(50),                      -- 작성자
+    write_time VARCHAR(50),
+    memo TEXT,                               -- 진행 내역 메모
+    
+    -- 상태 및 시간 기록 (기존 타입 유지)
+    create_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delete_flag    BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- update_time 자동 갱신 트리거 설정
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_working_history_modtime
+    BEFORE UPDATE ON working_history
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_modified_column();
+

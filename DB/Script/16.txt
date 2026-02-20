@@ -1,0 +1,52 @@
+CREATE TABLE customer_id (
+    customer_number   SERIAL PRIMARY KEY,
+
+    register_id_number VARCHAR(255),
+
+    create_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delete_flag        BOOLEAN DEFAULT FALSE
+);
+
+CREATE OR REPLACE FUNCTION update_customer_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER customer_update_time
+BEFORE UPDATE ON customer_id
+FOR EACH ROW
+EXECUTE FUNCTION update_customer_time();
+
+
+CREATE TABLE customer_info (
+    customer_number     INTEGER PRIMARY KEY,
+
+    status           VARCHAR(255),
+    buyer_name       VARCHAR(255),
+    company_address  VARCHAR(255),
+    ceo_name         VARCHAR(255),
+    home_address     VARCHAR(255),
+    phone            VARCHAR(255),
+    first_contact    VARCHAR(255),
+
+    create_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delete_flag      BOOLEAN DEFAULT FALSE
+);
+
+CREATE OR REPLACE FUNCTION update_customer_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER customer_update_time
+BEFORE UPDATE ON customer_info   -- ✅ 여기!
+FOR EACH ROW
+EXECUTE FUNCTION update_customer_time();

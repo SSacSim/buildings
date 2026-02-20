@@ -1,0 +1,34 @@
+CREATE TABLE detail_management (
+    -- 자동 생성 및 고유 번호 (기존 타입 유지)
+    dm_number SERIAL PRIMARY KEY,
+    bd_number INT NOT NULL,
+    
+    -- 요청하신 모든 상세 정보를 VARCHAR로 설정
+    floor VARCHAR(50),             -- 층
+    business_type VARCHAR(200),    -- 업종
+    deposit VARCHAR(100),          -- 보증금
+    monthly_rent VARCHAR(100),     -- 월세
+    maintenance_fee VARCHAR(100),  -- 관리비
+    area VARCHAR(100),             -- 면적
+    remark VARCHAR(1000),          -- 비고
+    
+    -- 상태 및 시간 기록 (기존 타입 유지)
+    create_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delete_flag    BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- update_time 자동 갱신 트리거 설정
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_detail_management_modtime
+    BEFORE UPDATE ON detail_management
+    FOR EACH ROW
+    EXECUTE PROCEDURE update_modified_column();
+

@@ -1,0 +1,2 @@
+ALTER TABLE customer_intro_property
+ADD COLUMN IF NOT EXISTS intro_note TEXT;

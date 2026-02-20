@@ -1,0 +1,8 @@
+ALTER TABLE building_info
+ADD COLUMN direction_basis VARCHAR,
+ADD COLUMN direction VARCHAR,
+ADD COLUMN room_count VARCHAR,
+ADD COLUMN bathroom_count VARCHAR;
+
+
+emergency_elevator

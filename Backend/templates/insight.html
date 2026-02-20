@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>통합 조회</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+    <header class="bg-white border-b border-slate-200 shadow-sm">
+        <div class="max-w-[1500px] mx-auto px-6 py-4 flex items-center justify-between">
+            <div>
+                <h1 class="text-xl font-bold text-slate-800">고객/빌딩 통합 조회</h1>
+                <p class="text-sm text-slate-500">매수조건 기반 재검색 + 고객/빌딩 분리 섹션</p>
+            </div>
+            <button type="button" onclick="handleCancel()" class="px-4 py-2 rounded-lg bg-slate-700 text-white font-semibold hover:bg-slate-800">
+                취소
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-[1500px] mx-auto px-6 py-6">
+        <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="font-bold text-slate-700">매수 조건 - 실제 매칭 필터</h2>
+                <div class="flex gap-2">
+                    <button id="resetBtn" type="button" class="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300">초기화</button>
+                    <button id="searchBtn" type="button" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">매칭 검색</button>
+                </div>
+            </div>
+
+            <div class="space-y-2 text-[13px] text-slate-700">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold min-w-[70px]">유형 조건:</span>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="NEW_SITE"> 신축부지</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="REMODELING"> 리모델링</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="OFFICE"> 사옥형</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="INVESTMENT"> 수익형</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="DEVELOPMENT"> 개발/전환</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="STABLE"> 보유안정</label>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold min-w-[70px]">용도지역:</span>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="COMMERCIAL"> 상업</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="INDUSTRIAL"> 공업</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="RESIDENTIAL"> 주거</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="OTHER"> 기타</label>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold min-w-[70px]">건축용도:</span>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="NEIGHBORHOOD"> 근린</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="OFFICE_USE"> 업무</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="LODGING"> 숙박</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="ENTERTAINMENT"> 위락</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="HOUSING"> 주택</label>
+                    <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="OTHER"> 기타</label>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold min-w-[70px]">주소 조건:</span>
+                        <input id="matchAddressInput" type="text" class="border-b border-slate-300 outline-none w-52 px-1" placeholder="[ 시 / 구 / 동 / 지번 키워드 ]">
+                        <span class="font-bold min-w-[40px] ml-2">상권:</span>
+                        <input id="matchBusinessAreaInput" type="text" class="border-b border-slate-300 outline-none w-36 px-1" placeholder="[ 입지 키워드 ]">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-16">수익률:</span>
+                        <span>≥</span>
+                        <input id="matchMinYieldInput" type="text" class="border-b w-10 text-center outline-none">
+                        <span>%</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold min-w-[70px]">주변역:</span>
+                        <input id="matchStationKeyword" type="text" class="border-b border-slate-300 outline-none w-28 px-1" placeholder="[ 역명 ]">
+                        <span class="font-bold min-w-[40px] ml-2">보도:</span>
+                        <input id="matchStationWalkMin" type="text" class="border-b w-10 text-center outline-none" placeholder="1">
+                        <span>~</span>
+                        <input id="matchStationWalkMax" type="text" class="border-b w-10 text-center outline-none" placeholder="15">
+                        <span class="text-[11px] text-slate-500">분</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">현금보유액:</span>
+                        <input id="matchCashHoldManwon" type="text" class="border-b w-16 text-center outline-none" placeholder="400,000">
+                        <span class="text-[11px] text-slate-500">만원</span>
+                        <input id="matchCashHoldPercent" type="text" class="border-b w-12 text-center outline-none ml-2" placeholder="60">
+                        <span>%</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-16">매매가:</span>
+                        <input id="matchMinPrice" type="text" class="border-b w-16 text-center" placeholder="1,000">
+                        <span>~</span>
+                        <input id="matchMaxPrice" type="text" class="border-b w-16 text-center" placeholder="10,000">
+                        <span class="text-[11px] text-slate-500">만원</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">토지 평단가:</span>
+                        <input id="matchLandPyeongMin" type="text" class="border-b w-16 text-center" placeholder="1,000">
+                        <span>~</span>
+                        <input id="matchLandPyeongMax" type="text" class="border-b w-16 text-center" placeholder="10,000">
+                        <span class="text-[11px] text-slate-500">만원</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">연면적 평단가:</span>
+                        <input id="matchGrossPyeongMin" type="text" class="border-b w-16 text-center" placeholder="1,000">
+                        <span>~</span>
+                        <input id="matchGrossPyeongMax" type="text" class="border-b w-16 text-center" placeholder="10,000">
+                        <span class="text-[11px] text-slate-500">만원</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">토지면적:</span>
+                        <input id="matchLandAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
+                        <span>~</span>
+                        <input id="matchLandAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
+                        <span class="text-[11px] text-slate-500">평</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">연면적:</span>
+                        <input id="matchGrossAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
+                        <span>~</span>
+                        <input id="matchGrossAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
+                        <span class="text-[11px] text-slate-500">평</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">사용가능 면적:</span>
+                        <input id="matchUsableAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
+                        <span>~</span>
+                        <input id="matchUsableAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
+                        <span class="text-[11px] text-slate-500">평</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">사용승인:</span>
+                        <input id="matchApprovalYearMin" type="text" class="border-b w-16 text-center" placeholder="2000">
+                        <span class="text-[11px] text-slate-500">년 이후</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">도로폭:</span>
+                        <input id="matchRoadWidthMin" type="text" class="border-b w-16 text-center" placeholder="8">
+                        <span class="text-[11px] text-slate-500">m 이상</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">승강기:</span>
+                        <select id="matchElevatorOption" class="border-b w-24 text-center outline-none bg-transparent">
+                            <option value="">선택</option>
+                            <option value="HAS">있음</option>
+                            <option value="NONE">없음</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">주차대수:</span>
+                        <input id="matchParkingMin" type="text" class="border-b w-16 text-center" placeholder="10">
+                        <span class="text-[11px] text-slate-500">대 이상</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div class="px-4 py-2 border-b border-slate-200 bg-slate-100 font-bold text-slate-700">고객명 섹션 (<span id="customerCount">0</span>)</div>
+                <div class="overflow-auto max-h-[70vh]">
+                    <table class="w-full text-sm">
+                        <thead class="sticky top-0 bg-slate-50 text-slate-700">
+                            <tr>
+                                <th class="px-3 py-2 text-left border-b">고객번호</th>
+                                <th class="px-3 py-2 text-left border-b">고객명</th>
+                                <th class="px-3 py-2 text-left border-b">연락처</th>
+                                <th class="px-3 py-2 text-left border-b">상권</th>
+                                <th class="px-3 py-2 text-left border-b">건물선호</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div class="px-4 py-2 border-b border-slate-200 bg-slate-100 font-bold text-slate-700">빌딩 섹션 (<span id="buildingCount">0</span>)</div>
+                <div class="overflow-auto max-h-[70vh]">
+                    <table class="w-full text-sm">
+                        <thead class="sticky top-0 bg-slate-50 text-slate-700">
+                            <tr>
+                                <th class="px-3 py-2 text-left border-b">건물번호</th>
+                                <th class="px-3 py-2 text-left border-b">건물명</th>
+                                <th class="px-3 py-2 text-left border-b">주소</th>
+                                <th class="px-3 py-2 text-left border-b">상권(입지)</th>
+                                <th class="px-3 py-2 text-left border-b">매매가</th>
+                            </tr>
+                        </thead>
+                        <tbody id="buildingBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function handleCancel() {
+            if (window.opener || window.history.length === 1) {
+                window.close();
+            } else {
+                history.back();
+            }
+        }
+
+        function esc(value) {
+            return String(value ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;")
+                .replaceAll("'", "&#39;");
+        }
+
+        function setEmptyRow(tbody, colspan, text) {
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="px-3 py-6 text-center text-slate-400">${text}</td></tr>`;
+        }
+
+        function formatThousandsInputValue(raw) {
+            const digits = String(raw || "").replace(/[^0-9]/g, "");
+            if (!digits) return "";
+            return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        async function loadInsightData() {
+            const customerBody = document.getElementById("customerBody");
+            const buildingBody = document.getElementById("buildingBody");
+
+            const params = new URLSearchParams();
+            const address = (document.getElementById("matchAddressInput")?.value || "").trim();
+            const siteLocation = (document.getElementById("matchBusinessAreaInput")?.value || "").trim();
+            const stationKeyword = (document.getElementById("matchStationKeyword")?.value || "").trim();
+            const minYieldRaw = (document.getElementById("matchMinYieldInput")?.value || "").replace(/[^0-9.]/g, "");
+            const minYield = minYieldRaw ? Number(minYieldRaw) : null;
+            const stationWalkMinRaw = (document.getElementById("matchStationWalkMin")?.value || "").replace(/[^0-9.]/g, "");
+            const stationWalkMaxRaw = (document.getElementById("matchStationWalkMax")?.value || "").replace(/[^0-9.]/g, "");
+            const stationWalkMin = stationWalkMinRaw ? Number(stationWalkMinRaw) : null;
+            const stationWalkMax = stationWalkMaxRaw ? Number(stationWalkMaxRaw) : null;
+            const cashHoldManwonRaw = (document.getElementById("matchCashHoldManwon")?.value || "").replace(/[^0-9]/g, "");
+            const cashHoldPercentRaw = (document.getElementById("matchCashHoldPercent")?.value || "").replace(/[^0-9.]/g, "");
+            const cashHoldManwon = cashHoldManwonRaw ? Number(cashHoldManwonRaw) : null;
+            const cashHoldPercent = cashHoldPercentRaw ? Number(cashHoldPercentRaw) : null;
+            const elevatorOption = (document.getElementById("matchElevatorOption")?.value || "").trim();
+            const checkedTypes = Array.from(document.querySelectorAll('input[name="matchType"]:checked')).map(el => el.value);
+            const checkedZoningCategories = Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked')).map(el => el.value);
+            const checkedUsageCategories = Array.from(document.querySelectorAll('input[name="matchUsageCategory"]:checked')).map(el => el.value);
+
+            const numericIds = {
+                min_price: "matchMinPrice",
+                max_price: "matchMaxPrice",
+                land_pp_min: "matchLandPyeongMin",
+                land_pp_max: "matchLandPyeongMax",
+                gross_pp_min: "matchGrossPyeongMin",
+                gross_pp_max: "matchGrossPyeongMax",
+                land_area_min: "matchLandAreaMin",
+                land_area_max: "matchLandAreaMax",
+                gross_area_min: "matchGrossAreaMin",
+                gross_area_max: "matchGrossAreaMax",
+                usable_area_min: "matchUsableAreaMin",
+                usable_area_max: "matchUsableAreaMax",
+                approval_year_min: "matchApprovalYearMin",
+                road_width_min: "matchRoadWidthMin",
+                parking_min: "matchParkingMin",
+            };
+
+            if (address) params.set("address", address);
+            if (siteLocation) params.set("site_location", siteLocation);
+            if (stationKeyword) params.set("station_keyword", stationKeyword);
+            if (minYield !== null && !Number.isNaN(minYield)) params.set("min_yield", String(minYield));
+            if (stationWalkMin !== null && !Number.isNaN(stationWalkMin)) params.set("station_walk_min", String(stationWalkMin));
+            if (stationWalkMax !== null && !Number.isNaN(stationWalkMax)) params.set("station_walk_max", String(stationWalkMax));
+            if (cashHoldManwon !== null && !Number.isNaN(cashHoldManwon)) params.set("cash_hold_manwon", String(cashHoldManwon));
+            if (cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
+            if (elevatorOption) params.set("elevator_option", elevatorOption);
+            if (checkedTypes.length) params.set("types", checkedTypes.join(","));
+            if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
+            if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
+
+            Object.entries(numericIds).forEach(([key, id]) => {
+                const raw = (document.getElementById(id)?.value || "").replace(/[^0-9.]/g, "");
+                if (!raw) return;
+                const val = Number(raw);
+                if (!Number.isNaN(val)) params.set(key, String(val));
+            });
+
+            params.set("limit", "200");
+
+            setEmptyRow(customerBody, 5, "조회 중...");
+            setEmptyRow(buildingBody, 5, "조회 중...");
+
+            try {
+                const res = await fetch(`/api/insight/overview?${params.toString()}`);
+                if (!res.ok) throw new Error("fetch failed");
+                const payload = await res.json();
+
+                const customers = Array.isArray(payload.customers) ? payload.customers : [];
+                const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
+
+                document.getElementById("customerCount").textContent = String(customers.length);
+                document.getElementById("buildingCount").textContent = String(buildings.length);
+
+                if (!customers.length) {
+                    setEmptyRow(customerBody, 5, "조건에 맞는 고객이 없습니다.");
+                } else {
+                    customerBody.innerHTML = customers.map((row) => `
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-3 py-2"><a class="text-blue-600 hover:underline" target="_blank" href="/customer/${esc(row.customer_number)}">${esc(row.customer_number)}</a></td>
+                            <td class="px-3 py-2">${esc(row.buyer_name || "-")}</td>
+                            <td class="px-3 py-2">${esc(row.phone || "-")}</td>
+                            <td class="px-3 py-2">${esc(row.business_area || "-")}</td>
+                            <td class="px-3 py-2">${esc(row.building_preference || "-")}</td>
+                        </tr>
+                    `).join("");
+                }
+
+                if (!buildings.length) {
+                    setEmptyRow(buildingBody, 5, "조건에 맞는 빌딩이 없습니다.");
+                } else {
+                    buildingBody.innerHTML = buildings.map((row) => `
+                        <tr class="hover:bg-slate-50">
+                            <td class="px-3 py-2"><a class="text-blue-600 hover:underline" target="_blank" href="/detail/${esc(row.bd_number)}">${esc(row.bd_number)}</a></td>
+                            <td class="px-3 py-2">${esc(row.bd_name || "-")}</td>
+                            <td class="px-3 py-2">${esc(row.address || "-")}</td>
+                            <td class="px-3 py-2">${esc(row.site_location || "-")}</td>
+                            <td class="px-3 py-2">${esc(row.sale_price || "-")}</td>
+                        </tr>
+                    `).join("");
+                }
+            } catch (e) {
+                setEmptyRow(customerBody, 5, "조회 중 오류가 발생했습니다.");
+                setEmptyRow(buildingBody, 5, "조회 중 오류가 발생했습니다.");
+            }
+        }
+
+        document.getElementById("searchBtn").addEventListener("click", loadInsightData);
+        document.getElementById("resetBtn").addEventListener("click", () => {
+            document.querySelectorAll("input").forEach((el) => {
+                if (el.type === "checkbox") {
+                    el.checked = false;
+                } else if (el.id === "matchMinYieldInput") {
+                    el.value = "3";
+                } else {
+                    el.value = "";
+                }
+            });
+            const elevator = document.getElementById("matchElevatorOption");
+            if (elevator) elevator.value = "";
+            loadInsightData();
+        });
+
+        [
+            "matchMinPrice", "matchMaxPrice", "matchCashHoldManwon", "matchLandPyeongMin", "matchLandPyeongMax",
+            "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax",
+            "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax",
+            "matchApprovalYearMin", "matchParkingMin"
+        ].forEach((id) => {
+            const input = document.getElementById(id);
+            if (!input) return;
+            input.addEventListener("input", (e) => {
+                e.target.value = formatThousandsInputValue(e.target.value);
+            });
+        });
+
+        ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    loadInsightData();
+                }
+            });
+        });
+
+        loadInsightData();
+    </script>
+</body>
+</html>

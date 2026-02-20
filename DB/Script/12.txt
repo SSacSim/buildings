@@ -1,0 +1,11 @@
+ALTER TABLE building_info
+ADD COLUMN emergency_elevator VARCHAR,
+ADD COLUMN building_area_pyeong VARCHAR,
+ADD COLUMN building_area_sqm VARCHAR;
+
+
+ALTER TABLE building_info
+ADD COLUMN price_per_total_floor_area VARCHAR;
+
+ALTER TABLE building_info
+ADD COLUMN official_price_per_pyeong_million_date VARCHAR;

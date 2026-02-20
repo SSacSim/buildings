@@ -1,0 +1,9 @@
+ALTER TABLE detail_management
+DROP COLUMN monthly_rent,
+DROP COLUMN area;
+
+
+ALTER TABLE detail_management
+ADD COLUMN area_pyeong VARCHAR,
+ADD COLUMN area_sqm VARCHAR,
+ADD COLUMN monthly_rent_fee VARCHAR;

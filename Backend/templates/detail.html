@@ -1,0 +1,3186 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Building Management System - Professional UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f1f5f9; }
+        
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        input, textarea, select { transition: all 0.2s; }
+        .section-card { @apply bg-white border border-slate-200 shadow-sm overflow-hidden; }
+        .label-blue { @apply bg-blue-900 text-white text-xs font-bold px-2 py-1 text-center min-w-[80px] flex items-center justify-center; }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col">
+
+    <header class="bg-white border-b border-slate-300 px-4 py-2 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-2">
+            <div class="flex items-center">
+                <span class="text-[10px] text-slate-400 font-bold mr-1 uppercase">고유 건물번호</span>
+                <input id="bd_number" name="bd_number" form="buildingForm" autocomplete="off" readonly class="text-sm text-white px-2 py-0.5 rounded font-mono font-bold min-w-[60px] text-center"></input>
+            </div>
+
+            <div class="flex items-center ml-2">
+                <span class="text-[10px] text-slate-400 font-bold mr-1 uppercase">상태</span>
+                <select id="status" name="status" form="buildingForm" class="bg-blue-50 text-blue-700 font-bold rounded-2xl px-5 py-3 border-none appearance-none w-36 text-center">
+                                <option value="준비">준비</option>
+                                <option value="완료">완료</option>
+                                <option value="매각">매각</option>
+                                <option value="보류">보류</option>
+                                
+                </select>
+            </div>
+
+        </div>
+        <div class="flex items-center gap-3">
+            
+            <button onclick="handleCancel()" class="px-6 py-2.5 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all">취소</button>
+            
+            <!-- <button id="lockBtn"
+                onclick="toggleSidebarLock()"
+                class="flex items-center gap-2 bg-slate-700 text-white px-6 py-2.5 rounded-xl font-bold
+                    hover:bg-slate-800 shadow-sm active:scale-95 transition-all">
+                🔒 잠금
+            </button> -->
+            
+            <button onclick="generatePPT(event)" 
+                class="flex items-center gap-2 bg-orange-500 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-orange-600 shadow-sm active:scale-95 transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                PPT 생성
+            </button>
+
+            <button onclick="openMap('naver')" 
+                class="flex items-center gap-2 bg-[#03C75A] text-white px-6 py-2.5 rounded-xl font-bold hover:bg-[#02b351] shadow-sm active:scale-95 transition-all">
+                <span class="text-sm">N</span> 네이버 지도
+            </button>
+            
+            <button onclick="openMap('kakao')" 
+                class="flex items-center gap-2 bg-[#FEE500] text-[#191919] px-6 py-2.5 rounded-xl font-bold hover:bg-[#FADA0A] shadow-sm active:scale-95 transition-all">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 3C6.477 3 2 6.485 2 10.785c0 2.746 1.81 5.155 4.54 6.528l-1.14 4.19c-.09.33.28.61.58.42l4.83-3.076c.39.038.78.058 1.19.058 5.523 0 10-3.485 10-7.785S17.523 3 12 3z"/>
+                </svg>
+                카카오 지도
+            </button>
+            
+            <button onclick="openDeleteModal()"
+                class="bg-red-500 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-red-600 shadow-sm active:scale-95 transition-all">
+                삭제
+            </button>
+            
+            <button onclick="saveBuildingDetail()" class="bg-blue-600 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all">정보 저장하기</button>
+        </div>
+    </header>
+
+    <form id="buildingForm" class="flex flex-1 overflow-hidden p-1 gap-1">
+        <!-- 왼쪽 사이드 -->
+        <aside class="w-[500px] flex shrink-0 border-r border-slate-400 bg-[#e2e8f0] text-[12px]">
+            <div class="flex-1 flex flex-col overflow-y-auto border-l border-white">
+                <!-- 주소관련 -->
+                <div class="p-1 space-y-0.5 border-b border-slate-400">
+                    <div class="border border-slate-400 bg-white">
+                        <!-- 1줄 : 입지 / 가격 / 수익률 -->
+                        <div class="grid grid-cols-3 border-b border-slate-300">
+                            <!-- 입지 -->
+                            <div class="flex items-center border-r border-slate-300">
+                                <div class="w-16 bg-slate-100 px-2 py-1 font-bold text-slate-600 text-[14px] text-center">
+                                    입지
+                                </div>
+                                <select name="location_decide" id="location_decide" 
+                                    class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                                    <option value="선택">선택</option>
+                                    <option value="A">A</option>
+                                    <option value="B">B</option>
+                                    <option value="C">C</option>
+                                    <option value="X">X</option>
+                                </select>
+                            </div>
+
+                            <!-- 가격 -->
+                            <div class="flex items-center border-r border-slate-300">
+                                <div class="w-16 bg-slate-100 px-2 py-1 font-bold text-slate-600 text-[14px] text-center">
+                                    가격
+                                </div>
+                                <select name="price_decide" id="price_decide" 
+                                    class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                                    <option value="선택">선택</option>
+                                    <option value="A">A</option>
+                                    <option value="B">B</option>
+                                    <option value="C">C</option>
+                                    <option value="X">X</option>
+                                </select>
+                            </div>
+
+                            <!-- 수익률 -->
+                            <div class="flex items-center">
+                                <div class="w-16 bg-slate-100 px-2 py-1 font-bold text-slate-600 text-[14px] text-center">
+                                    수익률
+                                </div>
+                                <select name="yield_decide" id="yield_decide" 
+                                    class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                                    <option value="선택">선택</option>
+                                    <option value="A">A</option>
+                                    <option value="B">B</option>
+                                    <option value="C">C</option>
+                                    <option value="X">X</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- 2줄 : 명도 / 제한 / 대출 -->
+                        <div class="grid grid-cols-3">
+                            <!-- 명도 -->
+                            <div class="flex items-center border-r border-slate-300">
+                                <div class="w-16 bg-slate-100 px-2 py-1 font-bold text-slate-600 text-[14px] text-center">
+                                    명도
+                                </div>
+                                <select name="vacancy_decide" id="vacancy_decide" 
+                                    class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                                    <option value="선택">선택</option>
+                                    <option value="a">a</option>
+                                    <option value="b">b</option>
+                                    <option value="c">c</option>
+                                    <option value="x">x</option>
+                                </select>
+                            </div>
+
+                            <!-- 제한 -->
+                            <div class="flex items-center border-r border-slate-300">
+                                <div class="w-16 bg-slate-100 px-2 py-1 font-bold text-slate-600 text-[14px] text-center">
+                                    제한
+                                </div>
+                                <select name="limit_decide" id="limit_decide" 
+                                    class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                                    <option value="선택">선택</option>
+                                    <option value="a">a</option>
+                                    <option value="b">b</option>
+                                    <option value="c">c</option>
+                                    <option value="x">x</option>
+                                </select>
+                            </div>
+
+                            <!-- 대출 -->
+                            <div class="flex items-center">
+                                <div class="w-16 bg-slate-100 px-2 py-1 font-bold text-slate-600 text-[14px] text-center">
+                                    상태
+                                </div>
+                                <select name="loan_decide" id="loan_decide" 
+                                    class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                                    <option value="선택">선택</option>
+                                    <option value="a">a</option>
+                                    <option value="b">b</option>
+                                    <option value="c">c</option>
+                                    <option value="x">x</option>
+                                </select>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div class="flex border border-slate-400 bg-white items-center">
+                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">건물명</div>
+                        <input id="bd_name" name="bd_name" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                    </div>
+                    <div class="flex border border-slate-400 bg-white items-center">
+                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">주소</div>
+                        <input id="address" name="address" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                    </div>
+                    <div class="flex border border-slate-400 bg-white items-center">
+                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">상세주소</div>
+                        <input id="address_detail" name="address_detail" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                    </div>
+                    <div class="flex border border-slate-400 bg-white items-center">
+                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">주변역</div>
+                        <input id="nearby_station" name="nearby_station" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                    </div>
+                    <div class="flex border border-slate-400 bg-white items-stretch">
+                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
+                            <div class="font-bold text-slate-600 text-[15px] leading-tight">주변역2</div>
+                            <button type="button" onclick="addNearbyStation2Row()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
+                        </div>
+                        <div class="flex-1 p-1">
+                            <input type="hidden" id="nearby_station2" name="nearby_station2" value="">
+                            <div id="nearbyStation2Rows" class="space-y-1 max-h-[150px] overflow-y-auto pr-1"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex border border-slate-400 bg-white items-center">
+                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">입지</div>
+                        <input id="site_location" name="site_location" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                    </div>
+
+                </div>
+                <!-- 입금가, 매매가 -->
+                <div class="p-1 space-y-0.5 border-b border-slate-400">
+                    <div class="flex border border-slate-400 bg-white h-[42px] items-stretch">
+                        <div class="px-3 bg-[#2d3748] text-white text-[10px] font-bold italic flex items-center justify-center text-center leading-none p-0.5">
+                            입금가
+                        </div>
+                        <input id="deposit_price" name="deposit_price" type="text" 
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[13px] text-slate-700">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-x border-slate-300">
+                            <span class="text-[9px] text-slate-500 leading-tight">만<br>원</span>
+                        </div>
+
+                        <div class="px-2 bg-[#2d3748] text-white text-[10px] font-bold italic flex items-center justify-center text-center leading-none p-0.5">
+                            기타<br>매매가
+                        </div>
+                        <input id="other_sale_price" name="other_sale_price" type="text" 
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[13px] text-slate-700">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-x border-slate-300">
+                            <span class="text-[9px] text-slate-500 leading-tight">만<br>원</span>
+                        </div>
+                    
+                    </div>
+                    <div class="flex border border-slate-400 bg-white">
+                        <div class="px-2 bg-orange-600 text-white px-2 py-1 font-bold italic">매매가</div>
+                        <input id="sale_price" name="sale_price" type="text" class="flex-1 px-2 py-1 text-right outline-none font-black text-blue-700">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-x border-slate-300">
+                            <span class="text-[9px] text-slate-500 leading-tight">만<br>원</span>
+                        </div>
+                        <div class="bg-yellow-400 px-1 flex items-center gap-1 border-l border-orange-600">
+                            <span class="text-[10px] font-bold">수익률</span>
+                            <input id="yield_rate" name="yield_rate" type="text" class="w-20 bg-transparent text-center font-bold text-red-600 outline-none" readonly value="0">
+                        </div>
+                    </div>
+                </div>
+                <!-- 보증금 평단가 등 -->
+                <div class="p-1 grid grid-cols-2 gap-x-1 gap-y-0.5 border-b border-slate-400">
+                <div class="flex col-span-2 border-t border-x border-slate-400 bg-[#2d3748] text-white px-2 py-0.5 mt-2 font-bold italic text-[11px]">비용 정보</div>
+                    <div class="flex border border-slate-400 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
+                            보증금
+                        </div>
+                        <input id="security_deposit" name="security_deposit" type="text"
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px] text-slate-700">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-l border-slate-200">
+                            <span class="text-[9px] text-slate-500 leading-tight text-center">만<br>원</span>
+                        </div>
+                    </div>
+
+                    <div class="flex border border-slate-400 h-[32px] items-stretch bg-white">
+                        <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
+                            토지면적당 단가
+                        </div>
+                        <input id="price_per_pyeong" name="price_per_pyeong" type="text"
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px] text-slate-700 bg-transparent" value="0">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-l border-slate-200">
+                            <span class="text-[9px] text-slate-500 leading-tight text-center">만<br>원</span>
+                        </div>
+                    </div>
+
+                    <div class="flex border border-slate-400 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
+                            월 임대료
+                        </div>
+                        <input id="monthly_rent_fee" name="monthly_rent_fee" type="text" 
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px] text-slate-700">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-l border-slate-200">
+                            <span class="text-[9px] text-slate-500 leading-tight text-center">만<br>원</span>
+                        </div>
+                    </div>
+
+                    <div class="flex border border-slate-400 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
+                            연면적당 단가
+                        </div>
+                        <input id="price_per_total_floor_area" name="price_per_total_floor_area" type="text"  readonly
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px] text-slate-700" value="0">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-l border-slate-200">
+                            <span class="text-[9px] text-slate-500 leading-tight text-center">만<br>원</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex border border-slate-400 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
+                            관리비
+                        </div>
+                        <input id="maintenance_fee" name="maintenance_fee" type="text" 
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px] text-slate-700">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-l border-slate-200">
+                            <span class="text-[9px] text-slate-500 leading-tight text-center">만<br>원</span>
+                        </div>
+                    </div>
+
+                    <div class="flex border border-slate-400 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
+                            관리비 지출
+                        </div>
+                        <input id="maintenance_expense" name="maintenance_expense" type="text" 
+                            class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px] text-slate-700" value="0">
+                        <div class="flex items-center bg-slate-50 px-0.5 border-l border-slate-200">
+                            <span class="text-[9px] text-slate-500 leading-tight text-center">만<br>원</span>
+                        </div>
+                    </div>
+
+                    <div class="col-span-2 flex border border-slate-400 min-h-[40px] items-stretch mt-0.5 bg-white">
+                        <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
+                            대출현황
+                        </div>
+                        
+                        <textarea id="loan_status" name="loan_status" 
+                                class="flex-1 min-w-0 px-2 py-1.5 text-left outline-none font-medium text-[12px] text-slate-700 resize-none leading-relaxed"
+                                placeholder="상세 내용을 입력하세요"></textarea>
+                                
+                        <div class="flex items-center bg-slate-50 px-2 border-l border-slate-200 shrink-0">
+                            <span class="text-[10px] text-slate-400">내용</span>
+                        </div>
+                    </div>
+                    
+                </div>
+
+                <!-- 토지관련 -->
+                <div class="p-1 bg-slate-200">
+                    <div class="flex border-t border-x border-slate-400 bg-[#2d3748] text-white px-2 py-0.5 mt-2 font-bold italic text-[11px]">토지</div>
+                    <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-50 px-2 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 whitespace-nowrap shrink-0">
+                            토지
+                        </div>
+                        
+                        <div class="relative w-[70px] border-r border-slate-100">
+                            <select id="land_category" name="land_category" 
+                                    class="w-full h-full px-1 bg-white font-bold text-center outline-none text-[12px] appearance-none cursor-pointer text-slate-700">
+                                <option value="">지목</option>
+                                <option value="대">대</option>
+                                <option value="전">전</option>
+                                <option value="답">답</option>
+                                <option value="과수원">과수원</option>
+                                <option value="목장용지">목장용지</option>
+                                <option value="임야">임야</option>
+                                <option value="잡종지">잡종지</option>
+                                <option value="공장용지">공장용지</option>
+                                <option value="창고용지">창고용지</option>
+                                <option value="주유소용지">주유소용지</option>
+                                <option value="주차장">주차장</option>
+                                <option value="학교용지">학교용지</option>
+                                <option value="공원">공원</option>
+                                <option value="체육용지">체육용지</option>
+                                <option value="유원지">유원지</option>
+                                <option value="종교용지">종교용지</option>
+                                <option value="사적지">사적지</option>
+                                <option value="묘지">묘지</option>
+                                <option value="도로">도로</option>
+                                <option value="철도용지">철도용지</option>
+                                <option value="제방">제방</option>
+                                <option value="하천">하천</option>
+                                <option value="구거">구거</option>
+                                <option value="유지">유지</option>
+                                <option value="수도용지">수도용지</option>
+                                <option value="양어장">양어장</option>
+                                <option value="광천지">광천지</option>
+                                <option value="염전">염전</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-1 flex items-center pointer-events-none text-[8px] text-slate-400">▼</div>
+                        </div>
+                        <div class="relative flex-1">
+                            <select id="zoning_type" name="zoning_type" 
+                                    class="w-full h-full px-2 bg-white font-bold text-center outline-none text-[12px] appearance-none cursor-pointer text-slate-700">
+                                <option value="">용도지역</option>
+                                <option value="제1종전용주거지역">제1종전용주거지역</option>
+                                <option value="제2종전용주거지역">제2종전용주거지역</option>
+                                <option value="제1종일반주거지역">제1종일반주거지역</option>
+                                <option value="제2종일반주거지역">제2종일반주거지역</option>
+                                <option value="제3종일반주거지역">제3종일반주거지역</option>
+                                <option value="준주거지역">준주거지역</option>
+                                <option value="중심상업지역">중심상업지역</option>
+                                <option value="일반상업지역">일반상업지역</option>
+                                <option value="근린상업지역">근린상업지역</option>
+                                <option value="유통상업지역">유통상업지역</option>
+                                <option value="노선상업지역">노선상업지역</option>
+                                <option value="전용공업지역">전용공업지역</option>
+                                <option value="일반공업지역">일반공업지역</option>
+                                <option value="준공업지역">준공업지역</option>
+                                <option value="보전녹지지역">보전녹지지역</option>
+                                <option value="생산녹지지역">생산녹지지역</option>
+                                <option value="자연녹지지역">자연녹지지역</option>
+                                <option value="보전관리지역">보전관리지역</option>
+                                <option value="생산관리지역">생산관리지역</option>
+                                <option value="계획관리지역">계획관리지역</option>
+                                <option value="농림지역">농림지역</option>
+                                <option value="자연환경보전지역">자연환경보전지역</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-2 flex items-center pointer-events-none text-[8px] text-slate-400">▼</div>
+                        </div>
+                    </div>
+                    <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-50 px-2 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 whitespace-nowrap shrink-0">
+                            면적
+                        </div>
+                        
+                        <input id="land_area_pyeong" name="land_area_pyeong" type="text" 
+                            placeholder="평"
+                            class="w-[70px] px-2 py-1 bg-white font-bold text-right outline-none border-r border-slate-100 text-[12px]" readonly>
+                        <span class="px-1 self-center text-blue-600 font-bold text-[10px] shrink-0">평</span>
+                        
+                        <input id="land_area_sqm" name="land_area_sqm" type="text" 
+                            placeholder="㎡"
+                            class="flex-1 px-2 py-1 bg-white font-bold text-right outline-none text-[12px]" >
+                        <span class="px-1 self-center text-blue-600 font-bold text-[10px] shrink-0">㎡</span>
+                    </div>
+
+                    <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-50 px-2 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 whitespace-nowrap shrink-0">
+                            ㎡당 공시
+                        </div>
+                        
+                        <input id="official_price_per_sqm_won" name="official_price_per_sqm_won" type="text"
+                            class="px-2 py-1 bg-white font-bold text-right outline-none border-r border-slate-100 text-[12px] flex-1">
+                        <span class="px-1 self-center text-blue-600 font-bold text-[14px] shrink-0 ">원</span>
+                    </div>
+
+                    <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full overflow-hidden">
+                        <!-- ① 공시지가 -->
+                        <div class="flex items-stretch border-r border-slate-200 min-w-0">
+                            <div class="w-16 bg-slate-50 text-[10px] flex items-center justify-center font-bold text-slate-600 shrink-0 border-r">
+                                공시지가
+                            </div>
+                            <span class="w-10 flex items-center justify-center text-[10px] text-slate-500 shrink-0">연도</span>
+                            <input type="text" id="official_price_per_pyeong_million_date" name="official_price_per_pyeong_million_date"
+                                class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px]">
+
+                            <span class="w-10 flex items-center justify-center text-[10px] text-slate-500 shrink-0" >평당</span>
+                            <input type="text" id="official_price_per_pyeong_million" name="official_price_per_pyeong_million" readonly
+                                class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px]">
+
+                            <span class="px-1 flex items-center text-blue-600 font-bold text-[10px] shrink-0">만원</span>
+                        </div>
+
+                        <!-- ② 공시합계 -->
+                        <div class="flex items-stretch border-r border-slate-200 min-w-0">
+                            <div class="w-12 bg-slate-50 text-[10px] flex items-center justify-center font-bold text-slate-600 shrink-0 border-r">
+                                공시합계
+                            </div>
+                            <input type="text"  id="official_price_total_million" name="official_price_total_million" readonly
+                                class="flex-1 min-w-0 px-1 text-right outline-none font-bold text-[12px]">
+                            <span class="px-1 flex items-center text-blue-600 font-bold text-[7px] shrink-0">만원</span>
+                        </div>
+
+                       
+                    </div>
+                    <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                        <div class="w-16 bg-slate-50 px-2 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 whitespace-nowrap shrink-0">
+                            도로
+                        </div>
+                        <input id="road_access" name="road_access" type="text"
+                            class="px-2 py-1 bg-white font-bold text-center outline-none border-r border-slate-100 text-[12px] flex-1">
+                    </div>
+                    <div class="flex border-b border-slate-200 bg-white items-stretch">
+                        <div class="w-16 bg-slate-50 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
+                            <div class="font-bold text-slate-600 text-[11px] leading-tight">도로2</div>
+                            <button type="button" onclick="addRoadAccess2Row()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
+                        </div>
+                        <div class="flex-1 p-1">
+                            <input type="hidden" id="road_access2" name="road_access2" value="">
+                            <div id="roadAccess2Rows" class="space-y-1 max-h-[150px] overflow-y-auto pr-1"></div>
+                        </div>
+                    </div>
+
+
+                    <!-- 건물 관련 -->
+                    <div class="flex border-t border-x border-slate-400 bg-[#2d3748] text-white px-2 py-0.5 mt-2 font-bold italic text-[11px]">건물</div>
+                    <div class="border border-slate-400 bg-white space-y-px">
+                        <div class="flex border-b border-slate-200">
+                            <div class="w-16 bg-slate-50 px-2 py-1 border-r text-[11px] text-center">승인일자</div>
+                            <input id="approval_date" name="approval_date" type="text" class="flex-1 px-2 py-1 text-center font-bold outline-none" placeholder="1999.01.01">
+                            <div class="relative flex-1">
+                                <select id="heating_cooling" name="heating_cooling" 
+                                        class="w-full h-full px-2 bg-white font-bold text-center outline-none text-[12px] appearance-none cursor-pointer text-slate-700">
+                                    <option value="">냉난방</option>
+                                    <option value="개별냉난방">개별냉난방</option>
+                                    <option value="중앙냉난방">중앙냉난방</option>
+                                    <option value="지역냉난방">지역냉난방</option>
+                                    <option value="기타">기타</option>
+                                </select>
+                                <div class="absolute inset-y-0 right-2 flex items-center pointer-events-none text-[8px] text-slate-400">▼</div>
+                            </div>
+                        </div>
+                        <div class="flex border-b border-slate-200 bg-white items-stretch">
+                            <div class="w-16 bg-slate-50 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
+                                <div class="font-bold text-slate-600 text-[11px] leading-tight">위반</div>
+                                <button type="button" onclick="addViolationRow()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
+                            </div>
+                            <div class="flex-1 p-1">
+                                <input type="hidden" id="violation_info" name="violation_info" value="">
+                                <div id="violationRows" class="space-y-1 max-h-[140px] overflow-y-auto pr-1"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    건축물용도
+                                </div>
+                                <div class="relative flex-1 h-full" id="group-usage">
+                                    <button type="button" class="dropdownButton w-full h-full px-2 bg-white border border-slate-200 font-bold text-center text-[12px] text-slate-700 flex justify-between items-center cursor-pointer">
+                                        <span class="selectedLabel truncate">건축물용도 (선택)</span>
+                                        <span class="text-[8px] text-slate-400">▼</span>
+                                    </button>
+                                    <div class="dropdownMenu absolute z-20 w-full mt-1 bg-white border border-slate-200 shadow-lg max-h-60 overflow-y-auto hidden">
+                                        <div class="p-2 space-y-1">
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="단독주택"> 단독주택
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="공동주택"> 공동주택
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="제1종 근린생활시설"> 제1종 근린생활시설
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="제2종 근린생활시설"> 제2종 근린생활시설
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="문화 및 집회시설"> 문화 및 집회시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="종교시설"> 종교시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="판매시설"> 판매시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="운수시설"> 운수시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="의료시설"> 의료시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="교육연구시설"> 교육연구시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="노유자시설"> 노유자시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="수련시설"> 수련시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="운동시설"> 운동시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="업무시설"> 업무시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="숙박시설"> 숙박시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="위락시설"> 위락시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="공장"> 공장
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="창고시설"> 창고시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="위험물 저장 및 처리시설"> 위험물 저장 및 처리시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="자동차 관련 시설"> 자동차 관련 시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="동물 및 식물 관련 시설"> 동물 및 식물 관련 시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="자원순환시설"> 자원순환시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="교정 및 군사시설"> 교정 및 군사시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="방송통신시설"> 방송통신시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="발전시설"> 발전시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="묘지 관련 시설"> 묘지 관련 시설
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="관광 휴게시설"> 관광 휴게시설
+                                            </label>
+
+                                            <label class="hidden flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="장례사솔"> 장례사솔
+                                            </label>
+
+                                            <label class="hidden flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="야영장 시설"> 야영장 시설
+                                            </label>
+
+                                            <label class="hidden flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700" >
+                                                <input type="checkbox" class="usage-check mr-2" value="미등기건물"> 미등기건물
+                                            </label>
+
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="그 밖에 토지의 정착물"> 그 밖에 토지의 정착물
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" id="building_usage" name="building_usage">
+                                </div>
+                            </div>
+
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    건물구조
+                                </div>
+                                <div class="relative flex-1 h-full" id="group-structure">
+                                    <button type="button" class="dropdownButton w-full h-full px-2 bg-white border border-slate-200 font-bold text-center text-[12px] text-slate-700 flex justify-between items-center cursor-pointer">
+                                        <span class="selectedLabel truncate">건물구조 (선택)</span>
+                                        <span class="text-[8px] text-slate-400">▼</span>
+                                    </button>
+
+                                    <div class="dropdownMenu absolute z-20 w-full mt-1 bg-white border border-slate-200 shadow-lg max-h-60 overflow-y-auto hidden">
+                                        <div class="p-2 space-y-1">
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="철근콘크리트구조"> 철근콘크리트구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="철골철근콘크리트구조"> 철골철근콘크리트구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="철골구조"> 철골구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="철골조"> 철골조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="조적구조"> 조적구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="연와조"> 연와조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="벽돌구조"> 벽돌구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="블록구조"> 블록구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="목구조"> 목구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="경량철골구조"> 경량철골구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="프리캐스트콘크리트구조"> 프리캐스트콘크리트구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="혼합구조"> 혼합구조
+                                            </label>
+                                            <label class="flex items-center p-2 hover:bg-slate-50 cursor-pointer text-[12px] text-slate-700">
+                                                <input type="checkbox" class="usage-check mr-2" value="기타구조"> 기타구조
+                                            </label>
+                                        </div>
+                                        <input type="hidden" id="building_structure" name="building_structure">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                연면적
+                            </div>
+
+                            <div class="flex flex-1 min-w-0">
+                                <div class="w-1/2 flex items-stretch border-r border-slate-200">
+                                    <input id="gross_area_pyeong" name="gross_area_pyeong" type="text" placeholder="평"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]" readonly>
+                                    <span class="w-8 flex items-center justify-center bg-slate-100 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-200">
+                                        평
+                                    </span>
+                                </div>
+
+                                <div class="w-1/2 flex items-stretch">
+                                    <input id="gross_area_sqm" name="gross_area_sqm" type="text" placeholder="㎡"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]" >
+                                    <span class="w-8 flex items-center justify-center bg-slate-100 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-200">
+                                        ㎡
+                                    </span>
+                                </div>
+
+                            </div>
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                건축면적
+                            </div>
+
+                            <div class="flex flex-1 min-w-0">
+                                <div class="w-1/2 flex items-stretch border-r border-slate-200">
+                                    <input id="building_area_pyeong" name="building_area_pyeong" type="text" placeholder="평"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]" readonly>
+                                    <span class="w-8 flex items-center justify-center bg-slate-100 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-200">
+                                        평
+                                    </span>
+                                </div>
+
+                                <div class="w-1/2 flex items-stretch">
+                                    <input id="building_area_sqm" name="building_area_sqm" type="text" placeholder="㎡"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                    <span class="w-8 flex items-center justify-center bg-slate-100 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-200">
+                                        ㎡
+                                    </span>
+                                </div>
+
+                            </div>
+                        </div>
+
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    층고
+                                </div>
+                                <input id="floor_height" name="floor_height" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                <span class="w-6 flex items-center justify-center bg-slate-50 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-100">m</span>
+                            </div>
+
+                            <div class="flex flex-1 items-stretch min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    보 하부
+                                </div>
+                                <input id="beam_clearance_height" name="beam_clearance_height" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                <span class="w-6 flex items-center justify-center bg-slate-50 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-100">m</span>
+                            </div>
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                층
+                            </div>
+
+                            <div class="flex flex-1 min-w-0">
+                                <div class="w-1/2 flex items-stretch border-r border-slate-200">
+                                    <span class="w-6 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0">지하</span>
+                                    <input id="underground_floors" name="underground_floors" type="text" placeholder="0"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+
+                                <div class="w-1/2 flex items-stretch border-r border-slate-200">
+                                    <span class="w-6 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0">지상</span>
+                                    <input id="aboveground_floors" name="aboveground_floors" type="text" placeholder="0"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex border-b border-slate-200 items-stretch w-full">
+                            <!-- 좌측 라벨 -->
+                            <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                승강기
+                            </div>
+
+                            <!-- 우측 영역 -->
+                            <div class="flex flex-1 min-w-0 flex-wrap">
+                                <div class="w-1/2 flex items-stretch border-r border-b border-slate-200 h-[32px]">
+                                    <span class="w-8 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0" >승객용</span>
+                                    <input id="elevator" name="elevator" type="text" placeholder="0" 
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+
+                                <div class="w-1/2 flex items-stretch border-r border-b border-slate-200 h-[32px]">
+                                    <span class="w-8 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0">비상용</span>
+                                    <input id="emergency_elevator" name="emergency_elevator" type="text" placeholder="0"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>    
+                            </div>
+                        </div>
+
+
+                        
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    건폐율
+                                </div>
+                                <input id="building_coverage_ratio" name="building_coverage_ratio" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                <span class="flex items-center px-1 text-[10px] font-bold text-slate-400 bg-slate-50 border-l border-slate-100">%</span>
+                            </div>
+
+                            <div class="flex flex-1 items-stretch min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    용적률
+                                </div>
+                                <input id="floor_area_ratio" name="floor_area_ratio" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                <span class="flex items-center px-1 text-[10px] font-bold text-slate-400 bg-slate-50 border-l border-slate-100">%</span>
+                            </div>
+                        </div>
+
+                        <!-- 기존 주차 대수 관련  -->
+                        <!-- <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    주차방식
+                                </div>
+                                <input id="parking_type" name="parking_type" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                            </div>
+
+                            <div class="flex flex-1 items-stretch min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    주차대수
+                                </div>
+                                <input id="parking_capacity" name="parking_capacity" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                            </div>
+                        </div> -->
+
+                        <div class="flex border-b border-slate-200 items-stretch w-full">
+                            <!-- 좌측 라벨 -->
+                            <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                주차대수
+                            </div>
+
+                            <!-- 우측 영역 -->
+                            <div class="flex flex-1 min-w-0 flex-wrap">
+                                <div class="w-1/3 flex items-stretch border-r border-b border-slate-200 h-[32px]">
+                                    <span class="w-6 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0" >총</span>
+                                    <input id="parking_capacity" name="parking_capacity" type="text" placeholder="0" 
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]" readonly>
+                                </div>
+
+                                <div class="w-1/3 flex items-stretch border-r border-b border-slate-200 h-[32px]">
+                                    <span class="w-6 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0">옥외기계</span>
+                                    <input id="parking_outdoor_mechanical" name="parking_outdoor_mechanical" type="text" placeholder="0"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+
+                                <div class="w-1/3 flex items-stretch border-r border-b border-slate-200 h-[32px]">
+                                    <span class="w-6 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0">옥외자주</span>
+                                    <input id="parking_outdoor_self" name="parking_outdoor_self" type="text" placeholder="0"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+                                
+                                <!-- 빈칸 유지 셀 -->
+                                <div class="w-1/3 flex items-stretch border-r border-slate-200 h-[32px] bg-slate-50">
+                                    <span class="w-6 flex items-center justify-center text-[10px] font-bold text-slate-400 border-r border-slate-100 shrink-0">
+                                        &nbsp;
+                                    </span>
+                                    <div class="flex-1"></div>
+                                </div>
+
+                                <!-- 4번째 → 자동으로 아래 줄 -->
+                                <div class="w-1/3 flex items-stretch border-r border-slate-200 h-[32px]">
+                                    <span class="w-6 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0">옥내기계</span>
+                                    <input id="parking_indoor_mechanical" name="parking_indoor_mechanical" type="text" placeholder="0"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+                                
+                                <div class="w-1/3 flex items-stretch border-r border-slate-200 h-[32px]">
+                                    <span class="w-6 flex items-center justify-center bg-slate-50 text-[10px] font-bold text-slate-500 border-r border-slate-100 shrink-0">옥내자주</span>
+                                    <input id="parking_indoor_self" name="parking_indoor_self" type="text" placeholder="0"
+                                        class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    방향기준
+                                </div>
+                                <div class="relative flex-1 h-full">
+                                    <select id="direction_basis" name="direction_basis"
+                                        class="w-full h-full px-2 bg-white font-bold text-center text-[12px] appearance-none cursor-pointer text-slate-700">
+                                        <option value="">방향기준</option>
+                                        <option value="주출입구">주출입구</option>
+                                        <option value="거실">거실</option>
+                                        <option value="안방">안방</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-2 flex items-center pointer-events-none text-[8px] text-slate-400">▼</div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    방향
+                                </div>
+                                <div class="relative flex-1 h-full">
+                                    <select id="direction" name="direction"
+                                        class="w-full h-full px-2 bg-white font-bold text-center text-[12px] appearance-none cursor-pointer text-slate-700">
+                                        <option value="">방향</option>
+                                        <option value="동향">동향</option>
+                                        <option value="서향">서향</option>
+                                        <option value="남향">남향</option>
+                                        <option value="북향">북향</option>
+                                        <option value="남동향">남동향</option>
+                                        <option value="남서향">남서향</option>
+                                        <option value="북동향">북동향</option>
+                                        <option value="북서향">북서향</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-2 flex items-center pointer-events-none text-[8px] text-slate-400">▼</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+
+                            <!-- 방 -->
+                            <div class="flex w-1/2 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    방
+                                </div>
+                                <input id="room_count"
+                                    name="room_count"
+                                    type="text"
+                                    placeholder="개"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                            </div>
+
+                            <!-- 화장실 -->
+                            <div class="flex w-1/2 items-stretch min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    화장실
+                                </div>
+
+                                <div class="relative flex-1 min-w-0">
+                                    <input id="bathroom_count"
+                                        name="bathroom_count"
+                                        type="text"
+                                        placeholder="개"
+                                        class="w-full h-full px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                </div>
+                            </div>
+
+                        </div>
+                        <!-- 주택 관련 -->
+                        <div class="flex border-b border-slate-200 min-h-[64px] items-stretch w-full">
+                            <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                유형
+                            </div>
+
+                            <div class="grid grid-cols-3 flex-1 gap-y-2 gap-x-2 px-3 py-2 bg-slate-50 items-center">
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="is_new_site" name="is_new_site" class="w-3.5 h-3.5 accent-blue-600"> 
+                                    <span class="text-[12px] font-bold text-slate-700 group-hover:text-blue-600">신축부지</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="is_remodeling" name="is_remodeling" class="w-3.5 h-3.5 accent-blue-600"> 
+                                    <span class="text-[12px] font-bold text-slate-700 group-hover:text-blue-600">리모델링</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="is_office_building" name="is_office_building" class="w-3.5 h-3.5 accent-blue-600"> 
+                                    <span class="text-[12px] font-bold text-slate-700 group-hover:text-blue-600">사옥형</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="is_investment" name="is_investment" class="w-3.5 h-3.5 accent-blue-600"> 
+                                    <span class="text-[12px] font-bold text-slate-700 group-hover:text-blue-600">수익형</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="is_development" name="is_development" class="w-3.5 h-3.5 accent-blue-600"> 
+                                    <span class="text-[12px] font-bold text-slate-700 group-hover:text-blue-600">개발/전환</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer group">
+                                    <input type="checkbox" id="is_stable_holding" name="is_stable_holding" class="w-3.5 h-3.5 accent-blue-600"> 
+                                    <span class="text-[12px] font-bold text-slate-700 group-hover:text-blue-600">보유안정</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 중간 사이드 -->
+        <section class="flex-1 flex flex-col gap-1 overflow-y-auto">
+            <div class="section-card h-[350px] flex flex-col">
+                <div class="bg-slate-800 text-white text-[11px] px-2 py-1 font-bold">
+                    대표 사진 및 도면 (최대 5장)
+                </div>
+
+                <!-- 전체 이미지 영역 -->
+                <div class="flex flex-1 gap-2 p-2 bg-slate-100 w-full">
+                    <!-- 왼쪽 메인 -->
+                     
+                    <div
+                        id="img-main-box" data-box="main"
+                        class="w-[50%] bg-slate-200 border-2 border-dashed border-slate-400
+                                flex items-center justify-center cursor-pointer hover:bg-slate-300
+                                relative overflow-hidden"
+                        onclick="openImageModal('main')">
+                        <span class="text-slate-400 text-4xl font-bold">-</span>
+                    </div>
+
+                    <!-- 오른쪽 2x2 -->
+                    <div class="w-[50%] h-full grid grid-cols-2 grid-rows-3 gap-2 min-w-[160px]">
+                        <label data-box="sub1"
+                            class="min-w-0 bg-slate-200 border-2 border-dashed border-slate-400
+                                flex items-center justify-center cursor-pointer hover:bg-slate-300
+                                relative overflow-hidden"
+                            onclick="openImageModal('sub1')">
+
+                            <span class="text-slate-400 text-4xl font-bold">+</span>
+                        </label>
+
+                        <label data-box="sub2"
+                            class="min-w-0 bg-slate-200 border-2 border-dashed border-slate-400
+                                flex items-center justify-center cursor-pointer hover:bg-slate-300
+                                relative overflow-hidden"
+                            onclick="openImageModal('sub2')">
+
+                            <span class="text-slate-400 text-4xl font-bold">+</span>
+                        </label>
+
+
+                        <label data-box="sub3"
+                            class="min-w-0 bg-slate-200 border-2 border-dashed border-slate-400
+                                flex items-center justify-center cursor-pointer hover:bg-slate-300
+                                relative overflow-hidden"
+                            onclick="openImageModal('sub3')">
+
+                            <span class="text-slate-400 text-4xl font-bold">+</span>
+                        </label>
+
+
+                        <label data-box="sub4"
+                            class="min-w-0 bg-slate-200 border-2 border-dashed border-slate-400
+                                flex items-center justify-center cursor-pointer hover:bg-slate-300
+                                relative overflow-hidden"
+                            onclick="openImageModal('sub4')">
+
+                            <span class="text-slate-400 text-4xl font-bold">+</span>
+                        </label>
+
+                        
+                        <label data-box="sub5"
+                            class="min-w-0 bg-slate-200 border-2 border-dashed border-slate-400
+                                flex items-center justify-center cursor-pointer hover:bg-slate-300
+                                relative overflow-hidden"
+                            onclick="openImageModal('sub5')">
+
+                            <span class="text-slate-400 text-4xl font-bold">+</span>
+                        </label>
+
+
+                        <label data-box="sub6"
+                            class="min-w-0 bg-slate-200 border-2 border-dashed border-slate-400
+                                flex items-center justify-center cursor-pointer hover:bg-slate-300
+                                relative overflow-hidden"
+                            onclick="openImageModal('sub6')">
+                            <span class="text-slate-400 text-4xl font-bold">+</span>
+                        </label>
+
+                    </div>
+                </div>
+            </div>
+
+          
+            <!-- 추가 row 생성 -->
+            <div class="section-card border border-slate-400 flex flex-col">
+                <div class="bg-blue-900 text-white text-[15px] px-2 py-1 font-bold flex justify-between items-center italic shrink-0">
+                    <span>임대현황 - 상세관리</span>
+                    <button type="button" onclick="addRow()" class="bg-blue-600 hover:bg-blue-500 text-white px-2 py-0.5 rounded text-[12px] not-italic transition-colors">
+                        + 행 추가
+                    </button>
+                </div>
+                <input type="hidden" id="usable_area_pyeong" name="usable_area_pyeong" value="0">
+
+                <div class="overflow-y-auto max-h-[250px] bg-white">
+                    <table class="w-full text-[11px] border-collapse" id="lease-table">
+                        <thead class="bg-slate-50 border-b border-slate-300 sticky top-0 z-10">
+                            <tr>
+                                <th class="border-r py-1 w-10 bg-slate-50">층</th>
+                                <th class="border-r bg-slate-50 w-56">업종</th>
+                                <th class="border-r bg-slate-50" >건축면적(평)</th>
+                                <th class="border-r bg-slate-50">건축면적(㎡)</th>
+                                <th class="border-r bg-slate-50">보증금</th>
+                                <th class="border-r bg-slate-50">임대료</th>
+                                <th class="border-r bg-slate-50">관리비</th>
+                                <th class="border-r bg-slate-50 w-64">비고</th>
+                                <th class="border-r bg-slate-50 w-20">공실</th>
+                                <th class="w-8 bg-slate-50">삭제</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lease-body" class="text-center divide-y divide-slate-200">
+                            <tr class="lease-row hover:bg-blue-50">
+                                <td class="border-r py-1"><input type="text" class="col-floor w-full text-center outline-none bg-transparent"></td>
+                                <td class="border-r px-1"><input type="text" class="col-type w-full text-center outline-none bg-transparent"></td>
+                                <td class="border-r px-1"><input type="text" class="col-area-pyeong w-full text-center outline-none bg-transparent" readonly></td>
+                                <td class="border-r px-1"><input type="text" class="col-area-sqm w-full text-center outline-none bg-transparent" ></td>
+                                <td class="border-r px-1"><input type="text" class="col-deposit w-full text-center outline-none bg-transparent"></td>
+                                <td class="border-r px-1"><input type="text" class="col-monthly-rent-fee w-full text-center outline-none bg-transparent"></td>
+                                <td class="border-r px-1"><input type="text" class="col-maintenance-fee w-full text-center outline-none bg-transparent"></td>
+                                <td class="border-r px-1"><input type="text" class="col-remark w-full text-center outline-none bg-transparent"></td>
+                                <td class="border-r px-1 text-center">
+                                    <select class="col-is-vacant w-full h-6 border border-slate-300 rounded bg-white text-[11px] text-center outline-none">
+                                        <option value="-" selected>-</option>
+                                        <option value="공실">공실</option>
+                                        <option value="책임명도">책임명도</option>
+                                        <option value="명도x">명도x</option>
+                                        <option value="명도협의">명도협의</option>
+                                    </select>
+                                </td>
+                                <td class="text-red-500 cursor-pointer font-bold" onclick="removeRow(this)">×</td>
+                            </tr>
+                        </tbody>
+                        <!-- ⭐ 총합 -->
+                        <tfoot class="bg-slate-100 border-t border-slate-300 font-bold sticky bottom-0 z-10">
+                            <tr>
+                                <td class="border-r py-1 text-center">합계</td>
+                                <td class="border-r px-1 text-center text-blue-700 font-bold" id="sum-leaseable-pyeong">현 사용 가능 면적(평) : <span class="font-black text-[12px]">0평</span></td>
+                                <td class="border-r px-1 text-center" id="sum_area_pyeong">0</td>
+                                <td class="border-r px-1 text-center" id="sum_area_sqm">0</td>
+                                <td class="border-r px-1 text-center" id="sum-deposit">0</td>
+                                <td class="border-r px-1 text-center" id="sum-rent">0</td>
+                                <td class="border-r px-1 text-center" id="sum-maintenance">0</td>
+                                <td class="border-r"></td>
+                                <td class="border-r"></td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="section-card grow flex flex-col min-h-0">
+                <div class="bg-slate-800 text-white text-[11px] px-2 py-1 font-bold">건물의 특징</div>
+                <textarea id="bd_feature" name="bd_feature" spellcheck="false" class="w-full flex-1 min-h-0 overflow-y-auto p-3 text-sm text-slate-800 leading-6 outline-none resize-none whitespace-pre-wrap break-words" placeholder="건물 특징을 입력하세요..."></textarea>
+            </div>
+
+            <div class="section-card grow flex flex-col min-h-0">
+                <div class="bg-slate-800 text-white text-[11px] px-2 py-1 font-bold">기타 특징</div>
+                <textarea id="etc_feature" name="etc_feature" spellcheck="false" class="w-full flex-1 min-h-0 overflow-y-auto p-3 text-sm text-slate-800 leading-6 outline-none resize-none whitespace-pre-wrap break-words" placeholder="건물 기타 특징을 입력하세요..."></textarea>
+            </div>
+        </section>
+
+
+        <!-- 우측 사이드 정보 -->
+        <aside class="w-[500px] flex flex-col gap-1 min-h-0 overflow-hidden relative" id="rightSidebar">
+            <div class="section-card border border-slate-400 bg-white">
+                <div class="bg-blue-900 text-white text-[13px] px-2 py-1 font-bold italic border-b border-slate-400">
+                    고객 정보 상세
+                </div>
+
+                <div class="flex items-stretch overflow-hidden">
+                    
+                    <div class="w-[60%] flex flex-col border-r border-slate-200">
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                            <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">고객명</div>
+                            <input type="text" id="client_name" name="client_name" class="flex-1 px-2 bg-white font-bold text-[12px] outline-none">
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                            <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">연락처</div>
+                            <input type="text" id="mobile_phone" name="mobile_phone" class="flex-1 px-2 bg-white font-bold text-[12px] text-blue-600 outline-none">
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                            <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">이메일</div>
+                            <input type="text" id="email" name="email" class="flex-1 px-2 bg-white font-bold text-[12px] outline-none">
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                            <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">회사전화</div>
+                            <input type="text" id="office_phone" name="office_phone" class="flex-1 px-2 bg-white font-bold text-[12px] outline-none">
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                            <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">자택전화</div>
+                            <input type="text" id="home_phone" name="home_phone" class="flex-1 px-2 bg-white font-bold text-[12px] outline-none">
+                        </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch">
+                            <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">기타전화</div>
+                            <input type="text" id="orientation" name="orientation" class="flex-1 px-2 bg-white font-bold text-[12px] outline-none">
+                        </div>
+
+                        <div class="flex items-stretch flex-1 min-h-[64px]">
+                            <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">비고</div>
+                            <textarea id="etc_memo" name="etc_memo" class="flex-1 p-2 bg-white text-[12px] outline-none resize-none"></textarea>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 flex flex-col">
+                        <div class="h-[32px] bg-slate-100 border-b border-slate-200 flex items-center px-2 text-[11px] font-bold text-slate-600">
+                            통합 상세 메모
+                        </div>
+                        <textarea id="memo" name="memo" placeholder="상세 내용을 입력하세요..."
+                                class="flex-1 p-3 bg-white outline-none text-[12px] resize-none leading-relaxed"></textarea>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="section-card grow min-h-0 flex flex-col border border-slate-400 bg-white">
+                <div class="bg-emerald-700 text-white text-[12px] px-2 py-1 font-bold flex justify-between items-center italic shrink-0">
+                    <span>진행 내역 (History)</span>
+                    <button type="button" onclick="addHistoryRow()" class="bg-white/20 hover:bg-white/40 text-white px-2 py-0.5 rounded text-[11px] transition-all">
+                        + 추가
+                    </button>
+                </div>
+
+                <div id="history-container" class="flex-1 overflow-y-auto bg-slate-50 text-[11px]">
+                    <div id="history-list" class="divide-y divide-slate-200 px-2">
+
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card shrink-0 flex flex-col border border-slate-400 bg-white">
+                <div class="bg-indigo-700 text-white text-[12px] px-2 py-1 font-bold">
+                    소개 고객 목록
+                </div>
+                <div id="intro-customer-list" class="p-2 text-[11px] text-slate-600 space-y-1 max-h-[180px] overflow-y-auto">
+                    <div class="text-slate-400">아직 소개 기록이 없습니다.</div>
+                </div>
+            </div>
+            
+        </aside>
+    </form>
+
+    <!-- Model Page -->
+    <div id="imageModal"
+        class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
+
+        <div class="bg-white w-[700px] max-h-[80vh] rounded-xl p-5 flex flex-col">
+
+            <h2 class="text-lg font-bold mb-3">이미지 등록</h2>
+
+            <!-- 숨긴 파일 input -->
+            <input id="imageInput"
+                type="file"
+                accept="image/*"
+                onchange="handleImageUpload(this)"
+                class="hidden">
+
+            <!-- 커스텀 버튼 -->
+            <div class="mb-3 bg-blue-600 hover:bg-blue-700
+                        text-white font-semibold py-2 rounded-lg transition text-center" >
+                📷 이미지 업로드 (최대 6장)
+            </div>
+
+            <!-- 이미지 목록 -->
+            <div id="modalImageList"
+                class="grid grid-cols-3 gap-3 overflow-y-auto flex-1">
+                <p id="emptyText"
+                class="text-slate-400 col-span-4 text-center">
+                    등록된 이미지가 없습니다
+                </p>
+            </div>
+
+            <button onclick="closeImageModal()"
+                    class="mt-3 bg-slate-700 hover:bg-slate-800
+                        text-white py-2 rounded-lg">
+                닫기
+            </button>
+        </div>
+    </div>
+
+    <div id="previewModal"
+        class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[60]"
+        onclick="closePreviewModal()">
+
+    <img id="previewImage"
+        class="max-w-[90vw] max-h-[90vh] rounded shadow-lg">
+    </div>
+
+    <!-- 삭제 확인 모달 -->
+    <div id="deleteModal"
+        class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+
+        <div class="bg-white rounded-2xl w-[420px] p-6 shadow-xl">
+            <h2 class="text-xl font-bold text-red-600 mb-2">⚠️ 삭제 확인</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                이 작업은 <b>되돌릴 수 없습니다.</b><br>
+                계속하려면 아래에 <b class="text-red-600">DELETE</b> 를 입력하세요.
+            </p>
+
+            <input id="deleteInput"
+                type="text"
+                placeholder="DELETE"
+                class="w-full border rounded-lg px-4 py-2 mb-4 focus:ring-2 focus:ring-red-400 outline-none"/>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="closeDeleteModal()"
+                    class="px-5 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-semibold">
+                    취소
+                </button>
+
+                <button id="confirmDeleteBtn"
+                    onclick="confirmDelete()"
+                    disabled
+                    class="px-5 py-2 rounded-lg bg-red-500 text-white font-bold
+                        disabled:bg-red-300 disabled:cursor-not-allowed">
+                    삭제
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    function normalizeTextValue(value) {
+        if (typeof value !== "string") return value;
+        try {
+            return value.normalize("NFKC");
+        } catch (e) {
+            return value;
+        }
+    }
+
+    function sanitizeNearbyPart(value) {
+        return String(value || "").replace(/\|\|/g, "|").replace(/\|/g, " ").replace(/##/g, " ").trim();
+    }
+
+    function createNearbyStation2Row(values = {}) {
+        const row = document.createElement("div");
+        row.className = "group relative text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded px-1 py-1";
+        row.innerHTML = `
+            <button type="button" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 text-[12px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="삭제">×</button>
+            <div class="pr-1 space-y-1">
+                <div class="grid grid-cols-[auto_1fr_auto_1fr_auto_1fr_auto] gap-1 items-center">
+                    <span>주변역</span>
+                    <input type="text" class="nearby2-station h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded" value="${values.station || ""}">
+                    <span>호선</span>
+                    <input type="text" class="nearby2-line h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded" value="${values.line || ""}">
+                    <span></span>
+                    <input type="text" class="nearby2-exit h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded" value="${values.exit || ""}">
+                    <span>번출구</span>
+                </div>
+                <div class="grid grid-cols-[auto_1fr_auto_auto_1fr_auto] gap-1 items-center">
+                    <span>도보</span>
+                    <input type="text" class="nearby2-walk h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded" value="${values.walk || ""}">
+                    <span>분</span>
+                    <span>거리</span>
+                    <input type="text" class="nearby2-distance h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded" value="${values.distance || ""}">
+                    <span>m</span>
+                </div>
+            </div>
+        `;
+
+        const removeBtn = row.querySelector("button");
+        removeBtn.addEventListener("click", () => {
+            row.remove();
+            updateNearbyStation2Hidden();
+        });
+
+        row.querySelectorAll("input").forEach(input => {
+            input.addEventListener("input", updateNearbyStation2Hidden);
+        });
+
+        return row;
+    }
+
+    function updateNearbyStation2Hidden() {
+        const rows = Array.from(document.querySelectorAll("#nearbyStation2Rows > div"));
+        const serialized = rows
+            .map(row => {
+                const station = sanitizeNearbyPart(row.querySelector(".nearby2-station")?.value);
+                const line = sanitizeNearbyPart(row.querySelector(".nearby2-line")?.value);
+                const exit = sanitizeNearbyPart(row.querySelector(".nearby2-exit")?.value);
+                const walk = sanitizeNearbyPart(row.querySelector(".nearby2-walk")?.value);
+                const distance = sanitizeNearbyPart(row.querySelector(".nearby2-distance")?.value);
+                if (!(station || line || exit || walk || distance)) return "";
+                return [station, line, exit, walk, distance].join("|");
+            })
+            .filter(Boolean)
+            .join("##");
+
+        const hidden = document.getElementById("nearby_station2");
+        if (hidden) hidden.value = serialized;
+    }
+
+    function renderNearbyStation2RowsFromHidden() {
+        const wrap = document.getElementById("nearbyStation2Rows");
+        const hidden = document.getElementById("nearby_station2");
+        if (!wrap || !hidden) return;
+
+        wrap.innerHTML = "";
+        const raw = hidden.value || "";
+        const entries = raw ? raw.split("##").filter(Boolean) : [];
+
+        if (!entries.length) {
+            wrap.appendChild(createNearbyStation2Row());
+            updateNearbyStation2Hidden();
+            return;
+        }
+
+        entries.forEach(item => {
+            const [station = "", line = "", exit = "", walk = "", distance = ""] = item.split("|");
+            wrap.appendChild(createNearbyStation2Row({ station, line, exit, walk, distance }));
+        });
+        updateNearbyStation2Hidden();
+    }
+
+    function addNearbyStation2Row() {
+        const wrap = document.getElementById("nearbyStation2Rows");
+        if (!wrap) return;
+        wrap.appendChild(createNearbyStation2Row());
+        updateNearbyStation2Hidden();
+    }
+
+    function createRoadAccess2Row(values = {}) {
+        const row = document.createElement("div");
+        row.className = "group relative text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded px-1 py-1";
+        row.innerHTML = `
+            <button type="button" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 text-[12px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="삭제">×</button>
+            <div class="pr-7 grid grid-cols-[auto_40px_auto_auto_40px_auto_40px_auto_minmax(0,1fr)_auto_auto_64px] gap-0.5 items-center text-[10px]">
+                <span>도로</span>
+                <input type="text" class="road2-main h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.main || ""}">
+                <span>m</span>
+                <span>{X</span>
+                <input type="text" class="road2-sub1 h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.sub1 || ""}">
+                <span>m X</span>
+                <input type="text" class="road2-sub2 h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.sub2 || ""}">
+                <span>m X</span>
+                <input type="text" class="road2-sub3 h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.sub3 || ""}">
+                <span>m}</span>
+                <span>선택</span>
+                <select class="road2-type h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-[10px] text-center rounded px-0.5">
+                    <option value="선택" ${values.type === "선택" ? "selected" : ""}>선택</option>
+                    <option value="코너" ${values.type === "코너" ? "selected" : ""}>코너</option>
+                    <option value="양면" ${values.type === "양면" ? "selected" : ""}>양면</option>
+                </select>
+            </div>
+        `;
+
+        const removeBtn = row.querySelector("button");
+        removeBtn.addEventListener("click", () => {
+            row.remove();
+            updateRoadAccess2Hidden();
+        });
+
+        row.querySelectorAll("input, select").forEach(el => {
+            el.addEventListener("input", updateRoadAccess2Hidden);
+            el.addEventListener("change", updateRoadAccess2Hidden);
+        });
+
+        return row;
+    }
+
+    function updateRoadAccess2Hidden() {
+        const rows = Array.from(document.querySelectorAll("#roadAccess2Rows > div"));
+        const serialized = rows
+            .map(row => {
+                const main = sanitizeNearbyPart(row.querySelector(".road2-main")?.value);
+                const sub1 = sanitizeNearbyPart(row.querySelector(".road2-sub1")?.value);
+                const sub2 = sanitizeNearbyPart(row.querySelector(".road2-sub2")?.value);
+                const sub3 = sanitizeNearbyPart(row.querySelector(".road2-sub3")?.value);
+                const type = sanitizeNearbyPart(row.querySelector(".road2-type")?.value || "선택");
+                if (!(main || sub1 || sub2 || sub3 || (type && type !== "선택"))) return "";
+                return [main, sub1, sub2, sub3, type].join("|");
+            })
+            .filter(Boolean)
+            .join("##");
+
+        const hidden = document.getElementById("road_access2");
+        if (hidden) hidden.value = serialized;
+    }
+
+    function renderRoadAccess2RowsFromHidden() {
+        const wrap = document.getElementById("roadAccess2Rows");
+        const hidden = document.getElementById("road_access2");
+        if (!wrap || !hidden) return;
+
+        wrap.innerHTML = "";
+        const raw = hidden.value || "";
+        const entries = raw ? raw.split("##").filter(Boolean) : [];
+
+        if (!entries.length) {
+            wrap.appendChild(createRoadAccess2Row());
+            updateRoadAccess2Hidden();
+            return;
+        }
+
+        entries.forEach(item => {
+            const [main = "", sub1 = "", sub2 = "", sub3 = "", type = "선택"] = item.split("|");
+            wrap.appendChild(createRoadAccess2Row({ main, sub1, sub2, sub3, type }));
+        });
+        updateRoadAccess2Hidden();
+    }
+
+    function addRoadAccess2Row() {
+        const wrap = document.getElementById("roadAccess2Rows");
+        if (!wrap) return;
+        wrap.appendChild(createRoadAccess2Row());
+        updateRoadAccess2Hidden();
+    }
+
+    function createViolationRow(values = {}) {
+        const row = document.createElement("div");
+        row.className = "group relative text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded px-1 py-1";
+        row.innerHTML = `
+            <button type="button" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 text-[12px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="삭제">×</button>
+            <div class="pr-1 space-y-1">
+                <div class="grid grid-cols-[auto_72px_auto_72px_auto_minmax(0,1fr)] gap-1 items-center">
+                    <span>날짜</span>
+                    <input type="text" class="violation-date h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.date || ""}">
+                    <span>내용</span>
+                    <input type="text" class="violation-content h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.content || ""}">
+                    <span>세부내용</span>
+                    <input type="text" class="violation-detail h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.detail || ""}">
+                </div>
+                <div class="grid grid-cols-[auto_72px_auto_auto_64px_auto_minmax(0,1fr)] gap-0.5 items-center text-[10px]">
+                    <span class="whitespace-nowrap">이행강제금</span>
+                    <input type="text" class="violation-fine h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.fine || ""}">
+                    <span>원</span>
+                    <span class="whitespace-nowrap">종류</span>
+                    <select class="violation-type h-6 border border-slate-300 bg-white outline-none min-w-0 text-center rounded px-0.5">
+                        <option value="선백" ${values.type === "선백" ? "selected" : ""}>선백</option>
+                        <option value="대수선" ${values.type === "대수선" ? "selected" : ""}>대수선</option>
+                        <option value="리모델링" ${values.type === "리모델링" ? "selected" : ""}>리모델링</option>
+                    </select>
+                    <span class="whitespace-nowrap">비고</span>
+                    <input type="text" class="violation-remark h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.remark || ""}">
+                </div>
+            </div>
+        `;
+
+        const removeBtn = row.querySelector("button");
+        removeBtn.addEventListener("click", () => {
+            row.remove();
+            updateViolationHidden();
+        });
+
+        row.querySelectorAll("input, select").forEach(el => {
+            el.addEventListener("input", updateViolationHidden);
+            el.addEventListener("change", updateViolationHidden);
+        });
+
+        return row;
+    }
+
+    function updateViolationHidden() {
+        const rows = Array.from(document.querySelectorAll("#violationRows > div"));
+        const serialized = rows
+            .map(row => {
+                const date = sanitizeNearbyPart(row.querySelector(".violation-date")?.value);
+                const content = sanitizeNearbyPart(row.querySelector(".violation-content")?.value);
+                const detail = sanitizeNearbyPart(row.querySelector(".violation-detail")?.value);
+                const fine = sanitizeNearbyPart(row.querySelector(".violation-fine")?.value);
+                const remark = sanitizeNearbyPart(row.querySelector(".violation-remark")?.value);
+                const type = sanitizeNearbyPart(row.querySelector(".violation-type")?.value || "선백");
+
+                if (!(date || content || detail || fine || remark || type !== "선백")) return "";
+                return [date, content, detail, fine, type, remark].join("|");
+            })
+            .filter(Boolean)
+            .join("##");
+
+        const hidden = document.getElementById("violation_info");
+        if (hidden) hidden.value = serialized;
+    }
+
+    function renderViolationRowsFromHidden() {
+        const wrap = document.getElementById("violationRows");
+        const hidden = document.getElementById("violation_info");
+        if (!wrap || !hidden) return;
+
+        wrap.innerHTML = "";
+        const raw = hidden.value || "";
+        const entries = raw ? raw.split("##").filter(Boolean) : [];
+
+        if (!entries.length) {
+            wrap.appendChild(createViolationRow());
+            updateViolationHidden();
+            return;
+        }
+
+        entries.forEach(item => {
+            const [date = "", content = "", detail = "", fine = "", type = "선백", remark = ""] = item.split("|");
+            wrap.appendChild(createViolationRow({ date, content, detail, fine, remark, type }));
+        });
+        updateViolationHidden();
+    }
+
+    function addViolationRow() {
+        const wrap = document.getElementById("violationRows");
+        if (!wrap) return;
+        wrap.appendChild(createViolationRow());
+        updateViolationHidden();
+    }
+
+    // 1. 페이지 로드 시 데이터 불러오기 (기존 로직 유지하되 value에 할당)
+    async function loadBuildingDetail() {
+        const pathSegments = window.location.pathname.split('/');
+        const bd_number = pathSegments[pathSegments.length - 1];
+
+        try {
+            const res = await fetch(`/api/building/${bd_number}`);
+            const item = await res.json();
+            
+            if (item.info_data) {
+                Object.entries(item.info_data).forEach(([key, value]) => {
+                    
+                    // --- 다중 선택 필드(용도, 구조 등) 공통 처리 ---
+                    if ((key === "building_usage" || key === "building_structure") && value) {
+                        // 1. 해당 그룹 컨테이너를 찾음 (id="group-usage" 등)
+                        const groupId = (key === "building_usage") ? "group-usage" : "group-structure";
+                        const group = document.getElementById(groupId);
+
+                        if (group) {
+                            const selectedValues = value.split('/'); // "철근/철골" -> ["철근", "철골"]
+                            
+                            // 2. 해당 그룹 내의 체크박스들만 찾아서 체크
+                            const checkboxes = group.querySelectorAll('.usage-check');
+                            checkboxes.forEach(cb => {
+                                cb.checked = selectedValues.includes(cb.value);
+                            });
+
+                            // 3. 해당 그룹 내의 hidden input에 값 세팅
+                            const hiddenInput = group.querySelector('input[type="hidden"]');
+                            if (hiddenInput) hiddenInput.value = value;
+
+                            // 4. 해당 그룹 내의 라벨(Label) 업데이트
+                            const label = group.querySelector('.selectedLabel');
+                            if (label && selectedValues.length > 0) {
+                                label.innerText = selectedValues.length > 2 
+                                    ? `${selectedValues[0]} 외 ${selectedValues.length - 1}건` 
+                                    : selectedValues.join(', ');
+                                label.classList.add('text-blue-700', 'font-extrabold');
+                            }
+                        }
+                        return; // 다중 선택 처리가 끝났으므로 다음 필드로 넘어감
+                    }
+
+                    // --- 2. 기존 로직 (일반 필드 및 단일 체크박스) ---
+                    const element = document.getElementById(key);
+                    if (element) {
+                        if (element.type === "checkbox") {
+                            const isChecked = (value === true || value === "true" || value === 1 || value === "1");
+                            element.checked = isChecked;
+                            return;
+                        }
+
+                        const rawDisplayValue = (value === "0" || value === "0.0" || value === null || value === "NaN") ? "" : value;
+                        const displayValue = normalizeTextValue(rawDisplayValue);
+                        element.value = displayValue;
+
+                        // 스타일 로직
+                        element.style.border = "1px solid #3b82f6";
+                        element.style.borderRadius = "8px";
+                        element.style.paddingLeft = "8px";
+                        element.style.paddingRight = "8px";
+
+                        if (displayValue !== "") {
+                            element.style.fontWeight = "800";
+                            element.style.color = "#1e40af";
+                            element.classList.add('bg-yellow-50');
+                        }
+                    }
+                });
+
+                
+                // 2. 상세 관리 테이블(lease_details) 세팅
+                if (item.lease_details && Array.from(item.lease_details).length > 0) {
+                    console.log("lease_detatils")
+                    const tbody = document.getElementById('lease-body');
+                    tbody.innerHTML = ''; // 기존에 있던 빈 행이나 샘플 행을 삭제
+
+                    item.lease_details.forEach(detail => {
+                        // 행 추가 함수 호출 (데이터를 파라미터로 전달)
+                        addRow(detail);
+                    });
+
+                    // ⭐⭐⭐ 이 줄 추가
+                    updateLeaseSummary();
+                }
+
+                console.log("history_data")
+                console.log(item.history_details)
+                // 3. history 테이블(history_details) 세팅
+                if (item.history_details && Array.isArray(item.history_details)) {
+                    const historyList = document.getElementById('history-list');
+                    historyList.innerHTML = ''; // 초기화
+
+                    // 최신순으로 정렬되어 있다면 그대로, 아니라면 필요에 따라 정렬 후 순회
+                    item.history_details.forEach(history => {
+                        // 이미 저장된 형태의 HTML을 생성하는 함수 호출
+                        renderHistoryItem(history);
+                    });
+                }
+
+                if (Array.isArray(item.intro_customers)) {
+                    renderIntroCustomerList(item.intro_customers);
+                }
+                
+                // Image load setting 
+                if (item.image_info){
+                    Object.entries(item.image_info).forEach(([boxKey, imageList]) => {
+
+                        // boxKey 없으면 초기화
+                        if (!imageStore[boxKey]) {
+                            imageStore[boxKey] = Array(6).fill(null);
+                            imagechange[boxKey] = Array(6).fill(false);
+                        }
+
+                        imageList.forEach(img => {
+                            const index = Number(img.section_index);
+                            imageStore[boxKey][index] = img.url;   // ⭐ URL 주입
+                            imagechange[boxKey][index] = false;    // 변경 아님
+                        });
+
+                        // UI 갱신
+                        renderMainBox(boxKey);
+                    });
+
+                    // 현재 선택된 box 모달도 갱신
+                    if (currentBox) {
+                        renderModalImages();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("데이터 로드 실패:", error);
+            alert("정보를 불러오지 못했습니다.");
+        }
+        calculatePricePerPyeong();
+        calculateOfficialTotalPrice();
+        calculateLandPricePerPyeong();
+        calculatetotalPrice();
+        change_comma.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && el.value !== "") {
+                applyCommaAndYield(el, id);
+            }
+        });
+        renderNearbyStation2RowsFromHidden();
+        renderRoadAccess2RowsFromHidden();
+        renderViolationRowsFromHidden();
+    }
+    // 페이지가 열리면 바로 빌딜 Detail 관련 정보 받아와 뿌리기 
+    window.onload = loadBuildingDetail;
+
+
+    // 2. 수정된 데이터 서버에 저장하기
+    // 1️⃣ 건물 정보(JSON) 저장
+    async function saveBuildingDetail() {
+        console.log("play save");
+
+        const formElement = document.getElementById('buildingForm');
+        const formData = new FormData(formElement);
+        const updatedData = Object.fromEntries(formData.entries());
+
+        // 체크박스 대상 키 목록
+        const checkboxKeys = [
+            'is_new_site', 
+            'is_remodeling', 
+            'is_office_building', 
+            'is_investment', 
+            'is_development', 
+            'is_stable_holding'
+        ];
+        // 체크박스 필드들을 True/False로 덮어쓰기
+        checkboxKeys.forEach(key => {
+            updatedData[key] = formData.has(key);
+        });
+
+        Object.keys(updatedData).forEach(key => {
+            updatedData[key] = normalizeTextValue(updatedData[key]);
+        });
+
+        /* ===============================
+        임대현황
+        =============================== */
+        const rows = document.querySelectorAll('#lease-body .lease-row');
+        updatedData.lease_details = Array.from(rows).map(row => ({
+            floor: row.querySelector('.col-floor').value,
+            business_type: row.querySelector('.col-type').value,
+            area_sqm: row.querySelector('.col-area-sqm').value,
+            area_pyeong: row.querySelector('.col-area-pyeong').value,
+            deposit: row.querySelector('.col-deposit').value,
+            monthly_rent_fee: row.querySelector('.col-monthly-rent-fee').value,
+            maintenance_fee: row.querySelector('.col-maintenance-fee').value,
+            remark: row.querySelector('.col-remark').value,
+            is_vacant: row.querySelector('.col-is-vacant')?.value || "-",
+        }));
+
+        /* ===============================
+        진행 이력
+        =============================== */
+        const historyRows = document.querySelectorAll('.history-row');
+        updatedData.history_data = Array.from(historyRows).map(row => ({
+            writer: row.querySelector('.h_writer').innerText,
+            write_time: row.querySelector('.h_time').innerText,
+            memo: row.querySelector('.h_memo').innerText,
+        }));
+
+        /* ===============================
+        이미지 메타 정보 (개수만)
+        ❗ 서버 기존 구조 유지
+        =============================== */
+        updatedData.images = Object.keys(imageStore).map(section => ({
+            section,
+            count: imageStore[section].length
+        }));
+        console.log("updatedData")
+        console.log(updatedData)
+        /* ===============================
+        신규 / 수정 판단
+        =============================== */
+        const bd_number = updatedData.bd_number;
+        const isNew = !bd_number || bd_number === 'new';
+
+        const method = isNew ? 'POST' : 'PUT';
+        const url = isNew ? '/api/building' : `/api/building/${bd_number}`;
+
+        try {
+            const res = await fetch(url, {
+                method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedData)
+            });
+
+            if (!res.ok) throw new Error("JSON 저장 실패");
+
+            const result = await res.json();
+            const savedBdNumber = isNew ? result.bd_number : bd_number;
+
+            // ✅ JSON 저장 성공 후 이미지 업로드
+            await uploadBuildingImages(savedBdNumber);
+
+            alert("성공적으로 저장되었습니다!");
+
+            if (isNew) {
+                location.href = `/detail/${savedBdNumber}`;
+            }
+
+        } catch (err) {
+            console.error(err);
+            alert("저장 중 오류가 발생했습니다.");
+        }
+    }
+    
+    // Image 저장 function
+    async function uploadBuildingImages(bd_number) {
+        const changes = getChangedImageSlots();
+        console.log("changes")
+        console.log(changes)
+        if (!changes.length) return; // 🔥 변경 없으면 업로드 안 함
+
+        const fd = new FormData();
+        
+        changes.forEach(item => {
+            fd.append("sections", item.section);
+            fd.append("indices", item.index);
+            fd.append("actions", item.image ? "U" : "D");
+
+            if (item.image) {
+                fd.append(
+                    "images",
+                    base64ToFile(item.image, `${item.section}_${item.index}.jpg`)
+                );
+            }
+        });
+        
+
+        console.log("fd 객체 확인 ")
+        // 객체 리스트 확인 map 형식으로 저장되어 있음. 
+        fd.forEach((value, key) => {
+            console.log(key, value);
+            console.log("===========================");
+        });
+        
+
+        const res = await fetch(`/api/building/${bd_number}/images`, {
+            method: "POST",
+            body: fd
+        });
+
+        if (!res.ok) {
+            throw new Error("이미지 업로드 실패");
+        }
+    }
+
+
+    // // 원래버전 
+    // async function uploadBuildingImages(bd_number) {
+    //     // 이미지 없으면 그냥 종료
+    //     const hasImages = Object.values(imageStore).some(arr => arr.length > 0);
+    //     if (!hasImages) return;
+
+    //     const fd = new FormData();
+
+    //     Object.keys(imageStore).forEach(section => {
+    //         imageStore[section].forEach((base64, index) => {
+    //             const file = base64ToFile(base64, `${section}_${index}.jpg`);
+    //             fd.append("images", file);
+    //             fd.append("sections", section); // 서버에서 매칭용
+    //         });
+    //     });
+
+    //     const res = await fetch(`/api/building/${bd_number}/images`, {
+    //         method: "POST",
+    //         body: fd
+    //     });
+
+    //     if (!res.ok) {
+    //         throw new Error("이미지 업로드 실패");
+    //     }
+    // }
+
+
+    // 변경된 이미지만 확인 
+    function getChangedImageSlots() {
+        const changes = [];
+        console.log("check changes")
+        console.log(imagechange)
+        Object.keys(imagechange).forEach(section => {
+            imagechange[section].forEach((changed, index) => {
+                if (changed === true) {
+                    changes.push({
+                        section,
+                        index,
+                        image: imageStore[section][index] // null or base64
+                    });
+                    // 변경했다고 체크 진행
+                    imagechange[section][index] = false
+                }
+            });
+        });
+        console.log("after check changes")
+        console.log(imagechange)
+        return changes;
+    }
+
+    // 파일로 변환
+    function base64ToFile(base64, filename) {
+        // base64 헤더 분리
+        const arr = base64.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n);
+        }
+
+        return new File([u8arr], filename, { type: mime });
+    }
+
+
+
+    function openMap(type) {
+        // 1. 주소 가져오기
+        const addressValue = document.getElementById('address').value;
+
+        if (!addressValue || addressValue === "0") {
+            alert("이동할 주소가 없습니다!");
+            document.getElementById('address').focus();
+            return;
+        }
+
+        // 2. 타입에 따른 베이스 URL 설정
+        let baseUrl = "";
+        if (type === 'naver') {
+            baseUrl = "https://map.naver.com/p/search/";
+        } else if (type === 'kakao') {
+            baseUrl = "https://map.kakao.com/?q=";
+        }
+
+        // 3. 인코딩 및 합치기
+        const encodedAddress = encodeURIComponent(addressValue);
+        const finalUrl = baseUrl + encodedAddress;
+
+        // 4. 새 창 열기
+        window.open(finalUrl, '_blank');
+    }
+
+
+    // detail 정보 써져있는 창 닫기
+    function handleCancel() {
+            // 2. 창 닫기 시도 (팝업이나 window.open으로 열린 경우)
+            if (window.opener || window.history.length === 1) {
+                window.close();
+            } else {
+                // 3. 일반적인 페이지 이동으로 들어온 경우 뒤로 가기
+                history.back();
+            }
+        }
+
+
+
+    // 행 추가 함수
+    function addRow(data = {}) {
+        console.log("add data")
+        console.log(data)
+        const tbody = document.getElementById('lease-body');
+        const newRow = document.createElement('tr');
+        newRow.className = "lease-row hover:bg-blue-50";
+        // 데이터가 없으면 빈 문자열("") 처리
+        const floor = data.floor || "";
+        const bType = data.business_type || "";
+        const area_sqm = data.area_sqm || "";
+        const area_pyeong= data.area_pyeong || "";
+        const deposit = data.deposit || "";
+        const monthly_rent_fee = data.monthly_rent_fee || "";
+        const maintenance_fee = data.maintenance_fee || "";
+        const remark = data.remark || "";
+        const occupancyStatus = ["-", "공실", "책임명도", "명도x", "명도협의"].includes(data.is_vacant) ? data.is_vacant : "-";
+        
+        newRow.innerHTML = `
+        <td class="border-r py-1"><input type="text" class="col-floor w-full text-center outline-none bg-transparent" value="${floor}"></td>
+        <td class="border-r px-1"><input type="text" class="col-type w-full text-center outline-none bg-transparent" value="${bType}"></td>
+        <td class="border-r px-1"><input type="text" class="col-area-pyeong w-full text-center outline-none bg-transparent" readonly value="${area_pyeong}"></td>
+        <td class="border-r px-1"><input type="text" class="col-area-sqm w-full text-center outline-none bg-transparent" value="${area_sqm}" oninput="formatNumberWithComma_row(this)"></td>
+        <td class="border-r px-1"><input type="text" class="col-deposit w-full text-center outline-none bg-transparent" value="${deposit}" oninput="formatNumberWithComma_row(this)"></td>
+        <td class="border-r px-1"><input type="text" class="col-monthly-rent-fee w-full text-center outline-none bg-transparent" value="${monthly_rent_fee}" oninput="formatNumberWithComma_row(this)"></td>
+        <td class="border-r px-1"><input type="text" class="col-maintenance-fee w-full text-center outline-none bg-transparent" value="${maintenance_fee}" oninput="formatNumberWithComma_row(this)"></td>
+        <td class="border-r px-1"><input type="text" class="col-remark w-full text-center outline-none bg-transparent" value="${remark}"></td>
+        <td class="border-r px-1 text-center">
+            <select class="col-is-vacant w-full h-6 border border-slate-300 rounded bg-white text-[11px] text-center outline-none">
+                <option value="-" ${occupancyStatus === "-" ? "selected" : ""}>-</option>
+                <option value="공실" ${occupancyStatus === "공실" ? "selected" : ""}>공실</option>
+                <option value="책임명도" ${occupancyStatus === "책임명도" ? "selected" : ""}>책임명도</option>
+                <option value="명도x" ${occupancyStatus === "명도x" ? "selected" : ""}>명도x</option>
+                <option value="명도협의" ${occupancyStatus === "명도협의" ? "selected" : ""}>명도협의</option>
+            </select>
+        </td>
+        <td class="text-red-500 cursor-pointer font-bold" onclick="removeRow(this)">×</td>`;
+        tbody.appendChild(newRow);
+    }
+
+    // 행 삭제 함수
+    function removeRow(btn) {
+        // 1. 사용자에게 확인 메시지 표시
+        if (confirm("정말로 이 행을 삭제하시겠습니까?")) {
+            const row = btn.parentElement;
+            const tbody = document.getElementById('lease-body');
+            
+            // 2. 최소 한 줄은 남겨두는 로직
+            if (tbody.querySelectorAll('tr').length > 1) {
+                row.remove();
+            } else {
+                alert("최소 한 줄은 유지해야 합니다.");
+            }
+        }
+        updateLeaseSummary();
+    }
+
+    // History 행 추가 공통 UI 
+    function getHistoryEditHTML({ time, writer = "", content = "" }) {
+        return `
+            <div class="flex justify-between items-center font-bold text-emerald-700 mb-2">
+                <span>${time}</span>
+                <div class="flex gap-1.5 items-center">
+                    <input type="text"
+                        value="${writer}"
+                        placeholder="작성자"
+                        class="w-16 h-6 bg-white border border-slate-300 px-1.5 text-[11px] font-bold outline-none rounded">
+
+                    <button onclick="confirmHistory(this)"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded shadow-sm text-[10px]">
+                        저장
+                    </button>
+
+                    <button onclick="cancelEdit(this)"
+                        class="bg-slate-400 hover:bg-slate-500 text-white px-2.5 py-1 rounded shadow-sm text-[10px]">
+                        취소
+                    </button>
+                </div>
+            </div>
+
+            <textarea
+                placeholder="진행 내용을 입력하세요..."
+                class="h_memo w-full p-2 bg-white border border-slate-300 outline-none text-[12px] resize-none rounded-md h-16 shadow-inner"
+            >${content}</textarea>
+        `;
+    }
+    // 1. 행 추가 함수
+    function addHistoryRow() {
+        const historyList = document.getElementById('history-list');
+        const now = new Date();
+
+        const dateStr = `${now.getFullYear().toString().slice(-2)}-${(now.getMonth()+1)
+            .toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}
+            ${now.getHours() >= 12 ? '오후' : '오전'}
+            ${now.getHours() % 12 || 12}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+        const newRow = document.createElement('div');
+        newRow.className =
+            "py-3 border-b border-emerald-100 bg-emerald-50/30 px-2 animate-in fade-in duration-300";
+
+        newRow.innerHTML = getHistoryEditHTML({ time: dateStr });
+
+        historyList.insertBefore(newRow, historyList.firstChild);
+    }
+
+    // 2. 저장 함수 (저장된 텍스트 옆에 삭제 버튼 자동 생성)
+    function confirmHistory(btn) {
+        const row = btn.closest('.py-2, .py-3');
+
+        const time = row.querySelector('span')?.innerText;
+        const writer = row.querySelector('input')?.value || '작성자';
+        const content = row.querySelector('textarea')?.value;
+
+        if (!content) {
+            alert("내용을 입력하세요.");
+            return;
+        }
+
+        row.className = "history-row py-2 border-b border-slate-200 group";
+
+        row.innerHTML = `
+            <div class="flex justify-between font-bold text-blue-600">
+                <div class="flex items-center gap-2">
+                    <span class="h_time">${time}</span>
+                    <button type="button" onclick="editHistory(this)"
+                        class="text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[수정]</button>
+                    <button type="button" onclick="deleteHistory(this)"
+                        class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[삭제]</button>
+                </div>
+                <span class="h_writer">${writer}</span>
+            </div>
+            <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${content}</p>
+        `;
+    }
+
+    // 수정 함수 
+    function editHistory(btn) {
+        const row = btn.closest('.history-row');
+
+        const time = row.querySelector('.h_time')?.innerText || '';
+        const writer = row.querySelector('.h_writer')?.innerText || '';
+        const content = row.querySelector('.h_memo')?.innerText || '';
+
+        // 취소 대비 백업
+        row._backupHTML = row.innerHTML;
+
+        row.className =
+            "py-3 border-b border-emerald-100 bg-emerald-50/30 px-2";
+
+        row.innerHTML = getHistoryEditHTML({
+            time,
+            writer,
+            content
+        });
+    }
+
+    // 3. 삭제 함수
+    function deleteHistory(btn) {
+        if (confirm("이 히스토리 기록을 정말로 삭제하시겠습니까?")) {
+            const row = btn.closest('.py-2');
+            row.remove();
+        }
+    }
+    // 취소 함수
+    function cancelEdit(btn) {
+        const row = btn.closest('.py-3');
+
+        if (row._backupHTML) {
+            row.className = "history-row py-2 border-b border-slate-200 group";
+            row.innerHTML = row._backupHTML;
+            delete row._backupHTML;
+        } else {
+            // 새로 추가한 행이면 그냥 제거
+            row.remove();
+        }
+    }
+
+    
+    // 서버에서 받아온 데이터를 화면에 뿌려주는 함수
+    function renderHistoryItem(data) {
+        const historyList = document.getElementById('history-list');
+        const newRow = document.createElement('div');
+        
+        // confirmHistory에서 저장된 후의 클래스와 구조를 그대로 사용합니다.
+        newRow.className = "history-row py-2 border-b border-slate-200 group";
+        
+        const writer = data.writer || '알 수 없음';
+        const time = data.write_time || '';
+        const memo = data.memo || '';
+
+        newRow.innerHTML = `
+            <div class="flex justify-between font-bold text-blue-600">
+                <div class="flex items-center gap-2">
+                    <span class="h_time">${time}</span>
+                    <button type="button" onclick="editHistory(this)" class="text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[수정]</button>
+                    <button type="button" onclick="deleteHistory(this)" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[삭제]</button>
+                </div>
+                <span class="h_writer">${writer}</span>
+            </div>
+            <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${memo}</p>
+        `;
+
+        historyList.appendChild(newRow); 
+        // 만약 최신글이 위로 오게 하고 싶다면 appendChild 대신 insertBefore(newRow, historyList.firstChild)를 사용하세요.
+    }
+
+    function renderIntroCustomerList(rows) {
+        const list = document.getElementById('intro-customer-list');
+        if (!list) return;
+
+        if (!rows.length) {
+            list.innerHTML = '<div class="text-slate-400">아직 소개 기록이 없습니다.</div>';
+            return;
+        }
+
+        list.innerHTML = rows.map(row => `
+            <div class="border border-slate-200 rounded p-2 bg-slate-50 hover:bg-slate-100 cursor-pointer"
+                onclick="openCustomerFromIntro(${row.customer_number})">
+                <div class="flex justify-between">
+                    <div class="font-bold text-slate-700">${row.buyer_name || '이름없음'} (${row.customer_number})</div>
+                    <div class="text-indigo-600 font-semibold">${row.progress_status || '-'}</div>
+                </div>
+                <div class="text-slate-500">연락처: ${row.phone || '-'}</div>
+                <div class="text-slate-500">소개일: ${row.intro_date || '-'}</div>
+                <div class="text-slate-500">내용: ${row.intro_note || '-'}</div>
+            </div>
+        `).join('');
+    }
+
+    function openCustomerFromIntro(customerNumber) {
+        if (!customerNumber) return;
+        window.open(`/customer/${customerNumber}`, '_blank');
+    }
+
+
+    // 수익률 계산 script
+    function parseNumber(value) {
+        if (!value) return 0;
+        return parseFloat(value.replace(/,/g, '')) || 0;
+    }
+
+    function calculateYieldRate() {
+        const monthlyRent = parseNumber(document.getElementById('monthly_rent_fee')?.value);
+        const maintenanceFee = parseNumber(document.getElementById('maintenance_fee')?.value);
+        const maintenanceExpense = parseNumber(document.getElementById('maintenance_expense')?.value);
+        const salePrice = parseNumber(document.getElementById('sale_price')?.value);
+        const deposit = parseNumber(document.getElementById('security_deposit')?.value);
+
+        // 🔴 하나라도 없으면 표시 안 함
+        // if (
+        //     monthlyRent === 0 ||
+        //     maintenanceFee === 0 ||
+        //     maintenanceExpense === 0 ||
+        //     salePrice === 0 ||
+        //     deposit === 0
+        // ) {
+        //     document.getElementById('yield_rate').value = 0;
+        //     return;
+        // }
+
+        const denominator = salePrice - deposit;
+
+        // // 🔴 분모가 0 이하인 경우도 표시 안 함
+        // if (denominator <= 0) {
+        //     document.getElementById('yield_rate').value = '';
+        //     return;
+        // }
+
+        const annualNetIncome =
+            (monthlyRent + maintenanceFee - maintenanceExpense) * 12;
+
+        const yieldRate = (annualNetIncome / (denominator + Number.EPSILON)) ;
+
+        // console.log("INCOME")
+        // console.log(annualNetIncome)
+        // console.log(yieldRate)
+        // console.log(yieldRate)
+        const roundedUp =
+            (yieldRate + Number.EPSILON) * 100;
+
+        document.getElementById('yield_rate').value =
+            roundedUp.toFixed(1);
+    }
+
+
+
+
+
+    const change_comma = [
+        'deposit_price',
+        'other_sale_price',
+        'sale_price',
+        'security_deposit',
+        'price_per_pyeong',
+        
+        'monthly_rent_fee',
+        'maintenance_fee',
+        'maintenance_expense',
+        'price_per_total_floor_area',
+
+        'sale_price',
+        'security_deposit',
+        'official_price_per_sqm_won',
+        'official_price_per_pyeong_million',
+        'official_price_total_million',
+        
+    ];
+
+    const yieldInputs = [
+        'monthly_rent_fee',
+        'maintenance_fee',
+        'maintenance_expense',
+        'sale_price',
+        'security_deposit'
+    ];
+
+    const yieldInputSet = new Set(yieldInputs);
+
+    
+    // 콤마 적용 함수 , 수익률 계산 
+    function applyCommaAndYield(el, id) {
+        if (!el) return;
+
+        const cursorPosition = el.selectionStart ?? el.value.length;
+        const beforeLength = el.value.length;
+
+        el.value = formatNumberWithComma(el.value);
+
+        const afterLength = el.value.length;
+        el.selectionStart = el.selectionEnd =
+            cursorPosition + (afterLength - beforeLength);
+
+        // yieldInputs에 포함된 경우만 계산
+        if (yieldInputSet.has(id)) {
+            calculateYieldRate();
+        }
+    }
+
+    change_comma.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('input', function () {
+                applyCommaAndYield(el, id);
+            });
+        }
+    });
+
+
+    // Image 썸네일
+    function previewImage(input, box) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const img = new Image();
+        img.onload = () => {
+            const fit = img.width > img.height ? 'cover' : 'contain';
+
+            box.innerHTML = `
+                <img src="${img.src}"
+                    class="absolute inset-0 w-full h-full object-${fit}">
+            `;
+        };
+
+        const reader = new FileReader();
+        reader.onload = e => img.src = e.target.result;
+        reader.readAsDataURL(file);
+    }
+
+
+    // Modal Image 리스트 
+    const N = 12;
+
+    const createNullArray = (n) => Array.from({ length: n }, () => null);
+
+    const imageStore = {
+        main: createNullArray(N),
+        sub1: createNullArray(N),
+        sub2: createNullArray(N),
+        sub3: createNullArray(N),
+        sub4: createNullArray(N),
+        sub5: createNullArray(N),
+        sub6: createNullArray(N)
+    };
+
+    const imagechange = {
+        main: createNullArray(N),
+        sub1: createNullArray(N),
+        sub2: createNullArray(N),
+        sub3: createNullArray(N),
+        sub4: createNullArray(N),
+        sub5: createNullArray(N),
+        sub6: createNullArray(N)
+    };
+
+    // Main 페이지에서 어떤 Box를 눌렀는가?
+    let currentBox = null;
+    // 이미지 업로드에서 어떤 Slot을 눌렀는가?
+    let selectedSlotIndex = null;
+
+    function closeImageModal() {
+        document.getElementById('imageModal').classList.add('hidden');
+    }
+
+
+    function openImageModal(boxKey) {
+        currentBox = boxKey;
+        document.getElementById('imageModal').classList.remove('hidden');
+        renderModalImages();
+    }
+
+    function handleImageUpload(input) {
+        const file = input.files[0];
+                 // ⭐ 비동기로 인한 값 변경 방지 
+        const slotIndex = selectedSlotIndex;
+        const boxKey = currentBox;
+        if (!file) return;
+
+        // 🔹 1️⃣ 슬롯 클릭으로 업로드한 경우 (1장만)
+        if (selectedSlotIndex !== null) {
+            const reader = new FileReader();
+            reader.onload = e => {
+                imageStore[boxKey][slotIndex] = e.target.result;
+                imagechange[boxKey][slotIndex] = true;
+                renderModalImages();
+                renderMainBox(boxKey);
+            };
+            reader.readAsDataURL(file);
+
+            // ⭐ 반드시 초기화
+            selectedSlotIndex = null;
+            input.value = '';
+            return;
+        }
+
+        // 🔹 기존 "버튼으로 여러 장 업로드" 로직은 그대로 두고 싶다면
+        // (여기에 기존 코드 유지)
+    }
+
+    // 내부 이미지 설정 공간 갯수
+    function renderModalImages() {
+        const list = document.getElementById('modalImageList');
+        const images = imageStore[currentBox];
+        const MAX = 12;
+        console.log("images")
+        console.log(images)
+        console.log(currentBox)
+
+        list.innerHTML = '';
+
+        for (let i = 0; i < MAX; i++) {
+            const src = images[i];
+
+            // 이미지 있는 슬롯
+            if (src) {
+                console.log("이미지")
+                list.innerHTML += `
+                <div class="relative group bg-slate-200 border-2 border-dashed border-slate-400
+                    overflow-hidden rounded h-32">
+                    <img src="${src}"
+                        onclick="openPreviewModal('${src}')"
+                        class="absolute inset-0 w-full h-full object-cover cursor-pointer">
+
+                    <button
+                        onclick="removeImage(${i}); event.stopPropagation();"
+                        class="absolute top-1 right-1 bg-black/60 text-white
+                            w-5 h-5 rounded-full text-xs flex items-center
+                            justify-center opacity-0 group-hover:opacity-100">
+                        ✕
+                    </button>
+                </div>
+                `;
+            }
+            // 빈 슬롯
+            else {
+                list.innerHTML += `
+                <div
+                    onclick="selectSlot(${i})"
+                    class="bg-slate-200 border-2 border-dashed border-slate-400
+                        flex items-center justify-center text-slate-400
+                        text-4xl font-bold cursor-pointer hover:bg-slate-300 h-32">
+                    +
+                </div>
+                `;
+            }
+        }
+    }
+
+    function selectSlot(index) {
+        selectedSlotIndex = index;
+        document.getElementById('imageInput').click();
+    }
+
+    function renderMainBox(boxKey) {
+        const box = document.querySelector(`[data-box="${boxKey}"]`);
+        const images = imageStore[boxKey];
+
+        box.innerHTML = `
+            <span class="text-slate-400 text-4xl font-bold ${images.length ? 'hidden' : ''}">
+                +
+            </span>
+        `;
+
+        if (!images.length) return;
+        const firstImage = images.find(img => img !== null);
+        const imageCount = images.filter(img => img !== null).length;
+        box.innerHTML += `
+            <img src="${firstImage}"
+                class="absolute inset-0 w-full h-full object-cover">
+            <div class="absolute bottom-1 right-1 bg-black/60
+                        text-white text-xs px-2 rounded">
+                ${imageCount}장
+            </div>
+        `;
+    }
+
+
+    function openPreviewModal(src) {
+        const modal = document.getElementById('previewModal');
+        const img = document.getElementById('previewImage');
+
+        img.src = src;
+        modal.classList.remove('hidden');
+        }
+    
+    // 미리보기 닫기
+    function closePreviewModal() {
+        document.getElementById('previewModal').classList.add('hidden');
+    }
+    // 이미지 제거 
+    function removeImage(index) {
+        imageStore[currentBox][index] = null;
+        imagechange[currentBox][index] = true;
+        renderModalImages();
+        renderMainBox(currentBox);
+    }
+
+
+    // sidebar blur 
+    let sidebarLocked = false;
+    let overlay = null;
+    function applySidebarLock() {
+        const sidebar = document.getElementById("rightSidebar");
+        if (!sidebar || overlay) return; // 이미 오버레이가 있으면 중단
+        sidebar.style.filter = "blur(10px)";
+        sidebar.style.pointerEvents = "none";
+        sidebar.style.userSelect = "none";
+
+        overlay = document.createElement("div");
+        overlay.style.position = "absolute";
+        overlay.style.inset = "0";
+        overlay.style.background = "rgba(255,255,255,0.45)";
+        overlay.style.zIndex = "999";
+        overlay.style.pointerEvents = "none";
+
+        sidebar.style.position = "relative";
+        sidebar.appendChild(overlay);
+    }
+    // ⭐ 페이지 로딩 시 자동 실행
+    function removeSidebarLock() {
+        const sidebar = document.getElementById("rightSidebar");
+
+        sidebar.style.filter = "";
+        sidebar.style.pointerEvents = "";
+        sidebar.style.userSelect = "";
+
+        if (overlay) {
+            overlay.remove();
+            overlay = null;
+        }
+    }
+
+    function toggleSidebarLock() {
+        sidebarLocked = !sidebarLocked;
+        sidebarLocked ? applySidebarLock() : removeSidebarLock();
+    }
+    window.addEventListener("DOMContentLoaded", () => {
+        // 2. 부모 창(opener)의 변수를 직접 참조
+        if (window.opener && typeof window.opener.isLocked !== 'undefined') {
+            sidebarLocked = window.opener.isLocked;
+            console.log("부모로부터 받은 상태:", sidebarLocked);
+        } else {
+            console.log("부모 창을 찾을 수 없거나 변수가 없습니다.");
+        }
+
+        if (sidebarLocked) {
+            applySidebarLock();
+        }
+        
+    });
+
+
+    // 중앙 부분 m^2 -> 평 자동 변환
+    document.getElementById("lease-body").addEventListener("input", function (e) {
+        if (e.target.classList.contains("col-area-sqm")) {
+            const row = e.target.closest("tr");
+            if (!row) return;
+
+            const sqm = parseNumber(e.target.value);
+            const pyeongInput = row.querySelector(".col-area-pyeong");
+
+            if (!pyeongInput) return;
+
+            if (isNaN(sqm)) {
+                pyeongInput.value = "";
+            } else {
+                const pyeong = sqm / PYEONG_TO_SQM;
+
+                // 🔥 핵심
+                pyeongInput.value = formatNumberWithComma(
+                    pyeong % 1 === 0
+                        ? pyeong.toFixed(0)
+                        : pyeong.toFixed(1)
+                );
+            }
+        }
+        // ⭐ 반드시 변환 후에 실행
+        updateLeaseSummary();
+    });
+
+
+
+
+    function parseNumber(value) {
+        if (!value) return 0;
+        const num = Number(value.toString().replace(/,/g, ""));
+        return isNaN(num) ? 0 : num;
+    }
+
+    function updateLeaseSummary() {
+        let sumAreaSqm = 0;
+        let sumAreaPyeong = 0;
+        let sumDeposit = 0;
+        let sumRent = 0;
+        let sumMaintenance = 0;
+        let sumLeaseablePyeong = 0;
+
+        document.querySelectorAll("#lease-body tr").forEach(row => {
+            const areaPyeong = parseNumber(row.querySelector(".col-area-pyeong")?.value);
+            const leaseStatus = (row.querySelector(".col-is-vacant")?.value || "-").trim();
+
+            sumAreaSqm += parseNumber(row.querySelector(".col-area-sqm")?.value);
+            sumAreaPyeong += areaPyeong;
+            sumDeposit += parseNumber(row.querySelector(".col-deposit")?.value);
+            sumRent += parseNumber(row.querySelector(".col-monthly-rent-fee")?.value);
+            sumMaintenance += parseNumber(row.querySelector(".col-maintenance-fee")?.value);
+
+            if (leaseStatus === "공실" || leaseStatus === "책임명도") {
+                sumLeaseablePyeong += areaPyeong;
+            }
+        });
+
+        document.getElementById("sum_area_sqm").innerText = sumAreaSqm.toLocaleString();
+        document.getElementById("sum_area_pyeong").innerText = sumAreaPyeong.toLocaleString();
+        document.getElementById("sum-deposit").innerText = sumDeposit.toLocaleString();
+        document.getElementById("sum-rent").innerText = sumRent.toLocaleString();
+        document.getElementById("sum-maintenance").innerText = sumMaintenance.toLocaleString();
+        document.getElementById("sum-leaseable-pyeong").innerHTML = `현 사용 가능 면적(평) : <span class="font-black text-[12px]">${sumLeaseablePyeong.toLocaleString()}평</span>`;
+        const usableAreaEl = document.getElementById("usable_area_pyeong");
+        if (usableAreaEl) usableAreaEl.value = String(sumLeaseablePyeong);
+    }
+
+    // ⭐ 입력 변경 시 자동 계산
+    document.getElementById("lease-body").addEventListener("input", updateLeaseSummary);
+    document.getElementById("lease-body").addEventListener("change", updateLeaseSummary);
+    // // 행 삭제 후에도 합계 갱신
+    // function removeRow(el) {
+    //     el.closest("tr").remove();
+    //     updateLeaseSummary();
+    // }
+
+    
+
+    // 왼쪽 부분 평 변환 매핑 
+    // ㎡ → 평 변환 매핑 (역방향)
+    const SQM_MAPPING = {
+        land_area_sqm: 'land_area_pyeong',
+        gross_area_sqm: 'gross_area_pyeong',
+        building_area_sqm: 'building_area_pyeong',
+        supply_area_sqm: 'supply_area_pyeong',
+    };
+
+
+   const PYEONG_TO_SQM = 3.305785;
+
+    function parseNumber(value) {
+        if (!value) return 0;
+        return parseFloat(value.replace(/,/g, '')) || 0;
+    }
+
+
+    function formatNumberWithComma_row(input) {
+        const number = input.value.toString().replace(/[^0-9.]/g, '');
+        const parts = number.split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+        input.value = parts.join('.'); // ⭐ DOM 반
+        // return parts.join('.');
+    }
+
+    function formatNumberWithComma(value) {
+        const number = value.replace(/[^0-9.]/g, '');
+        const parts = number.split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        return parts.join('.');
+    }
+
+    function convertMappedSqm(el) {
+        const targetId = SQM_MAPPING[el.id];
+        if (!targetId) return;
+
+        const targetEl = document.getElementById(targetId);
+        if (!targetEl) return;
+
+        const sqm = parseNumber(el.value);
+        if (sqm === 0) {
+            targetEl.value = '';
+            return;
+        }
+
+        const pyeong = sqm / PYEONG_TO_SQM;
+        targetEl.value = formatNumberWithComma(
+            (pyeong).toFixed(1)
+        );
+    }
+
+
+    Object.keys(SQM_MAPPING).forEach(sourceId => {
+        const el = document.getElementById(sourceId);
+        if (!el) return;
+
+        el.addEventListener('input', function () {
+            const cursor = this.selectionStart;
+            const before = this.value.length;
+
+            this.value = formatNumberWithComma(this.value);
+
+            const after = this.value.length;
+            this.selectionStart = this.selectionEnd =
+                cursor + (after - before);
+
+            convertMappedSqm(this);
+        });
+    });
+
+    // 연면적당 단가 자동 구하기 
+    function calculatePricePerPyeong() {
+        const salePrice = parseNumber(
+            document.getElementById('sale_price')?.value
+        );
+        const grossPyeong = parseNumber(
+            document.getElementById('gross_area_pyeong')?.value
+        );
+
+        const output = document.getElementById('price_per_total_floor_area');
+        if (!output) return;
+
+        // 🔴 값 없거나 0이면 표시 안 함
+        if (salePrice <= 0 || grossPyeong <= 0) {
+            output.value = '';
+            return;
+        }
+
+        const unitPrice = salePrice / grossPyeong;
+
+        // 🔵 무조건 올림 (정수 단가)
+        const ceilValue = unitPrice.toFixed(0);
+
+        output.value = formatNumberWithComma(String(ceilValue));
+    }
+
+    ['sale_price', 'gross_area_sqm'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.addEventListener('input', function () {
+            const cursor = this.selectionStart;
+            const before = this.value.length;
+
+            this.value = formatNumberWithComma(this.value);
+
+            const after = this.value.length;
+            this.selectionStart = this.selectionEnd =
+                cursor + (after - before);
+
+            calculatePricePerPyeong();
+        });
+    });
+
+    // 토지면적당 단가 자동 구하기
+    function calculateLandPricePerPyeong() {
+        const salePrice = parseNumber(
+            document.getElementById('sale_price')?.value
+        );
+        const landPyeong = parseNumber(
+            document.getElementById('land_area_pyeong')?.value
+        );
+
+        const output = document.getElementById('price_per_pyeong');
+        if (!output) return;
+
+        // 🔴 값 없거나 0이면 표시 안 함
+        if (salePrice <= 0 || landPyeong <= 0) {
+            output.value = '';
+            return;
+        }
+
+        const unitPrice = salePrice / landPyeong;
+
+        // 🔵 무조건 올림 (소수 1자리)
+        const ceilValue = unitPrice.toFixed(0);
+
+        output.value = formatNumberWithComma(String(ceilValue));
+    }
+
+    ['sale_price', 'land_area_sqm'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.addEventListener('input', function () {
+            const cursor = this.selectionStart;
+            const before = this.value.length;
+
+            this.value = formatNumberWithComma(this.value);
+
+            const after = this.value.length;
+            this.selectionStart = this.selectionEnd =
+                cursor + (after - before);
+
+            calculateLandPricePerPyeong();
+        });
+    });
+
+
+    //  sqm to pyeong (m^2당 공시지가 -> 평당 ) 
+    function calculatesqmtopyeong() {
+        const officialPersqm = parseNumber(
+            document.getElementById('official_price_per_sqm_won')?.value
+        );
+  
+        const pyeong_entity = document.getElementById('official_price_per_pyeong_million');
+        if (!pyeong_entity) return;
+
+        if (officialPersqm <= 0) {
+            output.value = '';
+            return;
+        }
+
+        const output_pyeong = officialPersqm / 0.3025 / 10000;
+        pyeong_entity.value = formatNumberWithComma(output_pyeong.toFixed(0));
+
+    }
+
+
+    //  공시합계 
+    function calculatetotalPrice() {
+        const pyeongforwon = parseNumber(
+            document.getElementById('official_price_per_pyeong_million')?.value
+        );
+
+         const landareapyeong = parseNumber(
+            document.getElementById('land_area_pyeong')?.value
+        );
+  
+        const totalprice_entity = document.getElementById('official_price_total_million');
+        if (!totalprice_entity) return;
+
+        if ((pyeongforwon <= 0) | (landareapyeong <= 0) ) {
+            totalprice_entity.value = '';
+            return;
+        }
+
+        const output_total_price = pyeongforwon * landareapyeong;
+        console.log('ddddd')
+        console.log(output_total_price)
+        totalprice_entity.value = formatNumberWithComma(output_total_price.toFixed(0));
+
+    }
+
+    ['official_price_per_sqm_won' , 'land_area_sqm'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.addEventListener('input', function () {
+            const cursor = this.selectionStart;
+            const before = this.value.length;
+
+            this.value = formatNumberWithComma(this.value);
+
+            const after = this.value.length;
+            this.selectionStart = this.selectionEnd =
+                cursor + (after - before);
+            if(id ==='official_price_per_sqm_won'){
+                calculatesqmtopyeong();
+            };
+            
+            calculatetotalPrice();
+            
+        });
+    });
+
+
+    //  공시합계 자동 계산
+    function calculateOfficialTotalPrice() {
+        const officialPersqm = parseNumber(
+            document.getElementById('official_price_per_sqm_won')?.value
+        );
+  
+        const pyeong_entity = document.getElementById('official_price_per_pyeong_million');
+        if (!pyeong_entity) return;
+
+        if (officialPersqm <= 0) {
+            pyeong_entity.value = '';
+            return;
+        }
+
+        const output_pyeong = officialPersqm / 0.3025 / 10000;
+        pyeong_entity.value = formatNumberWithComma(output_pyeong.toFixed(0));
+
+    }
+
+    ['official_price_per_sqm_won'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+
+        el.addEventListener('input', function () {
+            const cursor = this.selectionStart;
+            const before = this.value.length;
+
+            this.value = formatNumberWithComma(this.value);
+
+            const after = this.value.length;
+            this.selectionStart = this.selectionEnd =
+                cursor + (after - before);
+
+            calculateOfficialTotalPrice();
+        });
+    });
+   
+
+    
+    // 주차대수 자동 계산 
+    function calcParkingTotal() {
+        const ids = [
+            "parking_outdoor_mechanical",
+            "parking_outdoor_self",
+            "parking_indoor_mechanical",
+            "parking_indoor_self"
+        ];
+
+        let total = 0;
+
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            const value = parseInt(el.value, 10);
+            if (!isNaN(value)) {
+                total += value;
+            }
+        });
+
+        document.getElementById("parking_capacity").value = total;
+    }
+
+    // 입력 변경 시 자동 계산
+    [
+        "parking_outdoor_mechanical",
+        "parking_outdoor_self",
+        "parking_indoor_mechanical",
+        "parking_indoor_self"
+    ].forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener("input", calcParkingTotal);
+    });
+    // Content-Disposition에서 filename 안전하게 추출
+    function getFileNameFromDisposition(disposition) {
+        let filename = "report.pptx"; // 기본값
+        if (!disposition) return filename;
+
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?"?([^\";\r\n]+)/i);
+        if (match && match[1]) {
+            // decodeURIComponent로 URL 인코딩된 이름 복원
+            filename = decodeURIComponent(match[1]);
+        }
+        return filename;
+    }
+    // 
+    async function generatePPT(event) {
+        try {
+            // 1. 버튼 상태 변경 (중복 클릭 방지)
+            const btn = event.currentTarget;
+            const originalText = btn.innerHTML;
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            const now_bd_number = document.getElementById('bd_number').value;
+
+            // 2. 서버 요청
+            const response = await fetch(`/api/building/${now_bd_number}/ppt`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+
+            if (!response.ok) throw new Error('파일 다운로드 실패');
+
+            // 3. Blob 변환
+            const blob = await response.blob();
+
+            // 4. 서버에서 보내준 filename 가져오기
+            const disposition = response.headers.get('Content-Disposition');
+            const filename = getFileNameFromDisposition(disposition);
+
+            // 5. 다운로드
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            a.remove();
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert('PPT 생성 중 오류가 발생했습니다.');
+        } finally {
+            // 버튼 복구
+            const btn = document.querySelector('button[onclick="generatePPT(event)"]');
+            btn.disabled = false;
+            btn.classList.remove('opacity-50', 'cursor-not-allowed');
+            btn.innerHTML = originalText;
+        }
+    }
+
+    // 실제 삭제 모듈 
+    const modal = document.getElementById("deleteModal");
+    const input = document.getElementById("deleteInput");
+    const confirmBtn = document.getElementById("confirmDeleteBtn");
+
+    function openDeleteModal() {
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+        input.value = "";
+        confirmBtn.disabled = true;
+        input.focus();
+    }
+
+    // 삭제 모달 취소 
+    function closeDeleteModal() {
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+    }
+
+    // DELETE 버튼 비활성화 
+    input.addEventListener("input", () => {
+        confirmBtn.disabled = input.value !== "DELETE";
+    });
+
+    // 실제 삭제 작업 진행 공간 
+    function deleteBuilding() {
+        const  building_number = document.getElementById('bd_number').value;
+        fetch("/api/building/delete", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                bd_number: building_number
+            })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("삭제 실패");
+            return res.json();
+        })
+        .then(data => {
+            alert("삭제 처리되었습니다.");
+            location.reload(); // 또는 리스트 다시 로드
+        })
+        .catch(err => {
+            console.error(err);
+            alert("삭제 중 오류가 발생했습니다.");
+        });
+    }
+
+    function confirmDelete() {
+        closeDeleteModal();
+        deleteBuilding(); // 🔥 실제 삭제 로직
+    }
+
+
+
+    // 다중 선택 관련 
+    function setupMultiSelect(groupId, defaultText) {
+        const group = document.getElementById(groupId);
+        if (!group) return;
+
+        const btn = group.querySelector('.dropdownButton');
+        const menu = group.querySelector('.dropdownMenu');
+        const label = group.querySelector('.selectedLabel');
+        const hiddenInput = group.querySelector('input[type="hidden"]');
+        const checkboxes = group.querySelectorAll('.usage-check');
+
+        // 1. 드롭다운 토글
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // 다른 열려있는 드롭다운 메뉴를 모두 닫고 싶다면 아래 한 줄 추가
+            // document.querySelectorAll('.dropdownMenu').forEach(m => m !== menu && m.classList.add('hidden'));
+            menu.classList.toggle('hidden');
+        });
+
+        // 2. 체크박스 선택 이벤트
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', () => {
+                const selectedValues = Array.from(checkboxes)
+                    .filter(i => i.checked)
+                    .map(i => i.value);
+
+                // DB 저장용 "/" 결합 값 세팅
+                const joinedValue = selectedValues.join('/');
+                hiddenInput.value = joinedValue;
+
+                // 라벨 업데이트 로직
+                if (selectedValues.length > 0) {
+                    label.innerText = selectedValues.length >= 2 
+                        ? `${selectedValues[0]} 외 ${selectedValues.length - 1}건` 
+                        : selectedValues.join(', ');
+                    label.classList.add('text-blue-700', 'font-extrabold'); // 선택 시 강조 스타일
+                } else {
+                    label.innerText = defaultText;
+                    label.classList.remove('text-blue-700', 'font-extrabold');
+                }
+            });
+        });
+
+        // 외부 클릭 시 메뉴 닫기
+        window.addEventListener('click', (e) => {
+            if (!group.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+    }
+
+    // --- 페이지 로드 시 두 그룹 모두 초기화 ---
+    document.addEventListener('DOMContentLoaded', () => {
+        setupMultiSelect('group-usage', '건축물용도 (선택)');
+        setupMultiSelect('group-structure', '건물구조 (선택)');
+    });
+    </script>
+</body>
+</html>

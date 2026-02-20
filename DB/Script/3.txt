@@ -1,0 +1,32 @@
+CREATE TABLE building_memo (
+    bd_number      INTEGER PRIMARY KEY,
+
+    memo           TEXT,
+    etc_memo       TEXT,
+    bd_feature     TEXT,
+    etc_feature    TEXT,
+	status         TEXT,
+	
+    create_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delete_flag    BOOLEAN NOT NULL DEFAULT FALSE,
+
+    CONSTRAINT fk_building_memo_id
+        FOREIGN KEY (bd_number)
+        REFERENCES building_id (bd_number)
+        ON DELETE CASCADE
+);
+
+-- update_time 자동 갱신 트리거
+CREATE OR REPLACE FUNCTION update_building_memo_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_building_memo_update_time
+BEFORE UPDATE ON building_memo
+FOR EACH ROW
+EXECUTE FUNCTION update_building_memo_time();

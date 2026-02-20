@@ -1,0 +1,2 @@
+ALTER TABLE building_info
+ADD COLUMN IF NOT EXISTS nearby_station2 TEXT;

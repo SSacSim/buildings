@@ -1,0 +1,6 @@
+ALTER TABLE customer_info
+ADD COLUMN IF NOT EXISTS customer_state VARCHAR(255),
+ADD COLUMN IF NOT EXISTS business_area VARCHAR(255),
+ADD COLUMN IF NOT EXISTS building_preference VARCHAR(255),
+ADD COLUMN IF NOT EXISTS main_interest_region VARCHAR(255),
+ADD COLUMN IF NOT EXISTS customer_note TEXT;

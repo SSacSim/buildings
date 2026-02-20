@@ -1,0 +1,451 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Building Information Dashboard - GlobeAI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f1f5f9; }
+        
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .section-card { @apply bg-white border border-slate-300 shadow-sm overflow-hidden rounded-sm; }
+        .label-cell { @apply bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center shrink-0; }
+        .input-cell { @apply flex-1 px-2 py-1 outline-none text-[12px] font-bold text-slate-700 focus:bg-blue-50; }
+        .header-btn { @apply flex items-center gap-2 px-4 py-2 rounded-xl font-bold shadow-sm active:scale-95 transition-all text-sm; }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col">
+
+    <header class="bg-white border-b border-slate-300 px-6 py-3 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-2">
+            <div class="flex items-center">
+                <span class="text-[10px] text-slate-400 font-bold mr-1 uppercase">고유 고객번호</span>
+                <input id="customer_number" name="customer_number" form="customerForm" autocomplete="off" readonly value="{{ customer_number if customer_number is defined else 'new' }}" class="text-sm text-black px-2 py-0.5 rounded font-mono font-bold min-w-[60px] text-center"></input>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button onclick="handleCancel()" class="px-6 py-2.5 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all">취소</button>
+            <button onclick="openDeleteModal()"
+                class="bg-red-500 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-red-600 shadow-sm active:scale-95 transition-all">
+                삭제
+            </button>
+            <button onclick="saveBuildingDetail()" class="bg-blue-600 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all">정보 저장하기</button>
+        </div>
+    </header>
+
+    <form id="customerForm" class="flex flex-1 overflow-hidden p-2 gap-2">
+        
+        <aside class="w-[550px] flex flex-col shrink-0 border-r border-slate-300 bg-[#f8fafc] text-[12px] overflow-y-auto">
+            <div class="space-y-2">
+                <div class="section-card">
+                    <div class="bg-slate-800 text-white text-[13px] px-2 py-1.5 font-bold flex justify-between items-center">
+                        <span>매수자 기본정보 </span>
+                    </div>
+                    
+                    <div class="p-2 space-y-1">            
+                        <div class="flex border border-slate-300 items-center h-8">
+                            <div class="w-20 label-cell border-r text-center font-bold">진행상황 </div>
+                            <select id="status" name="status" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                                <option>계약협의</option>
+                                <option>조건조율</option>
+                                <option>미팅/답사</option>
+                                <option>검토/제안</option>
+                                <option>신규/보류/완료</option>
+                            </select>
+                        </div>
+
+                        <div class="flex border border-slate-300 items-center h-8">
+                            <div class="w-20 label-cell border-r text-center font-bold"> 매수자명 </div>
+                            <input id="buyer_name" name="buyer_name" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                        </div>
+
+                        <div class="flex border border-slate-300 items-center h-8">
+                            <div class="w-20 label-cell border-r text-center font-bold"> 회사 주소 </div>
+                            <input id="company_address" name="company_address" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                        </div>
+
+                        <div class="flex border border-slate-300 items-center h-8">
+                            <div class="w-20 label-cell border-r text-center font-bold"> 대표자 </div>
+                            <input id="ceo_name" name="ceo_name" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                        </div>
+
+                        <div class="flex border border-slate-300 items-center h-8">
+                            <div class="w-20 label-cell border-r text-center font-bold"> 집 주소 </div>
+                            <input id="home_address" name="home_address" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                        </div>
+
+                        <div class="flex border border-slate-300 items-center h-8">
+                            <div class="w-20 label-cell border-r text-center font-bold"> 연락처 </div>
+                            <input id="phone" name="phone" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                        </div>
+
+                        <div class="flex border border-slate-300 items-center h-8">
+                            <div class="w-20 label-cell border-r text-center font-bold"> 최초컨택 </div>
+                            <input id="first_contact" name="first_contact" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 pt-2">
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold text-slate-500">[사진]</span>
+                                <div class="h-24 bg-white border border-dashed border-slate-400 flex items-center justify-center text-slate-400 text-[11px] cursor-pointer hover:bg-slate-50">인물 사진</div>
+                            </div>
+                            <div class="space-y-1">
+                                <span class="text-[10px] font-bold text-slate-500">[명함]</span>
+                                <div class="h-24 bg-white border border-dashed border-slate-400 flex items-center justify-center text-slate-400 text-[11px] cursor-pointer hover:bg-slate-50">명함 사진(앞, 뒤)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section-card flex flex-col">
+                    <div class="bg-slate-800 text-white text-[15px] px-3 py-1.5 font-bold border-b border-slate-700">
+                        고객 메모 / 히스토리
+                    </div>
+
+                    <div class="p-3 bg-white space-y-4">
+                        <div class="space-y-2">
+                            <p class="text-[12px] text-blue-600 font-bold">[고객 요약]</p>
+
+                            <div class="space-y-2 text-[14px] text-slate-700">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold shrink-0 w-20">상태:</span>
+                                    <select id="customer_state" name="customer_state"
+                                        class="flex-1 border-b border-slate-300 bg-transparent outline-none px-1 font-bold text-slate-700">
+                                        <option value="">-</option>
+                                        <option value="A">A(원활) : 최근 7일 이내 소통, 실행력 높은 매수자</option>
+                                        <option value="B">B(보통) : 반응은 있으나 느림, 조건 제한 많음</option>
+                                        <option value="C">C(어려움) : 응답 지연, 반복 제안에도 무반응</option>
+                                        <option value="X">X(비활성) : 3개월 초과 미접촉, 제외 대상</option>
+                                    </select>
+                            </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold shrink-0 w-20">상권:</span>
+                                    <input id="business_area" name="business_area" type="text"
+                                        class="flex-1 border-b border-slate-300 bg-transparent outline-none px-1"
+                                        placeholder="예: 연무장길, 한남동 카페거리">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold shrink-0 w-20">건물:</span>
+                                    <input id="building_preference" name="building_preference" type="text"
+                                        class="flex-1 border-b border-slate-300 bg-transparent outline-none px-1"
+                                        placeholder="예: 디자인, 신축, 층고 3m">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold shrink-0 w-20">주 관심지역:</span>
+                                    <input id="main_interest_region" name="main_interest_region" type="text"
+                                        class="flex-1 border-b border-slate-300 bg-transparent outline-none px-1"
+                                        placeholder="예: 강남 / 서초">
+                        </div>
+
+                    </div>
+                        </div>
+
+                        <textarea id="customer_note" name="customer_note" class="w-full h-40 p-3 bg-slate-50 border border-slate-200 rounded-lg text-[14px] outline-none focus:bg-white focus:border-blue-400 transition-all resize-none" 
+                                placeholder="고객에 대한 추가적인 상세 특징을 자유롭게 메모하세요..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <section class="flex-1 flex flex-col gap-2 overflow-y-auto">
+            <div class="section-card flex flex-col">
+                <div class="bg-slate-800 text-white text-[15px] px-3 py-1.5 font-bold border-b border-slate-700 flex items-center justify-between">
+                    <span>매수 조건 / 매칭 영역 (중앙)</span>
+                    <button id="customerMatchSearchBtn" type="button" class="px-4 py-1 rounded bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700">
+                        매칭 검색
+                    </button>
+                </div>
+                
+                <div class="p-3 bg-white space-y-3">
+                    <p class="text-[12px] text-blue-600 font-bold">[매수 조건 - 실제 매칭 필드]</p>
+                    
+                    <div class="space-y-1.5 text-[13px] text-slate-700">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold min-w-[70px]">유형 조건:</span>
+                            <div class="flex gap-3">
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="신축부지"> 신축부지</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="리모델링"> 리모델링</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="사옥형"> 사옥형</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="수익형"> 수익형</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="개발/전환"> 개발/전환</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="보유안정"> 보유안정</label>
+                            </div>
+                            <span class="text-[11px] text-slate-400 ml-2">[중복선택 가능]</span>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold min-w-[70px]">용도지역:</span>
+                            <div class="flex gap-3">
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="상업"> 상업</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="공업"> 공업</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="주거"> 주거</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="기타"> 기타</label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold min-w-[70px]">건축용도:</span>
+                            <div class="flex gap-3">
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="근린"> 근린</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="업무"> 업무</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="숙박"> 숙박</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="위락"> 위락</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="주택"> 주택</label>
+                                <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="기타"> 기타</label>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold min-w-[70px]">주소 조건:</span>
+                            <input id="matchAddressInput" type="text" class="border-b border-slate-300 outline-none w-48 px-1" placeholder="[ 시 / 구 / 동 / 지번 키워드 ]">
+                            <span class="font-bold min-w-[40px] ml-3">상권:</span>
+                            <input id="matchBusinessAreaInput" type="text" class="border-b border-slate-300 outline-none w-36 px-1" placeholder="[ 입지 키워드 ]">
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold min-w-[70px]">주변역:</span>
+                            <input id="matchStationKeyword" type="text" class="border-b border-slate-300 outline-none w-24 px-1" placeholder="[ 역명 ]">
+                            <span class="font-bold min-w-[40px] ml-3">보도:</span>
+                            <input id="matchStationWalkMin" type="text" class="border-b w-10 text-center outline-none" placeholder="1">
+                            <span>~</span>
+                            <input id="matchStationWalkMax" type="text" class="border-b w-10 text-center outline-none" placeholder="15">
+                            <span class="text-[11px] text-slate-500 shrink-0">분</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold min-w-[70px]">현금보유액:</span>
+                            <input id="matchCashHoldManwon" type="text" class="border-b w-16 text-center outline-none" placeholder="400,000">
+                            <span class="text-[11px] text-slate-500 shrink-0">만원</span>
+                            <input id="matchCashHoldPercent" type="text" class="border-b w-12 text-center outline-none ml-2" placeholder="60">
+                            <span class="text-[11px] text-slate-500 shrink-0">%</span>
+                            <span class="text-[10px] text-slate-400 ml-2">매매가 ≤ 현금보유액 / (1 - %)</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-y-1.5 gap-x-4">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-16">매매가:</span>
+                                <input id="matchMinPrice" type="text" class="border-b w-14 text-center" placeholder="1,000">
+                                <span>~</span>
+                                <input id="matchMaxPrice" type="text" class="border-b w-14 text-center" placeholder="10,000">
+                                <span class="text-[11px] text-slate-500 shrink-0">만원</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-16">수익률:</span>
+                                <span class="ml-2">≥</span>
+                                <input id="matchMinYieldInput" type="text" class="border-b w-10 text-center outline-none">
+                                <span>%</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-y-1.5 gap-x-4 border-t border-slate-100 pt-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">토지 평단가:</span>
+                                <input id="matchLandPyeongMin" type="text" class="border-b w-14 text-center" placeholder="1,000">
+                                <span>~</span>
+                                <input id="matchLandPyeongMax" type="text" class="border-b w-14 text-center" placeholder="10,000">
+                                <span class="text-[11px] text-slate-500 shrink-0">만원</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">연면적 평단가:</span>
+                                <input id="matchGrossPyeongMin" type="text" class="border-b w-14 text-center" placeholder="1,000">
+                                <span>~</span>
+                                <input id="matchGrossPyeongMax" type="text" class="border-b w-14 text-center" placeholder="10,000">
+                                <span class="text-[11px] text-slate-500 shrink-0">만원</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-y-1.5 gap-x-4 border-t border-slate-100 pt-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">토지면적:</span>
+                                <input id="matchLandAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
+                                <span>~</span>
+                                <input id="matchLandAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
+                                <span class="text-[11px] text-slate-500 shrink-0">평</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">연면적:</span>
+                                <input id="matchGrossAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
+                                <span>~</span>
+                                <input id="matchGrossAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
+                                <span class="text-[11px] text-slate-500 shrink-0">평</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-y-1.5 gap-x-4">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">사용가능 면적:</span>
+                                <input id="matchUsableAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
+                                <span>~</span>
+                                <input id="matchUsableAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
+                                <span class="text-[11px] text-slate-500 shrink-0">평</span>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-y-1.5 gap-x-4 border-t border-slate-100 pt-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">사용승인:</span>
+                                <input id="matchApprovalYearMin" type="text" class="border-b w-16 text-center" placeholder="2000">
+                                <span class="text-[11px] text-slate-500 shrink-0">년 이후</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">도로폭:</span>
+                                <input id="matchRoadWidthMin" type="text" class="border-b w-14 text-center" placeholder="8">
+                                <span class="text-[11px] text-slate-500 shrink-0">m 이상</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">승강기:</span>
+                                <select id="matchElevatorOption" class="border-b w-24 text-center outline-none bg-transparent">
+                                    <option value="">선택</option>
+                                    <option value="있음">있음</option>
+                                    <option value="없음">없음</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-24">주차대수:</span>
+                                <input id="matchParkingMin" type="text" class="border-b w-14 text-center" placeholder="10">
+                                <span class="text-[11px] text-slate-500 shrink-0">대 이상</span>
+                            </div>
+                        </div>
+
+                        <!-- <div class="bg-slate-50 p-2 rounded space-y-1.5 mt-1 border border-slate-200">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold w-20 text-red-600 italic">리스크 컷:</span>
+                                <div class="flex gap-3 text-[12px]">
+                                    <label class="flex items-center gap-1"><input type="checkbox"> 위반건축 제외</label>
+                                    <label class="flex items-center gap-1"><input type="checkbox"> 가압류·가처분 제외</label>
+                                    <label class="flex items-center gap-1"><input type="checkbox"> 지분(공유) 제외</label>
+                                    <label class="flex items-center gap-1"><input type="checkbox"> 근저당 제외</label>
+                                    <label class="flex items-center gap-1"><input type="checkbox"> 주택 제외</label>
+                                </div>
+                            </div>
+                        </div> -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card flex-1 flex flex-col bg-white">
+                <div class="bg-blue-900 text-white text-[15px] px-3 py-1.5 font-bold flex justify-between">
+                    <span>매칭 결과 (자동 추천)</span>
+                    <span class="text-[11px] text-blue-200 underline cursor-pointer">[매칭결과 자료 다운로드]</span>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto">
+                    <table class="w-full text-[13px] border-collapse">
+                        <thead class="bg-slate-100 border-b border-slate-300 sticky top-0 font-bold text-slate-600">
+                            <tr>
+                                <th class="py-2 border-r">건물명</th>
+                                <th class="border-r">주소</th>
+                                <th class="border-r">매매가</th>
+                                <th class="border-r">수익률</th>
+                                <th>적합도</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerMatchResultBody" class="text-center divide-y divide-slate-100">
+                            <tr>
+                                <td colspan="5" class="py-6 text-slate-400">조건을 입력하고 매칭 검색 버튼을 눌러주세요.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <aside class="w-[450px] flex flex-col gap-2 overflow-y-auto shrink-0 relative" id="rightSidebar">
+            <div class="section-card">
+                <div class="bg-slate-700 text-white text-[13px] px-2 py-1.5 font-bold flex justify-between items-center">
+                    <span>소개 매물(히스토리 내역 정리)</span>
+                    <div class="flex gap-2">
+                        <button id="addIntroRowBtn" type="button" class="hover:underline">[+ 추가]</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-[10px] border-collapse">
+                        <thead>
+                            <tr class="bg-slate-100 border-b border-slate-300 text-slate-600">
+                                <th class="p-1 border-r font-normal">날짜</th>
+                                <th class="p-1 border-r font-normal">진행상황</th>
+                                <th class="p-1 border-r font-normal">담당자</th>
+                                <th class="p-1 border-r font-normal">주소</th>
+                                <th class="p-1 border-r font-normal">건물명</th>
+                                <th class="p-1 border-r font-normal">매매가</th>
+                                <th class="p-1 font-normal">삭제</th>
+                            </tr>
+                        </thead>
+                        <tbody id="introPropertyBody" class="text-center divide-y divide-slate-200">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </aside>
+
+    </form>
+    <!-- 삭제 확인 모달 -->
+    <div id="deleteModal"
+        class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+
+        <div class="bg-white rounded-2xl w-[420px] p-6 shadow-xl">
+            <h2 class="text-xl font-bold text-red-600 mb-2">⚠️ 삭제 확인</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                이 작업은 <b>되돌릴 수 없습니다.</b><br>
+                계속하려면 아래에 <b class="text-red-600">DELETE</b> 를 입력하세요.
+            </p>
+
+            <input id="deleteInput"
+                type="text"
+                placeholder="DELETE"
+                class="w-full border rounded-lg px-4 py-2 mb-4 focus:ring-2 focus:ring-red-400 outline-none"/>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="closeDeleteModal()"
+                    class="px-5 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-semibold">
+                    취소
+                </button>
+
+                <button id="confirmDeleteBtn"
+                    onclick="confirmDelete()"
+                    disabled
+                    class="px-5 py-2 rounded-lg bg-red-500 text-white font-bold
+                        disabled:bg-red-300 disabled:cursor-not-allowed">
+                    삭제
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="buildingSearchModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl w-[760px] max-h-[80vh] p-4 shadow-xl flex flex-col">
+            <div class="flex items-center gap-2 mb-3">
+                <input id="buildingSearchInput" type="text" placeholder="주소 또는 건물명 검색"
+                    class="flex-1 border border-slate-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-400">
+                <button id="buildingSearchBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">검색</button>
+                <button id="buildingSearchCloseBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">닫기</button>
+            </div>
+            <div id="buildingSearchResult" class="overflow-y-auto border border-slate-200 rounded-lg">
+                <table class="w-full text-[12px]">
+                    <thead class="bg-slate-50 text-slate-600">
+                        <tr>
+                            <th class="p-2 border-b">번호</th>
+                            <th class="p-2 border-b">주소</th>
+                            <th class="p-2 border-b">건물명</th>
+                            <th class="p-2 border-b">매매가</th>
+                            <th class="p-2 border-b">평단가</th>
+                            <th class="p-2 border-b">선택</th>
+                        </tr>
+                    </thead>
+                    <tbody id="buildingSearchResultBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script src="/statics/js/customer_page.js"></script>
+
+</body>
+</html>

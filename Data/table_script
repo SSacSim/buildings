@@ -1,0 +1,122 @@
+CREATE TABLE building_id (
+    bd_number            SERIAL PRIMARY KEY,
+    register_id_number   INTEGER NOT NULL,
+    create_time          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delete_flag          BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+-- update_time 자동 갱신용 트리거 (권장)
+CREATE OR REPLACE FUNCTION update_modified_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_update_time
+BEFORE UPDATE ON building_id
+FOR EACH ROW
+EXECUTE FUNCTION update_modified_time();
+
+
+
+CREATE TABLE building_info (
+    bd_number                          INTEGER PRIMARY KEY,
+    bd_name                            VARCHAR(255),
+
+    address                            VARCHAR(255),
+    address_detail                     VARCHAR(255),
+    nearby_station                     VARCHAR(255),
+
+    deposit_price                      INTEGER,
+    other_sale_price                  INTEGER,
+    sale_price                         INTEGER,
+    yield_rate                         INTEGER,
+    security_deposit                  INTEGER,
+    price_per_pyeong                  INTEGER,
+    monthly_rent_fee                  INTEGER,
+
+    maintenance_expense               INTEGER,
+    maintenance_fee                   INTEGER,
+    maintenance_other_fee             INTEGER,
+
+    loan_status                        BOOLEAN,
+
+    land_category                     VARCHAR(255),
+    zoning_type                       VARCHAR(255),
+
+    land_area_pyeong                  INTEGER,
+    land_area_sqm                     INTEGER,
+
+    official_price_per_sqm_won         INTEGER,
+    official_price_per_pyeong_million INTEGER,
+    official_price_total_million      INTEGER,
+
+    road_access                       VARCHAR(255),
+    approval_date                     TIMESTAMP,
+
+    heating_cooling                   VARCHAR(255),
+
+    gross_area_pyeong                 INTEGER,
+    gross_area_sqm                    INTEGER,
+
+    underground_floors                INTEGER,
+    aboveground_floors                INTEGER,
+    elevator                          INTEGER,
+
+    building_coverage_ratio           INTEGER,
+    floor_area_ratio                  INTEGER,
+
+    parking_type                      VARCHAR(255),
+    parking_capacity                  INTEGER,
+
+    client_name                       VARCHAR(255),
+    mobile_phone                      VARCHAR(255),
+    email                             VARCHAR(255),
+    office_phone                      VARCHAR(255),
+    home_phone                        VARCHAR(255),
+
+    orientation                       VARCHAR(255),
+
+    CONSTRAINT fk_building_info_id
+        FOREIGN KEY (bd_number)
+        REFERENCES building_id (bd_number)
+        ON DELETE CASCADE
+);
+
+
+
+CREATE TABLE building_memo (
+    bd_number      INTEGER PRIMARY KEY,
+
+    loan_status    TEXT,
+    memo           TEXT,
+    etc_memo       TEXT,
+    bd_feature     TEXT,
+    etc_feature    TEXT,
+
+    create_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    delete_flag    BOOLEAN NOT NULL DEFAULT FALSE,
+
+    CONSTRAINT fk_building_memo_id
+        FOREIGN KEY (bd_number)
+        REFERENCES building_id (bd_number)
+        ON DELETE CASCADE
+);
+
+-- update_time 자동 갱신 트리거
+CREATE OR REPLACE FUNCTION update_building_memo_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.update_time = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_building_memo_update_time
+BEFORE UPDATE ON building_memo
+FOR EACH ROW
+EXECUTE FUNCTION update_building_memo_time();

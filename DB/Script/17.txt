@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS customer_intro_property (
+    intro_id BIGSERIAL PRIMARY KEY,
+    customer_number INTEGER NOT NULL,
+    bd_number INTEGER NOT NULL,
+    intro_date DATE DEFAULT CURRENT_DATE,
+    progress_status VARCHAR(255),
+    address VARCHAR(255),
+    bd_name VARCHAR(255),
+    sale_price VARCHAR(255),
+    price_per_pyeong VARCHAR(255),
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delete_flag BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_intro_property_customer
+    ON customer_intro_property (customer_number)
+    WHERE delete_flag = FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_customer_intro_property_building
+    ON customer_intro_property (bd_number)
+    WHERE delete_flag = FALSE;

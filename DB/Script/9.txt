@@ -1,0 +1,3 @@
+ALTER TABLE building_info
+ADD COLUMN building_usage VARCHAR,
+ADD COLUMN building_structure VARCHAR;

@@ -1,0 +1,2 @@
+ALTER TABLE building_info
+ADD COLUMN IF NOT EXISTS usable_area_pyeong VARCHAR(255);
