@@ -20,3 +20,5 @@ settings.yaml
 
 __pycache__/
 *.pyc
+# PPT local config
+Backend/ppt/module/configuration.yaml
