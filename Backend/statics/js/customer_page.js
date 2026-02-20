@@ -428,6 +428,12 @@ function collectMatchConditions() {
         elevator_option: document.getElementById("matchElevatorOption")?.value || "",
         parking_min: document.getElementById("matchParkingMin")?.value || "",
         building_status: document.getElementById("matchBuildingStatus")?.value || "전체",
+        location_decide: document.getElementById("matchLocationDecide")?.value || "",
+        price_decide: document.getElementById("matchPriceDecide")?.value || "",
+        yield_decide: document.getElementById("matchYieldDecide")?.value || "",
+        vacancy_decide: document.getElementById("matchVacancyDecide")?.value || "",
+        limit_decide: document.getElementById("matchLimitDecide")?.value || "",
+        loan_decide: document.getElementById("matchLoanDecide")?.value || "",
         types: Array.from(document.querySelectorAll('input[name="matchType"]:checked')).map((el) => el.value),
         zoning_categories: Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked')).map((el) => el.value),
         usage_categories: Array.from(document.querySelectorAll('input[name="matchUsageCategory"]:checked')).map((el) => el.value),
@@ -468,6 +474,12 @@ function applyMatchConditions(saved) {
     setInputValue("matchElevatorOption", saved.elevator_option);
     setInputValue("matchParkingMin", saved.parking_min);
     setInputValue("matchBuildingStatus", saved.building_status || "전체");
+    setInputValue("matchLocationDecide", saved.location_decide);
+    setInputValue("matchPriceDecide", saved.price_decide);
+    setInputValue("matchYieldDecide", saved.yield_decide);
+    setInputValue("matchVacancyDecide", saved.vacancy_decide);
+    setInputValue("matchLimitDecide", saved.limit_decide);
+    setInputValue("matchLoanDecide", saved.loan_decide);
 
     const applyChecked = (selector, values) => {
         const selected = new Set(Array.isArray(values) ? values : []);
@@ -757,6 +769,12 @@ async function searchCustomerMatchBuildings(page = 1) {
     const elevatorOptionInput = document.getElementById("matchElevatorOption");
     const parkingMinInput = document.getElementById("matchParkingMin");
     const buildingStatusInput = document.getElementById("matchBuildingStatus");
+    const locationDecideInput = document.getElementById("matchLocationDecide");
+    const priceDecideInput = document.getElementById("matchPriceDecide");
+    const yieldDecideInput = document.getElementById("matchYieldDecide");
+    const vacancyDecideInput = document.getElementById("matchVacancyDecide");
+    const limitDecideInput = document.getElementById("matchLimitDecide");
+    const loanDecideInput = document.getElementById("matchLoanDecide");
     const checkedTypes = Array.from(document.querySelectorAll('input[name="matchType"]:checked'))
         .map(el => el.value);
     const checkedZoningCategories = Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked'))
@@ -809,6 +827,12 @@ async function searchCustomerMatchBuildings(page = 1) {
     const roadWidthMin = roadWidthMinRaw ? Number(roadWidthMinRaw) : null;
     const parkingMin = parkingMinRaw ? Number(parkingMinRaw) : null;
     const buildingStatus = (buildingStatusInput?.value || "전체").trim();
+    const locationDecide = (locationDecideInput?.value || "").trim();
+    const priceDecide = (priceDecideInput?.value || "").trim();
+    const yieldDecide = (yieldDecideInput?.value || "").trim();
+    const vacancyDecide = (vacancyDecideInput?.value || "").trim();
+    const limitDecide = (limitDecideInput?.value || "").trim();
+    const loanDecide = (loanDecideInput?.value || "").trim();
     const useMinYield = minYield !== null && !Number.isNaN(minYield);
     const hasAnyCondition = Boolean(address)
         || Boolean(businessArea)
@@ -836,6 +860,12 @@ async function searchCustomerMatchBuildings(page = 1) {
         || Boolean(elevatorOption)
         || (parkingMin !== null && !Number.isNaN(parkingMin))
         || (buildingStatus && buildingStatus !== "전체")
+        || Boolean(locationDecide)
+        || Boolean(priceDecide)
+        || Boolean(yieldDecide)
+        || Boolean(vacancyDecide)
+        || Boolean(limitDecide)
+        || Boolean(loanDecide)
         || checkedZoningCategories.length > 0
         || checkedUsageCategories.length > 0;
 
@@ -871,6 +901,12 @@ async function searchCustomerMatchBuildings(page = 1) {
     if (elevatorOption) params.set("elevator_option", elevatorOption);
     if (parkingMin !== null && !Number.isNaN(parkingMin)) params.set("parking_min", String(parkingMin));
     if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
+    if (locationDecide) params.set("location_decide", locationDecide);
+    if (priceDecide) params.set("price_decide", priceDecide);
+    if (yieldDecide) params.set("yield_decide", yieldDecide);
+    if (vacancyDecide) params.set("vacancy_decide", vacancyDecide);
+    if (limitDecide) params.set("limit_decide", limitDecide);
+    if (loanDecide) params.set("loan_decide", loanDecide);
     if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
     if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
     if (checkedTypes.length) params.set("types", checkedTypes.join(","));

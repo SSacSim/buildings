@@ -52,6 +52,28 @@
                 </div>
 
                 <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-bold min-w-[70px]">등급 조건:</span>
+                    <select id="matchLocationDecide" class="border-b w-16 text-center outline-none bg-transparent">
+                        <option value="">입지</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option>
+                    </select>
+                    <select id="matchPriceDecide" class="border-b w-16 text-center outline-none bg-transparent">
+                        <option value="">가격</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option>
+                    </select>
+                    <select id="matchYieldDecide" class="border-b w-16 text-center outline-none bg-transparent">
+                        <option value="">수익률</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option>
+                    </select>
+                    <select id="matchVacancyDecide" class="border-b w-16 text-center outline-none bg-transparent">
+                        <option value="">명도</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option>
+                    </select>
+                    <select id="matchLimitDecide" class="border-b w-16 text-center outline-none bg-transparent">
+                        <option value="">제한</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option>
+                    </select>
+                    <select id="matchLoanDecide" class="border-b w-16 text-center outline-none bg-transparent">
+                        <option value="">상태</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-bold min-w-[70px]">용도지역:</span>
                     <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="COMMERCIAL"> 상업</label>
                     <label class="flex items-center gap-1"><input type="checkbox" name="matchZoningCategory" value="INDUSTRIAL"> 공업</label>
@@ -328,6 +350,12 @@
             const cashHoldPercent = cashHoldPercentRaw ? Number(cashHoldPercentRaw) : null;
             const elevatorOption = (document.getElementById("matchElevatorOption")?.value || "").trim();
             const buildingStatus = (document.getElementById("matchBuildingStatus")?.value || "전체").trim();
+            const locationDecide = (document.getElementById("matchLocationDecide")?.value || "").trim();
+            const priceDecide = (document.getElementById("matchPriceDecide")?.value || "").trim();
+            const yieldDecide = (document.getElementById("matchYieldDecide")?.value || "").trim();
+            const vacancyDecide = (document.getElementById("matchVacancyDecide")?.value || "").trim();
+            const limitDecide = (document.getElementById("matchLimitDecide")?.value || "").trim();
+            const loanDecide = (document.getElementById("matchLoanDecide")?.value || "").trim();
             const checkedTypes = Array.from(document.querySelectorAll('input[name="matchType"]:checked')).map(el => el.value);
             const checkedZoningCategories = Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked')).map(el => el.value);
             const checkedUsageCategories = Array.from(document.querySelectorAll('input[name="matchUsageCategory"]:checked')).map(el => el.value);
@@ -360,6 +388,12 @@
             if (cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
             if (elevatorOption) params.set("elevator_option", elevatorOption);
             if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
+            if (locationDecide) params.set("location_decide", locationDecide);
+            if (priceDecide) params.set("price_decide", priceDecide);
+            if (yieldDecide) params.set("yield_decide", yieldDecide);
+            if (vacancyDecide) params.set("vacancy_decide", vacancyDecide);
+            if (limitDecide) params.set("limit_decide", limitDecide);
+            if (loanDecide) params.set("loan_decide", loanDecide);
             if (checkedTypes.length) params.set("types", checkedTypes.join(","));
             if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
             if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
@@ -445,6 +479,10 @@
             if (elevator) elevator.value = "";
             const buildingStatus = document.getElementById("matchBuildingStatus");
             if (buildingStatus) buildingStatus.value = "전체";
+            ["matchLocationDecide", "matchPriceDecide", "matchYieldDecide", "matchVacancyDecide", "matchLimitDecide", "matchLoanDecide"].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.value = "";
+            });
             document.getElementById("customerCount").textContent = "0";
             document.getElementById("buildingCount").textContent = "0";
             setEmptyRow(document.getElementById("customerBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");

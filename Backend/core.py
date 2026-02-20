@@ -81,6 +81,12 @@ def get_insight_overview(
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
     building_status: str = Query(""),
+    location_decide: str = Query(""),
+    price_decide: str = Query(""),
+    yield_decide: str = Query(""),
+    vacancy_decide: str = Query(""),
+    limit_decide: str = Query(""),
+    loan_decide: str = Query(""),
     parking_min: Optional[int] = Query(None),
     zoning_categories: str = Query(""),
     usage_categories: str = Query(""),
@@ -511,6 +517,36 @@ def get_insight_overview(
         if normalized_building_status not in ("", "전체"):
             building_sql += " AND COALESCE(bm.status, '') = %s"
             building_params.append(normalized_building_status)
+
+        normalized_location_decide = (location_decide or "").strip().lower()
+        if normalized_location_decide:
+            building_sql += " AND LOWER(COALESCE(bi.location_decide, '')) = %s"
+            building_params.append(normalized_location_decide)
+
+        normalized_price_decide = (price_decide or "").strip().lower()
+        if normalized_price_decide:
+            building_sql += " AND LOWER(COALESCE(bi.price_decide, '')) = %s"
+            building_params.append(normalized_price_decide)
+
+        normalized_yield_decide = (yield_decide or "").strip().lower()
+        if normalized_yield_decide:
+            building_sql += " AND LOWER(COALESCE(bi.yield_decide, '')) = %s"
+            building_params.append(normalized_yield_decide)
+
+        normalized_vacancy_decide = (vacancy_decide or "").strip().lower()
+        if normalized_vacancy_decide:
+            building_sql += " AND LOWER(COALESCE(bi.vacancy_decide, '')) = %s"
+            building_params.append(normalized_vacancy_decide)
+
+        normalized_limit_decide = (limit_decide or "").strip().lower()
+        if normalized_limit_decide:
+            building_sql += " AND LOWER(COALESCE(bi.limit_decide, '')) = %s"
+            building_params.append(normalized_limit_decide)
+
+        normalized_loan_decide = (loan_decide or "").strip().lower()
+        if normalized_loan_decide:
+            building_sql += " AND LOWER(COALESCE(bi.loan_decide, '')) = %s"
+            building_params.append(normalized_loan_decide)
         if normalized_elevator_option == "NONE":
             building_sql += """
                 AND (

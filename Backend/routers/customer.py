@@ -263,6 +263,12 @@ def customer_match_search(
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
     building_status: str = Query(""),
+    location_decide: str = Query(""),
+    price_decide: str = Query(""),
+    yield_decide: str = Query(""),
+    vacancy_decide: str = Query(""),
+    limit_decide: str = Query(""),
+    loan_decide: str = Query(""),
     parking_min: Optional[int] = Query(None),
     zoning_categories: str = Query(""),
     usage_categories: str = Query(""),
@@ -530,6 +536,36 @@ def customer_match_search(
             sql += " AND COALESCE(bm.status, '') = %s"
             params.append(normalized_building_status)
 
+        normalized_location_decide = (location_decide or "").strip().lower()
+        if normalized_location_decide:
+            sql += " AND LOWER(COALESCE(bi.location_decide, '')) = %s"
+            params.append(normalized_location_decide)
+
+        normalized_price_decide = (price_decide or "").strip().lower()
+        if normalized_price_decide:
+            sql += " AND LOWER(COALESCE(bi.price_decide, '')) = %s"
+            params.append(normalized_price_decide)
+
+        normalized_yield_decide = (yield_decide or "").strip().lower()
+        if normalized_yield_decide:
+            sql += " AND LOWER(COALESCE(bi.yield_decide, '')) = %s"
+            params.append(normalized_yield_decide)
+
+        normalized_vacancy_decide = (vacancy_decide or "").strip().lower()
+        if normalized_vacancy_decide:
+            sql += " AND LOWER(COALESCE(bi.vacancy_decide, '')) = %s"
+            params.append(normalized_vacancy_decide)
+
+        normalized_limit_decide = (limit_decide or "").strip().lower()
+        if normalized_limit_decide:
+            sql += " AND LOWER(COALESCE(bi.limit_decide, '')) = %s"
+            params.append(normalized_limit_decide)
+
+        normalized_loan_decide = (loan_decide or "").strip().lower()
+        if normalized_loan_decide:
+            sql += " AND LOWER(COALESCE(bi.loan_decide, '')) = %s"
+            params.append(normalized_loan_decide)
+
         if parking_min is not None:
             sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(parking_capacity, ''), '[^0-9]', '', 'g'), '')::int, 0) >= %s"
             params.append(parking_min)
@@ -599,13 +635,48 @@ def customer_match_search(
         has_approval_year = approval_year_min is not None
         has_road_width = road_width_min is not None
         has_elevator_option = normalized_elevator_option in ("있음", "없음")
+        has_building_status = normalized_building_status and normalized_building_status != "전체"
+        has_location_decide = bool(normalized_location_decide)
+        has_price_decide = bool(normalized_price_decide)
+        has_yield_decide = bool(normalized_yield_decide)
+        has_vacancy_decide = bool(normalized_vacancy_decide)
+        has_limit_decide = bool(normalized_limit_decide)
+        has_loan_decide = bool(normalized_loan_decide)
         has_parking = parking_min is not None
         has_zoning_categories = len(selected_zoning_categories) > 0
         has_usage_categories = len(selected_usage_categories) > 0
         has_types = len(selected_types) > 0
 
         # 조건이 하나도 없으면 검색하지 않음
-        if not (has_address or has_business_area or has_station_keyword or has_min_price or has_max_price or has_cash_hold or has_station_walk or has_min_yield or has_land_pp or has_gross_pp or has_land_area or has_gross_area or has_usable_area or has_approval_year or has_road_width or has_elevator_option or has_parking or has_zoning_categories or has_usage_categories or has_types):
+        if not (
+            has_address
+            or has_business_area
+            or has_station_keyword
+            or has_min_price
+            or has_max_price
+            or has_cash_hold
+            or has_station_walk
+            or has_min_yield
+            or has_land_pp
+            or has_gross_pp
+            or has_land_area
+            or has_gross_area
+            or has_usable_area
+            or has_approval_year
+            or has_road_width
+            or has_elevator_option
+            or has_building_status
+            or has_location_decide
+            or has_price_decide
+            or has_yield_decide
+            or has_vacancy_decide
+            or has_limit_decide
+            or has_loan_decide
+            or has_parking
+            or has_zoning_categories
+            or has_usage_categories
+            or has_types
+        ):
             return {"items": [], "total_count": 0, "page": 1, "page_size": page_size, "total_pages": 0}
 
         type_map = {
