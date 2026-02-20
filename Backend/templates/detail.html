@@ -2258,6 +2258,7 @@
                 </div>
                 <div class="text-slate-500">연락처: ${row.phone || '-'}</div>
                 <div class="text-slate-500">소개일: ${row.intro_date || '-'}</div>
+                <div class="text-slate-500">소개비용: ${row.intro_cost ? `${row.intro_cost}만원` : '-'}</div>
                 <div class="text-slate-500">내용: ${row.intro_note || '-'}</div>
             </div>
         `).join('');

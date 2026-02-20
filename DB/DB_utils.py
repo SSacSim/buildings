@@ -375,7 +375,9 @@ def extract_intro_customers_by_building(conn, bd_number: str) -> dict:
                 ci.buyer_name,
                 ci.phone,
                 cip.intro_date,
-                cip.progress_status
+                cip.progress_status,
+                cip.intro_cost,
+                cip.intro_note
             FROM customer_intro_property cip
             LEFT JOIN customer_info ci
               ON cip.customer_number = ci.customer_number

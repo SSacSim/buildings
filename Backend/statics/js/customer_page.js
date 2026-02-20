@@ -89,7 +89,11 @@ function renderIntroRows() {
                         <div class="flex items-center gap-1">
                             <button type="button" onclick="openBuildingSearchModal('${row.row_id}')"
                                 class="shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
+                            <button type="button"
+                                onclick="openIntroBuildingFromRow('${row.row_id}')"
+                                class="shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] rounded bg-emerald-600 text-white hover:bg-emerald-700">열기</button>
                             <input type="text" value="${row.address || ""}" readonly
+                                onclick="openIntroBuildingFromRow('${row.row_id}')"
                                 class="w-full min-w-0 bg-slate-50 px-1 py-0.5 border border-slate-200 rounded text-[10px]"
                                 placeholder="주소">
                         </div>
@@ -200,6 +204,12 @@ async function searchBuildingsForIntro() {
 
 function openBuildingDetailFromSearch(bdNumber) {
     window.open(`/detail/${bdNumber}`, "_blank");
+}
+
+function openIntroBuildingFromRow(rowId) {
+    const row = introRows.find(r => r.row_id === rowId);
+    if (!row || !row.bd_number) return;
+    openBuildingDetailFromSearch(row.bd_number);
 }
 
 function selectBuildingForCurrentRow(bdNumber, address, bdName, salePrice, pricePerPyeong) {
