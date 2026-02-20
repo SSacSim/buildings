@@ -16,3 +16,7 @@ Backend/save_file/
 
 # Local runtime config
 settings.yaml
+
+
+__pycache__/
+*.pyc
