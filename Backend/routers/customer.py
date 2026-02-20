@@ -267,7 +267,8 @@ def customer_match_search(
     zoning_categories: str = Query(""),
     usage_categories: str = Query(""),
     types: str = Query(""),
-    limit: int = Query(30, ge=1, le=200)
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100)
 ):
     conn = None
     cur = None
@@ -605,7 +606,7 @@ def customer_match_search(
 
         # 조건이 하나도 없으면 검색하지 않음
         if not (has_address or has_business_area or has_station_keyword or has_min_price or has_max_price or has_cash_hold or has_station_walk or has_min_yield or has_land_pp or has_gross_pp or has_land_area or has_gross_area or has_usable_area or has_approval_year or has_road_width or has_elevator_option or has_parking or has_zoning_categories or has_usage_categories or has_types):
-            return []
+            return {"items": [], "total_count": 0, "page": 1, "page_size": page_size, "total_pages": 0}
 
         type_map = {
             "신축부지": "is_new_site",
@@ -622,13 +623,21 @@ def customer_match_search(
             # 체크된 유형은 모두 충족해야 하므로 AND 조건으로 필터링
             sql += " AND (" + " AND ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        sql += " ORDER BY bi.update_time DESC, bi.bd_number DESC LIMIT %s"
-        params.append(limit)
+        count_sql = f"SELECT COUNT(*) FROM ({sql}) AS matched_buildings"
+        cur.execute(count_sql, tuple(params))
+        total_count = cur.fetchone()[0] or 0
 
-        cur.execute(sql, tuple(params))
+        total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+        safe_page = min(page, total_pages) if total_pages > 0 else 1
+        offset = (safe_page - 1) * page_size
+
+        sql += " ORDER BY bi.update_time DESC, bi.bd_number DESC LIMIT %s OFFSET %s"
+        page_params = list(params) + [page_size, offset]
+
+        cur.execute(sql, tuple(page_params))
         rows = cur.fetchall()
         columns = [desc[0] for desc in cur.description]
-        result = []
+        items = []
         for row in rows:
             item = dict(zip(columns, row))
             score = 0
@@ -638,9 +647,15 @@ def customer_match_search(
                 1 for c in type_columns if item.get(c) is True
             )
             item["match_score"] = min(score, 100)
-            result.append(item)
+            items.append(item)
 
-        return result
+        return {
+            "items": items,
+            "total_count": total_count,
+            "page": safe_page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

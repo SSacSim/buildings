@@ -3,6 +3,8 @@
 let introRows = [];
 let ownedRows = [];
 let pickingContext = null;
+let customerMatchCurrentPage = 1;
+const CUSTOMER_MATCH_PAGE_SIZE = 20;
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -638,6 +640,47 @@ function getMatchMaxPriceInput() {
     return document.getElementById("matchMaxPrice");
 }
 
+function renderCustomerMatchPagination(totalPages, currentPage) {
+    const container = document.getElementById("customerMatchPagination");
+    if (!container) return;
+
+    if (!totalPages || totalPages <= 1) {
+        container.innerHTML = "";
+        return;
+    }
+
+    const blockStart = Math.floor((Math.max(1, currentPage) - 1) / 5) * 5 + 1;
+    const startPage = blockStart;
+    const endPage = Math.min(totalPages, startPage + 4);
+
+    const pages = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+    const firstDisabled = currentPage === 1;
+    const nextPage = blockStart + 5;
+    const nextDisabled = nextPage > totalPages;
+
+    container.innerHTML = `
+        <button type="button"
+            onclick="${firstDisabled ? "" : "searchCustomerMatchBuildings(1)"}"
+            ${firstDisabled ? "disabled" : ""}
+            class="px-3 py-1.5 text-[12px] rounded-xl border ${firstDisabled ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}">
+            <<
+        </button>
+        ${pages.map((page) => `
+            <button type="button"
+                onclick="searchCustomerMatchBuildings(${page})"
+                class="px-3 py-1.5 text-[12px] rounded-xl border ${page === currentPage ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"}">
+                ${page}
+            </button>
+        `).join("")}
+        <button type="button"
+            onclick="${nextDisabled ? "" : `searchCustomerMatchBuildings(${nextPage})`}"
+            ${nextDisabled ? "disabled" : ""}
+            class="px-3 py-1.5 text-[12px] rounded-xl border ${nextDisabled ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"}">
+            다음
+        </button>
+    `;
+}
+
 function formatThousandsInputValue(raw) {
     const digits = String(raw || "").replace(/[^0-9]/g, "");
     if (!digits) return "";
@@ -648,7 +691,8 @@ function openBuildingDetail(bdNumber) {
     window.open(`/detail/${bdNumber}`, "_blank");
 }
 
-async function searchCustomerMatchBuildings() {
+async function searchCustomerMatchBuildings(page = 1) {
+    customerMatchCurrentPage = page;
     const tbody = getMatchResultBody();
     if (!tbody) return;
 
@@ -761,6 +805,7 @@ async function searchCustomerMatchBuildings() {
 
     if (!hasAnyCondition) {
         tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">최소 1개 이상의 조건을 선택/입력해 주세요.</td></tr>';
+        renderCustomerMatchPagination(0, 1);
         return;
     }
 
@@ -793,17 +838,22 @@ async function searchCustomerMatchBuildings() {
     if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
     if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
     if (checkedTypes.length) params.set("types", checkedTypes.join(","));
-    params.set("limit", "30");
+    params.set("page", String(customerMatchCurrentPage));
+    params.set("page_size", String(CUSTOMER_MATCH_PAGE_SIZE));
 
     tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">검색 중...</td></tr>';
 
     try {
         const res = await fetch(`/api/customer/match-search?${params.toString()}`);
         if (!res.ok) throw new Error("match search failed");
-        const items = await res.json();
+        const payload = await res.json();
+        const items = Array.isArray(payload) ? payload : (Array.isArray(payload.items) ? payload.items : []);
+        const totalPages = Array.isArray(payload) ? 1 : Number(payload.total_pages || 1);
+        const currentPage = Array.isArray(payload) ? customerMatchCurrentPage : Number(payload.page || customerMatchCurrentPage);
 
         if (!Array.isArray(items) || items.length === 0) {
             tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">조건에 맞는 매물이 없습니다.</td></tr>';
+            renderCustomerMatchPagination(0, 1);
             return;
         }
 
@@ -816,9 +866,11 @@ async function searchCustomerMatchBuildings() {
                 <td class="text-orange-500 font-semibold">${item.match_score || 0}점</td>
             </tr>
         `).join("");
+        renderCustomerMatchPagination(totalPages, currentPage);
     } catch (err) {
         console.error(err);
         tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-red-400">검색 중 오류가 발생했습니다.</td></tr>';
+        renderCustomerMatchPagination(0, 1);
     }
 }
 
@@ -858,7 +910,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const customerMatchSearchBtn = document.getElementById("customerMatchSearchBtn");
     if (customerMatchSearchBtn) {
-        customerMatchSearchBtn.addEventListener("click", searchCustomerMatchBuildings);
+        customerMatchSearchBtn.addEventListener("click", () => searchCustomerMatchBuildings(1));
     }
 
     ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword", "matchMinPrice", "matchMaxPrice", "matchStationWalkMin", "matchStationWalkMax", "matchCashHoldManwon", "matchCashHoldPercent", "matchMinYieldInput", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchApprovalYearMin", "matchRoadWidthMin", "matchParkingMin"].forEach((id) => {

@@ -84,7 +84,9 @@ def get_insight_overview(
     parking_min: Optional[int] = Query(None),
     zoning_categories: str = Query(""),
     usage_categories: str = Query(""),
-    limit: int = Query(100, ge=1, le=500),
+    customer_page: int = Query(1, ge=1),
+    building_page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
 ):
     conn = None
     cur = None
@@ -133,8 +135,7 @@ def get_insight_overview(
             customer_sql += " AND COALESCE(business_area, '') ILIKE %s"
             customer_params.append(f"%{site_location.strip()}%")
 
-        customer_sql += " ORDER BY customer_number DESC LIMIT %s"
-        customer_params.append(limit)
+        customer_sql += " ORDER BY customer_number DESC"
 
         cur.execute(customer_sql, tuple(customer_params))
         customer_rows = cur.fetchall()
@@ -568,15 +569,39 @@ def get_insight_overview(
         if type_columns:
             building_sql += " AND (" + " AND ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        building_sql += " ORDER BY bi.bd_number DESC LIMIT %s"
-        building_params.append(limit)
+        building_sql += " ORDER BY bi.bd_number DESC"
 
         cur.execute(building_sql, tuple(building_params))
         building_rows = cur.fetchall()
         building_cols = [desc[0] for desc in cur.description]
         buildings = [dict(zip(building_cols, row)) for row in building_rows]
 
-        return {"customers": customers, "buildings": buildings}
+        customers_total_count = len(customers)
+        buildings_total_count = len(buildings)
+
+        customers_total_pages = (customers_total_count + page_size - 1) // page_size if customers_total_count > 0 else 0
+        buildings_total_pages = (buildings_total_count + page_size - 1) // page_size if buildings_total_count > 0 else 0
+
+        safe_customer_page = min(customer_page, customers_total_pages) if customers_total_pages > 0 else 1
+        safe_building_page = min(building_page, buildings_total_pages) if buildings_total_pages > 0 else 1
+
+        customer_start = (safe_customer_page - 1) * page_size
+        building_start = (safe_building_page - 1) * page_size
+
+        paged_customers = customers[customer_start:customer_start + page_size]
+        paged_buildings = buildings[building_start:building_start + page_size]
+
+        return {
+            "customers": paged_customers,
+            "buildings": paged_buildings,
+            "customers_total_count": customers_total_count,
+            "buildings_total_count": buildings_total_count,
+            "customers_page": safe_customer_page,
+            "buildings_page": safe_building_page,
+            "customers_total_pages": customers_total_pages,
+            "buildings_total_pages": buildings_total_pages,
+            "page_size": page_size,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:

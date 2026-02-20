@@ -202,6 +202,7 @@
                         <tbody id="customerBody" class="divide-y divide-slate-100"></tbody>
                     </table>
                 </div>
+                <div id="insightCustomerPagination" class="px-3 py-2 border-t border-slate-200 flex items-center justify-center gap-1 flex-wrap bg-white"></div>
             </div>
 
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -220,6 +221,7 @@
                         <tbody id="buildingBody" class="divide-y divide-slate-100"></tbody>
                     </table>
                 </div>
+                <div id="insightBuildingPagination" class="px-3 py-2 border-t border-slate-200 flex items-center justify-center gap-1 flex-wrap bg-white"></div>
             </div>
         </section>
     </main>
@@ -252,7 +254,61 @@
             return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
-        async function loadInsightData() {
+        const INSIGHT_PAGE_SIZE = 20;
+        let insightCustomerPage = 1;
+        let insightBuildingPage = 1;
+
+        function renderInsightPagination(containerId, totalPages, currentPage, onClickFnName) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            if (!totalPages || totalPages <= 1) {
+                container.innerHTML = "";
+                return;
+            }
+
+            const blockStart = Math.floor((Math.max(1, currentPage) - 1) / 5) * 5 + 1;
+            const startPage = blockStart;
+            const endPage = Math.min(totalPages, startPage + 4);
+
+            const pages = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+            const firstDisabled = currentPage === 1;
+            const nextPage = blockStart + 5;
+            const nextDisabled = nextPage > totalPages;
+
+            container.innerHTML = `
+                <button type="button"
+                    onclick="${firstDisabled ? "" : `${onClickFnName}(1)`}"
+                    ${firstDisabled ? "disabled" : ""}
+                    class="px-3 py-1.5 text-[12px] rounded-xl border ${firstDisabled ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed" : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"}">
+                    <<
+                </button>
+                ${pages.map((page) => `
+                    <button type="button"
+                        onclick="${onClickFnName}(${page})"
+                        class="px-3 py-1.5 text-[12px] rounded-xl border ${page === currentPage ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"}">
+                        ${page}
+                    </button>
+                `).join("")}
+                <button type="button"
+                    onclick="${nextDisabled ? "" : `${onClickFnName}(${nextPage})`}"
+                    ${nextDisabled ? "disabled" : ""}
+                    class="px-3 py-1.5 text-[12px] rounded-xl border ${nextDisabled ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed" : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"}">
+                    다음
+                </button>
+            `;
+        }
+
+        function goInsightCustomerPage(page) {
+            loadInsightData(page, insightBuildingPage);
+        }
+
+        function goInsightBuildingPage(page) {
+            loadInsightData(insightCustomerPage, page);
+        }
+
+        async function loadInsightData(customerPage = 1, buildingPage = 1) {
+            insightCustomerPage = customerPage;
+            insightBuildingPage = buildingPage;
             const customerBody = document.getElementById("customerBody");
             const buildingBody = document.getElementById("buildingBody");
 
@@ -315,7 +371,9 @@
                 if (!Number.isNaN(val)) params.set(key, String(val));
             });
 
-            params.set("limit", "200");
+            params.set("customer_page", String(insightCustomerPage));
+            params.set("building_page", String(insightBuildingPage));
+            params.set("page_size", String(INSIGHT_PAGE_SIZE));
 
             setEmptyRow(customerBody, 5, "조회 중...");
             setEmptyRow(buildingBody, 5, "조회 중...");
@@ -327,9 +385,15 @@
 
                 const customers = Array.isArray(payload.customers) ? payload.customers : [];
                 const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
+                const customerTotalCount = Number(payload.customers_total_count ?? customers.length);
+                const buildingTotalCount = Number(payload.buildings_total_count ?? buildings.length);
+                const customerTotalPages = Number(payload.customers_total_pages ?? (customerTotalCount > 0 ? Math.ceil(customerTotalCount / INSIGHT_PAGE_SIZE) : 0));
+                const buildingTotalPages = Number(payload.buildings_total_pages ?? (buildingTotalCount > 0 ? Math.ceil(buildingTotalCount / INSIGHT_PAGE_SIZE) : 0));
+                const currentCustomerPage = Number(payload.customers_page ?? insightCustomerPage);
+                const currentBuildingPage = Number(payload.buildings_page ?? insightBuildingPage);
 
-                document.getElementById("customerCount").textContent = String(customers.length);
-                document.getElementById("buildingCount").textContent = String(buildings.length);
+                document.getElementById("customerCount").textContent = String(customerTotalCount);
+                document.getElementById("buildingCount").textContent = String(buildingTotalCount);
 
                 if (!customers.length) {
                     setEmptyRow(customerBody, 5, "조건에 맞는 고객이 없습니다.");
@@ -358,13 +422,15 @@
                         </tr>
                     `).join("");
                 }
+                renderInsightPagination("insightCustomerPagination", customerTotalPages, currentCustomerPage, "goInsightCustomerPage");
+                renderInsightPagination("insightBuildingPagination", buildingTotalPages, currentBuildingPage, "goInsightBuildingPage");
             } catch (e) {
                 setEmptyRow(customerBody, 5, "조회 중 오류가 발생했습니다.");
                 setEmptyRow(buildingBody, 5, "조회 중 오류가 발생했습니다.");
             }
         }
 
-        document.getElementById("searchBtn").addEventListener("click", loadInsightData);
+        document.getElementById("searchBtn").addEventListener("click", () => loadInsightData(1, 1));
         document.getElementById("resetBtn").addEventListener("click", () => {
             document.querySelectorAll("input").forEach((el) => {
                 if (el.type === "checkbox") {
@@ -379,7 +445,12 @@
             if (elevator) elevator.value = "";
             const buildingStatus = document.getElementById("matchBuildingStatus");
             if (buildingStatus) buildingStatus.value = "전체";
-            loadInsightData();
+            document.getElementById("customerCount").textContent = "0";
+            document.getElementById("buildingCount").textContent = "0";
+            setEmptyRow(document.getElementById("customerBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
+            setEmptyRow(document.getElementById("buildingBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
+            renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
+            renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
         });
 
         [
@@ -401,12 +472,15 @@
             el.addEventListener("keydown", (e) => {
                 if (e.key === "Enter") {
                     e.preventDefault();
-                    loadInsightData();
+                    loadInsightData(1, 1);
                 }
             });
         });
 
-        loadInsightData();
+        setEmptyRow(document.getElementById("customerBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
+        setEmptyRow(document.getElementById("buildingBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
+        renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
+        renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
     </script>
 </body>
 </html>
