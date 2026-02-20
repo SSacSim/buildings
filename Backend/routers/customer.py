@@ -23,6 +23,7 @@ def ensure_customer_intro_table(conn, cur):
             bd_number INTEGER NOT NULL,
             intro_date DATE DEFAULT CURRENT_DATE,
             progress_status VARCHAR(255),
+            intro_cost VARCHAR(255),
             manager_name VARCHAR(255),
             address VARCHAR(255),
             bd_name VARCHAR(255),
@@ -39,6 +40,12 @@ def ensure_customer_intro_table(conn, cur):
         """
         ALTER TABLE customer_intro_property
         ADD COLUMN IF NOT EXISTS manager_name VARCHAR(255);
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE customer_intro_property
+        ADD COLUMN IF NOT EXISTS intro_cost VARCHAR(255);
         """
     )
     conn.commit()
@@ -90,7 +97,7 @@ def get_customer_detail(customer_number: int):
         cur.execute(
             """
             SELECT intro_id, customer_number, bd_number, intro_date,
-                   progress_status, manager_name, address, bd_name, sale_price, price_per_pyeong, intro_note
+                   progress_status, intro_cost, manager_name, address, bd_name, sale_price, price_per_pyeong, intro_note
             FROM customer_intro_property
             WHERE customer_number = %s AND delete_flag = FALSE
             ORDER BY intro_date DESC, intro_id DESC
@@ -650,6 +657,7 @@ class CustomerIntroProperty(BaseModel):
     intro_id: Optional[int] = None
     intro_date: Optional[str] = None
     progress_status: Optional[str] = None
+    intro_cost: Optional[str] = None
     manager_name: Optional[str] = None
     bd_number: int
     address: Optional[str] = None
@@ -669,16 +677,17 @@ def insert_intro_properties(cur, customer_number: int, intro_properties: List[Cu
         cur.execute(
             """
             INSERT INTO customer_intro_property (
-                customer_number, bd_number, intro_date, progress_status, manager_name,
+                customer_number, bd_number, intro_date, progress_status, intro_cost, manager_name,
                 address, bd_name, sale_price, price_per_pyeong, intro_note, delete_flag
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, FALSE)
             """,
             (
                 customer_number,
                 item.bd_number,
                 item.intro_date,
                 item.progress_status,
+                item.intro_cost,
                 item.manager_name,
                 item.address,
                 item.bd_name,

@@ -24,6 +24,7 @@ function createEmptyIntroRow() {
         intro_id: null,
         intro_date: todayIsoDate(),
         progress_status: "소개",
+        intro_cost: "",
         manager_name: "",
         bd_number: "",
         address: "",
@@ -62,7 +63,7 @@ function renderIntroRows() {
         <tr>
             <td colspan="7" class="p-2 border-b border-slate-200 bg-white">
                 <div class="space-y-1.5">
-                    <div class="grid grid-cols-[1.2fr_1fr_1fr_auto] gap-1 items-center">
+                    <div class="grid grid-cols-[1.2fr_1fr_1fr_1fr_auto] gap-1 items-center">
                         <input type="date" value="${row.intro_date || ""}"
                             onchange="updateIntroField('${row.row_id}','intro_date', this.value)"
                             class="w-full px-1 py-0.5 border border-slate-200 rounded text-[10px]">
@@ -70,6 +71,13 @@ function renderIntroRows() {
                             class="w-full px-1 py-0.5 border border-slate-200 rounded text-[10px]">
                             ${renderStatusOptions(row.progress_status || "준비")}
                         </select>
+                        <div class="flex items-center gap-1 w-full">
+                            <input type="text" value="${formatThousandsInputValue(row.intro_cost || "")}"
+                                oninput="updateIntroCostField('${row.row_id}', this)"
+                                class="w-full min-w-0 px-1 py-0.5 border border-slate-200 rounded text-[10px] text-right"
+                                placeholder="소개비용">
+                            <span class="shrink-0 text-[10px] text-slate-500">만원</span>
+                        </div>
                         <input type="text" value="${row.manager_name || ""}"
                             oninput="updateIntroField('${row.row_id}','manager_name', this.value)"
                             class="w-full px-1 py-0.5 border border-slate-200 rounded text-[10px]"
@@ -114,6 +122,13 @@ function updateIntroField(rowId, key, value) {
     const row = introRows.find(r => r.row_id === rowId);
     if (!row) return;
     row[key] = value;
+}
+
+function updateIntroCostField(rowId, inputEl) {
+    if (!inputEl) return;
+    const formatted = formatThousandsInputValue(inputEl.value);
+    inputEl.value = formatted;
+    updateIntroField(rowId, "intro_cost", formatted);
 }
 
 function removeIntroRow(rowId) {
@@ -344,6 +359,7 @@ function buildSavePayload() {
             intro_id: row.intro_id || null,
             intro_date: row.intro_date || todayIsoDate(),
             progress_status: row.progress_status || "준비",
+            intro_cost: row.intro_cost || "",
             manager_name: row.manager_name || "",
             bd_number: Number(row.bd_number),
             address: row.address || "",
@@ -417,6 +433,7 @@ function bindIntroRows(introList) {
         intro_id: item.intro_id ?? null,
         intro_date: item.intro_date ? String(item.intro_date).slice(0, 10) : todayIsoDate(),
         progress_status: item.progress_status || "준비",
+        intro_cost: item.intro_cost || "",
         manager_name: item.manager_name || "",
         bd_number: item.bd_number ? String(item.bd_number) : "",
         address: item.address || "",
