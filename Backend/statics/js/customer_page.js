@@ -1,7 +1,8 @@
 ﻿const INTRO_STATUS_OPTIONS = ["준비", "소개", "미팅", "계약협의", "완료", "보류"];
 
 let introRows = [];
-let pickingRowId = null;
+let ownedRows = [];
+let pickingContext = null;
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -32,6 +33,15 @@ function createEmptyIntroRow() {
         sale_price: "",
         price_per_pyeong: "",
         intro_note: ""
+    };
+}
+
+function createEmptyOwnedRow() {
+    return {
+        row_id: generateRowId(),
+        bd_number: "",
+        address: "",
+        bd_name: ""
     };
 }
 
@@ -87,7 +97,7 @@ function renderIntroRows() {
                     </div>
                     <div class="grid grid-cols-[2.3fr_1.4fr_1fr] gap-1 items-center">
                         <div class="flex items-center gap-1">
-                            <button type="button" onclick="openBuildingSearchModal('${row.row_id}')"
+                            <button type="button" onclick="openBuildingSearchModal('intro','${row.row_id}')"
                                 class="shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
                             <button type="button"
                                 onclick="openIntroBuildingFromRow('${row.row_id}')"
@@ -117,9 +127,57 @@ function renderIntroRows() {
     `).join("");
 }
 
+function renderOwnedRows() {
+    const tbody = document.getElementById("ownedPropertyBody");
+    if (!tbody) return;
+
+    if (!ownedRows.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="p-3 text-slate-400 text-center">보유 부동산이 없습니다. [+ 추가]로 등록하세요.</td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = ownedRows.map(row => `
+        <tr>
+            <td class="p-1.5">
+                <div class="flex items-center justify-center gap-1">
+                    <button type="button" onclick="openBuildingSearchModal('owned','${row.row_id}')"
+                        class="px-2 py-1 text-[11px] rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
+                    <button type="button" onclick="openOwnedBuildingFromRow('${row.row_id}')"
+                        class="px-2 py-1 text-[11px] rounded bg-emerald-600 text-white hover:bg-emerald-700">열기</button>
+                </div>
+            </td>
+            <td class="p-2 text-left">
+                <input type="text" value="${row.address || ""}"
+                    oninput="updateOwnedField('${row.row_id}','address', this.value)"
+                    class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px]"
+                    placeholder="주소">
+            </td>
+            <td class="p-2 text-left">
+                <input type="text" value="${row.bd_name || ""}"
+                    oninput="updateOwnedField('${row.row_id}','bd_name', this.value)"
+                    class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px]"
+                    placeholder="건물명">
+            </td>
+            <td class="p-1.5">
+                <button type="button" onclick="removeOwnedRow('${row.row_id}')"
+                    class="px-2 py-1 text-[11px] rounded bg-red-100 text-red-700 hover:bg-red-200">삭제</button>
+            </td>
+        </tr>
+    `).join("");
+}
+
 function addIntroRow() {
     introRows.push(createEmptyIntroRow());
     renderIntroRows();
+}
+
+function addOwnedRow() {
+    ownedRows.push(createEmptyOwnedRow());
+    renderOwnedRows();
 }
 
 function updateIntroField(rowId, key, value) {
@@ -140,8 +198,19 @@ function removeIntroRow(rowId) {
     renderIntroRows();
 }
 
-function openBuildingSearchModal(rowId) {
-    pickingRowId = rowId;
+function removeOwnedRow(rowId) {
+    ownedRows = ownedRows.filter(r => r.row_id !== rowId);
+    renderOwnedRows();
+}
+
+function updateOwnedField(rowId, key, value) {
+    const row = ownedRows.find(r => r.row_id === rowId);
+    if (!row) return;
+    row[key] = value;
+}
+
+function openBuildingSearchModal(kind, rowId) {
+    pickingContext = { kind, rowId };
     const modalEl = document.getElementById("buildingSearchModal");
     modalEl.classList.remove("hidden");
     modalEl.classList.add("flex");
@@ -158,7 +227,7 @@ function closeBuildingSearchModal() {
     const modalEl = document.getElementById("buildingSearchModal");
     modalEl.classList.add("hidden");
     modalEl.classList.remove("flex");
-    pickingRowId = null;
+    pickingContext = null;
 }
 
 async function searchBuildingsForIntro() {
@@ -212,18 +281,33 @@ function openIntroBuildingFromRow(rowId) {
     openBuildingDetailFromSearch(row.bd_number);
 }
 
+function openOwnedBuildingFromRow(rowId) {
+    const row = ownedRows.find(r => r.row_id === rowId);
+    if (!row || !row.bd_number) return;
+    openBuildingDetailFromSearch(row.bd_number);
+}
+
 function selectBuildingForCurrentRow(bdNumber, address, bdName, salePrice, pricePerPyeong) {
-    if (!pickingRowId) return;
-    const row = introRows.find(r => r.row_id === pickingRowId);
-    if (!row) return;
+    if (!pickingContext) return;
 
-    row.bd_number = String(bdNumber);
-    row.address = address;
-    row.bd_name = bdName;
-    row.sale_price = salePrice;
-    row.price_per_pyeong = pricePerPyeong;
+    if (pickingContext.kind === "intro") {
+        const row = introRows.find(r => r.row_id === pickingContext.rowId);
+        if (!row) return;
+        row.bd_number = String(bdNumber);
+        row.address = address;
+        row.bd_name = bdName;
+        row.sale_price = salePrice;
+        row.price_per_pyeong = pricePerPyeong;
+        renderIntroRows();
+    } else if (pickingContext.kind === "owned") {
+        const row = ownedRows.find(r => r.row_id === pickingContext.rowId);
+        if (!row) return;
+        row.bd_number = String(bdNumber);
+        row.address = address;
+        row.bd_name = bdName;
+        renderOwnedRows();
+    }
 
-    renderIntroRows();
     closeBuildingSearchModal();
 }
 
@@ -379,6 +463,16 @@ function buildSavePayload() {
             intro_note: row.intro_note || ""
         }));
 
+    data_detail.owned_properties_json = JSON.stringify(
+        ownedRows
+            .filter(row => row.bd_number || row.address || row.bd_name)
+            .map(row => ({
+                bd_number: row.bd_number ? Number(row.bd_number) : null,
+                address: row.address || "",
+                bd_name: row.bd_name || ""
+            }))
+    );
+
     return { data_detail, intro_properties };
 }
 
@@ -456,13 +550,48 @@ function bindIntroRows(introList) {
     renderIntroRows();
 }
 
+function bindOwnedRows(rawOwned) {
+    if (!rawOwned) {
+        ownedRows = [];
+        renderOwnedRows();
+        return;
+    }
+
+    let parsed = rawOwned;
+    if (typeof rawOwned === "string") {
+        try {
+            parsed = JSON.parse(rawOwned);
+        } catch (e) {
+            console.error("owned properties parse failed", e);
+            parsed = [];
+        }
+    }
+
+    if (!Array.isArray(parsed)) {
+        ownedRows = [];
+        renderOwnedRows();
+        return;
+    }
+
+    ownedRows = parsed.map(item => ({
+        row_id: generateRowId(),
+        bd_number: item?.bd_number !== null && item?.bd_number !== undefined ? String(item.bd_number) : "",
+        address: item?.address || "",
+        bd_name: item?.bd_name || ""
+    }));
+
+    renderOwnedRows();
+}
+
 async function loadCustomerDetail() {
     const customerNumber = getCustomerNumberFromPath();
     if (!customerNumber) {
         const idInput = document.getElementById("customer_number");
         if (idInput && !idInput.value) idInput.value = "new";
         introRows = [];
+        ownedRows = [];
         renderIntroRows();
+        renderOwnedRows();
         return;
     }
 
@@ -481,6 +610,7 @@ async function loadCustomerDetail() {
             }
         }
         bindIntroRows(payload.intro_properties || []);
+        bindOwnedRows(payload?.data_detail?.owned_properties_json || "[]");
     } catch (err) {
         console.error(err);
         alert("고객 정보 로드 실패");
@@ -701,6 +831,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const addBtn = document.getElementById("addIntroRowBtn");
     if (addBtn) addBtn.addEventListener("click", addIntroRow);
+    const addOwnedBtn = document.getElementById("addOwnedRowBtn");
+    if (addOwnedBtn) addOwnedBtn.addEventListener("click", addOwnedRow);
 
     const searchBtn = document.getElementById("buildingSearchBtn");
     if (searchBtn) searchBtn.addEventListener("click", searchBuildingsForIntro);
@@ -742,5 +874,5 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     renderIntroRows();
+    renderOwnedRows();
 });
-

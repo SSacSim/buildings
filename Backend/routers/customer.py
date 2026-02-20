@@ -48,6 +48,12 @@ def ensure_customer_intro_table(conn, cur):
         ADD COLUMN IF NOT EXISTS intro_cost VARCHAR(255);
         """
     )
+    cur.execute(
+        """
+        ALTER TABLE customer_info
+        ADD COLUMN IF NOT EXISTS owned_properties_json TEXT;
+        """
+    )
     conn.commit()
 
 
@@ -81,7 +87,7 @@ def get_customer_detail(customer_number: int):
             SELECT customer_number, status, buyer_name, company_address, ceo_name,
                    home_address, phone, first_contact,
                    customer_state, business_area, building_preference,
-                   main_interest_region, customer_note, match_conditions_json
+                   main_interest_region, customer_note, match_conditions_json, owned_properties_json
             FROM customer_info
             WHERE customer_number = %s AND delete_flag = FALSE
             """,
@@ -651,6 +657,7 @@ class CustomerInfo(BaseModel):
     main_interest_region: Optional[str]
     customer_note: Optional[str]
     match_conditions_json: Optional[str]
+    owned_properties_json: Optional[str]
 
 
 class CustomerIntroProperty(BaseModel):
