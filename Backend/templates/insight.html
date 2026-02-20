@@ -42,6 +42,13 @@
                     <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="INVESTMENT"> 수익형</label>
                     <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="DEVELOPMENT"> 개발/전환</label>
                     <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="STABLE"> 보유안정</label>
+                    <span class="font-bold min-w-[60px] ml-3">건물상태:</span>
+                    <select id="matchBuildingStatus" class="border-b w-24 text-center outline-none bg-transparent">
+                        <option value="전체">전체</option>
+                        <option value="준비">준비</option>
+                        <option value="완료">완료</option>
+                        <option value="매각">매각</option>
+                    </select>
                 </div>
 
                 <div class="flex items-center gap-2 flex-wrap">
@@ -264,6 +271,7 @@
             const cashHoldManwon = cashHoldManwonRaw ? Number(cashHoldManwonRaw) : null;
             const cashHoldPercent = cashHoldPercentRaw ? Number(cashHoldPercentRaw) : null;
             const elevatorOption = (document.getElementById("matchElevatorOption")?.value || "").trim();
+            const buildingStatus = (document.getElementById("matchBuildingStatus")?.value || "전체").trim();
             const checkedTypes = Array.from(document.querySelectorAll('input[name="matchType"]:checked')).map(el => el.value);
             const checkedZoningCategories = Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked')).map(el => el.value);
             const checkedUsageCategories = Array.from(document.querySelectorAll('input[name="matchUsageCategory"]:checked')).map(el => el.value);
@@ -295,6 +303,7 @@
             if (cashHoldManwon !== null && !Number.isNaN(cashHoldManwon)) params.set("cash_hold_manwon", String(cashHoldManwon));
             if (cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
             if (elevatorOption) params.set("elevator_option", elevatorOption);
+            if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
             if (checkedTypes.length) params.set("types", checkedTypes.join(","));
             if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
             if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
@@ -368,6 +377,8 @@
             });
             const elevator = document.getElementById("matchElevatorOption");
             if (elevator) elevator.value = "";
+            const buildingStatus = document.getElementById("matchBuildingStatus");
+            if (buildingStatus) buildingStatus.value = "전체";
             loadInsightData();
         });
 

@@ -389,6 +389,7 @@ function collectMatchConditions() {
         road_width_min: document.getElementById("matchRoadWidthMin")?.value || "",
         elevator_option: document.getElementById("matchElevatorOption")?.value || "",
         parking_min: document.getElementById("matchParkingMin")?.value || "",
+        building_status: document.getElementById("matchBuildingStatus")?.value || "전체",
         types: Array.from(document.querySelectorAll('input[name="matchType"]:checked')).map((el) => el.value),
         zoning_categories: Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked')).map((el) => el.value),
         usage_categories: Array.from(document.querySelectorAll('input[name="matchUsageCategory"]:checked')).map((el) => el.value),
@@ -428,6 +429,7 @@ function applyMatchConditions(saved) {
     setInputValue("matchRoadWidthMin", saved.road_width_min);
     setInputValue("matchElevatorOption", saved.elevator_option);
     setInputValue("matchParkingMin", saved.parking_min);
+    setInputValue("matchBuildingStatus", saved.building_status || "전체");
 
     const applyChecked = (selector, values) => {
         const selected = new Set(Array.isArray(values) ? values : []);
@@ -674,6 +676,7 @@ async function searchCustomerMatchBuildings() {
     const roadWidthMinInput = document.getElementById("matchRoadWidthMin");
     const elevatorOptionInput = document.getElementById("matchElevatorOption");
     const parkingMinInput = document.getElementById("matchParkingMin");
+    const buildingStatusInput = document.getElementById("matchBuildingStatus");
     const checkedTypes = Array.from(document.querySelectorAll('input[name="matchType"]:checked'))
         .map(el => el.value);
     const checkedZoningCategories = Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked'))
@@ -725,6 +728,7 @@ async function searchCustomerMatchBuildings() {
     const approvalYearMin = approvalYearMinRaw ? Number(approvalYearMinRaw) : null;
     const roadWidthMin = roadWidthMinRaw ? Number(roadWidthMinRaw) : null;
     const parkingMin = parkingMinRaw ? Number(parkingMinRaw) : null;
+    const buildingStatus = (buildingStatusInput?.value || "전체").trim();
     const useMinYield = minYield !== null && !Number.isNaN(minYield);
     const hasAnyCondition = Boolean(address)
         || Boolean(businessArea)
@@ -751,6 +755,7 @@ async function searchCustomerMatchBuildings() {
         || (roadWidthMin !== null && !Number.isNaN(roadWidthMin))
         || Boolean(elevatorOption)
         || (parkingMin !== null && !Number.isNaN(parkingMin))
+        || (buildingStatus && buildingStatus !== "전체")
         || checkedZoningCategories.length > 0
         || checkedUsageCategories.length > 0;
 
@@ -784,6 +789,7 @@ async function searchCustomerMatchBuildings() {
     if (roadWidthMin !== null && !Number.isNaN(roadWidthMin)) params.set("road_width_min", String(roadWidthMin));
     if (elevatorOption) params.set("elevator_option", elevatorOption);
     if (parkingMin !== null && !Number.isNaN(parkingMin)) params.set("parking_min", String(parkingMin));
+    if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
     if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
     if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
     if (checkedTypes.length) params.set("types", checkedTypes.join(","));

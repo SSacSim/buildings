@@ -262,6 +262,7 @@ def customer_match_search(
     approval_year_min: Optional[int] = Query(None),
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
+    building_status: str = Query(""),
     parking_min: Optional[int] = Query(None),
     zoning_categories: str = Query(""),
     usage_categories: str = Query(""),
@@ -276,10 +277,12 @@ def customer_match_search(
 
         sql = """
             SELECT
-                bd_number, bd_name, address, sale_price, yield_rate,
-                is_new_site, is_remodeling, is_office_building, is_investment, is_development, is_stable_holding
-            FROM building_info
-            WHERE delete_flag = FALSE
+                bi.bd_number, bi.bd_name, bi.address, bi.sale_price, bi.yield_rate,
+                bi.is_new_site, bi.is_remodeling, bi.is_office_building, bi.is_investment, bi.is_development, bi.is_stable_holding
+            FROM building_info bi
+            LEFT JOIN building_memo bm
+              ON bi.bd_number = bm.bd_number
+            WHERE bi.delete_flag = FALSE
         """
         params: list = []
 
@@ -521,6 +524,11 @@ def customer_match_search(
                 )
             """
 
+        normalized_building_status = (building_status or "").strip()
+        if normalized_building_status and normalized_building_status != "전체":
+            sql += " AND COALESCE(bm.status, '') = %s"
+            params.append(normalized_building_status)
+
         if parking_min is not None:
             sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(parking_capacity, ''), '[^0-9]', '', 'g'), '')::int, 0) >= %s"
             params.append(parking_min)
@@ -614,7 +622,7 @@ def customer_match_search(
             # 체크된 유형은 모두 충족해야 하므로 AND 조건으로 필터링
             sql += " AND (" + " AND ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        sql += " ORDER BY update_time DESC, bd_number DESC LIMIT %s"
+        sql += " ORDER BY bi.update_time DESC, bi.bd_number DESC LIMIT %s"
         params.append(limit)
 
         cur.execute(sql, tuple(params))

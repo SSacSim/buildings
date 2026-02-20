@@ -80,6 +80,7 @@ def get_insight_overview(
     approval_year_min: Optional[int] = Query(None),
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
+    building_status: str = Query(""),
     parking_min: Optional[int] = Query(None),
     zoning_categories: str = Query(""),
     usage_categories: str = Query(""),
@@ -275,17 +276,19 @@ def get_insight_overview(
 
         building_sql = """
             SELECT
-                bd_number,
-                bd_name,
-                address,
-                site_location,
-                sale_price,
-                yield_rate,
-                price_per_pyeong,
-                gross_area_pyeong,
-                usable_area_pyeong
-            FROM building_info
-            WHERE delete_flag = FALSE
+                bi.bd_number,
+                bi.bd_name,
+                bi.address,
+                bi.site_location,
+                bi.sale_price,
+                bi.yield_rate,
+                bi.price_per_pyeong,
+                bi.gross_area_pyeong,
+                bi.usable_area_pyeong
+            FROM building_info bi
+            LEFT JOIN building_memo bm
+              ON bi.bd_number = bm.bd_number
+            WHERE bi.delete_flag = FALSE
         """
         building_params: list = []
 
@@ -502,7 +505,12 @@ def get_insight_overview(
                     OR COALESCE(NULLIF(regexp_replace(COALESCE(emergency_elevator, ''), '[^0-9]', '', 'g'), '')::int, 0) > 0
                 )
             """
-        elif normalized_elevator_option == "NONE":
+
+        normalized_building_status = (building_status or "").strip()
+        if normalized_building_status not in ("", "전체"):
+            building_sql += " AND COALESCE(bm.status, '') = %s"
+            building_params.append(normalized_building_status)
+        if normalized_elevator_option == "NONE":
             building_sql += """
                 AND (
                     COALESCE(NULLIF(regexp_replace(COALESCE(elevator, ''), '[^0-9]', '', 'g'), '')::int, 0) = 0
@@ -560,7 +568,7 @@ def get_insight_overview(
         if type_columns:
             building_sql += " AND (" + " AND ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        building_sql += " ORDER BY bd_number DESC LIMIT %s"
+        building_sql += " ORDER BY bi.bd_number DESC LIMIT %s"
         building_params.append(limit)
 
         cur.execute(building_sql, tuple(building_params))
