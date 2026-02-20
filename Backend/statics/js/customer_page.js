@@ -10,6 +10,42 @@ const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
 const confirmBtn = document.getElementById("confirmDeleteBtn");
 
+let sidebarLocked = false;
+let sidebarOverlay = null;
+
+function applySidebarLock() {
+    const sidebar = document.getElementById("rightSidebar");
+    if (!sidebar || sidebarOverlay) return;
+
+    sidebar.style.filter = "blur(10px)";
+    sidebar.style.pointerEvents = "none";
+    sidebar.style.userSelect = "none";
+
+    sidebarOverlay = document.createElement("div");
+    sidebarOverlay.style.position = "absolute";
+    sidebarOverlay.style.inset = "0";
+    sidebarOverlay.style.background = "rgba(255,255,255,0.45)";
+    sidebarOverlay.style.zIndex = "999";
+    sidebarOverlay.style.pointerEvents = "none";
+
+    sidebar.style.position = "relative";
+    sidebar.appendChild(sidebarOverlay);
+}
+
+function removeSidebarLock() {
+    const sidebar = document.getElementById("rightSidebar");
+    if (!sidebar) return;
+
+    sidebar.style.filter = "";
+    sidebar.style.pointerEvents = "";
+    sidebar.style.userSelect = "";
+
+    if (sidebarOverlay) {
+        sidebarOverlay.remove();
+        sidebarOverlay = null;
+    }
+}
+
 function todayIsoDate() {
     const now = new Date();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
@@ -875,6 +911,15 @@ async function searchCustomerMatchBuildings(page = 1) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    if (window.opener && typeof window.opener.isLocked !== "undefined") {
+        sidebarLocked = Boolean(window.opener.isLocked);
+    }
+    if (sidebarLocked) {
+        applySidebarLock();
+    } else {
+        removeSidebarLock();
+    }
+
     loadCustomerDetail();
 
     const customerForm = document.getElementById("customerForm");
