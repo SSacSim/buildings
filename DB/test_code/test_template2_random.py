@@ -16,6 +16,24 @@ import make_ppt_template2  # noqa: E402
 def pick_random_buildings(conn, limit=7, seed=None):
     cur = conn.cursor()
     try:
+        required_id = None
+        cur.execute(
+            """
+            SELECT bi.bd_number
+            FROM building_info bi
+            JOIN building_id bid ON bid.bd_number = bi.bd_number
+            WHERE bi.delete_flag = FALSE
+              AND bid.delete_flag = FALSE
+              AND bi.address LIKE %s
+            ORDER BY bi.update_time DESC NULLS LAST, bi.bd_number DESC
+            LIMIT 1
+            """,
+            ("%아시아333%",),
+        )
+        row = cur.fetchone()
+        if row:
+            required_id = int(row[0])
+
         cur.execute(
             """
             SELECT bd_number
@@ -31,8 +49,16 @@ def pick_random_buildings(conn, limit=7, seed=None):
         if seed is not None:
             random.seed(seed)
 
-        count = min(limit, len(all_ids))
-        return random.sample(all_ids, count)
+        selected = []
+        if required_id is not None and required_id in all_ids:
+            selected.append(required_id)
+            all_ids.remove(required_id)
+
+        remain = max(0, limit - len(selected))
+        if remain > 0 and all_ids:
+            selected.extend(random.sample(all_ids, min(remain, len(all_ids))))
+
+        return selected
     finally:
         cur.close()
 

@@ -5,6 +5,7 @@ let ownedRows = [];
 let pickingContext = null;
 let customerMatchCurrentPage = 1;
 const CUSTOMER_MATCH_PAGE_SIZE = 20;
+const selectedMatchBuildingIds = new Set();
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -964,6 +965,55 @@ function setCustomerMatchCount(count) {
     el.textContent = `(${safe.toLocaleString()}건)`;
 }
 
+function refreshCustomerMatchDownloadButton() {
+    const btn = document.getElementById("customerMatchDownloadBtn");
+    if (!btn) return;
+    const selectedCount = selectedMatchBuildingIds.size;
+    btn.textContent = selectedCount > 0
+        ? `[매칭결과 자료 다운로드 (${selectedCount}건 선택)]`
+        : "[매칭결과 자료 다운로드]";
+}
+
+function toggleMatchBuildingSelection(bdNumber, checked) {
+    const id = Number(bdNumber);
+    if (!Number.isFinite(id)) return;
+    if (checked) selectedMatchBuildingIds.add(id);
+    else selectedMatchBuildingIds.delete(id);
+    refreshCustomerMatchDownloadButton();
+}
+
+async function downloadSelectedMatchPpt() {
+    const ids = Array.from(selectedMatchBuildingIds);
+    if (!ids.length) {
+        alert("먼저 매칭 결과에서 건물을 선택해 주세요.");
+        return;
+    }
+    try {
+        const res = await fetch("/api/building/compare-ppt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bd_numbers: ids })
+        });
+        if (!res.ok) throw new Error("download failed");
+
+        const blob = await res.blob();
+        const cd = res.headers.get("content-disposition") || "";
+        const match = cd.match(/filename=\"?([^\";]+)\"?/i);
+        const filename = match ? decodeURIComponent(match[1]) : `compare_${Date.now()}.pptx`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error(err);
+        alert("매칭결과 자료 다운로드 중 오류가 발생했습니다.");
+    }
+}
+
 function renderCustomerMatchPagination(totalPages, currentPage) {
     const container = document.getElementById("customerMatchPagination");
     if (!container) return;
@@ -1213,6 +1263,12 @@ async function searchCustomerMatchBuildings(page = 1) {
             <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 cursor-pointer hover:border-blue-300" onclick="openBuildingDetail(${item.bd_number})">
                 <div class="flex items-start justify-between gap-3 mb-2">
                     <div class="flex flex-wrap items-center gap-2">
+                        <label class="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1" onclick="event.stopPropagation()">
+                            <input type="checkbox"
+                                ${selectedMatchBuildingIds.has(Number(item.bd_number)) ? "checked" : ""}
+                                onchange="toggleMatchBuildingSelection(${item.bd_number}, this.checked)">
+                            선택
+                        </label>
                         <span class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded">ID: ${item.bd_number || "-"}</span>
                         <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">FLAG: ${[
                             item.location_decide,
@@ -1297,6 +1353,10 @@ document.addEventListener("DOMContentLoaded", () => {
     if (customerMatchSearchBtn) {
         customerMatchSearchBtn.addEventListener("click", () => searchCustomerMatchBuildings(1));
     }
+    const customerMatchDownloadBtn = document.getElementById("customerMatchDownloadBtn");
+    if (customerMatchDownloadBtn) {
+        customerMatchDownloadBtn.addEventListener("click", downloadSelectedMatchPpt);
+    }
 
     CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
         const inputEl = document.getElementById(`customerImageInput_${slot}`);
@@ -1359,4 +1419,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
     renderIntroRows();
     renderOwnedRows();
+    refreshCustomerMatchDownloadButton();
 });

@@ -1487,11 +1487,30 @@ async def upload_building_images(
 
 sys.path.append('./ppt/module')
 import make_ppt
+import make_ppt_template2
+
+
+class ComparePptRequest(BaseModel):
+    bd_numbers: List[int]
 
 @app.post("/api/building/{bd_id}/ppt")
 async def generate_ppt(bd_id: int):
     ppt_path, filename  = make_ppt.run(bd_id)  # ← ppt 파일 경로 반환
 
+    return FileResponse(
+        ppt_path,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=filename
+    )
+
+
+@app.post("/api/building/compare-ppt")
+async def generate_compare_ppt(data: ComparePptRequest):
+    bd_numbers = [int(x) for x in (data.bd_numbers or []) if x is not None]
+    if not bd_numbers:
+        raise HTTPException(status_code=400, detail="bd_numbers is empty")
+
+    ppt_path, filename = make_ppt_template2.run(bd_numbers)
     return FileResponse(
         ppt_path,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
