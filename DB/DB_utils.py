@@ -370,21 +370,31 @@ def extract_intro_customers_by_building(conn, bd_number: str) -> dict:
         cur.execute(
             """
             SELECT
-                cip.intro_id,
-                cip.customer_number,
-                ci.buyer_name,
-                ci.phone,
-                cip.intro_date,
-                cip.progress_status,
-                cip.intro_cost,
-                cip.intro_note
-            FROM customer_intro_property cip
-            LEFT JOIN customer_info ci
-              ON cip.customer_number = ci.customer_number
-            WHERE cip.bd_number = %s
-              AND cip.delete_flag = FALSE
-              AND ci.delete_flag = FALSE
-            ORDER BY cip.intro_date DESC, cip.intro_id DESC
+                x.intro_id,
+                x.customer_number,
+                x.buyer_name,
+                x.intro_date,
+                x.progress_status,
+                x.intro_cost,
+                x.intro_note
+            FROM (
+                SELECT DISTINCT ON (cip.customer_number)
+                    cip.intro_id,
+                    cip.customer_number,
+                    ci.buyer_name,
+                    cip.intro_date,
+                    cip.progress_status,
+                    cip.intro_cost,
+                    cip.intro_note
+                FROM customer_intro_property cip
+                LEFT JOIN customer_info ci
+                  ON cip.customer_number = ci.customer_number
+                WHERE cip.bd_number = %s
+                  AND cip.delete_flag = FALSE
+                  AND ci.delete_flag = FALSE
+                ORDER BY cip.customer_number, cip.intro_date DESC, cip.intro_id DESC
+            ) x
+            ORDER BY x.intro_date DESC, x.intro_id DESC
             """,
             (bd_number,)
         )
