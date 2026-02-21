@@ -233,16 +233,7 @@
                         <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">주변역</div>
                         <input id="nearby_station" name="nearby_station" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
                     </div>
-                    <div class="flex border border-slate-400 bg-white items-stretch">
-                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
-                            <div class="font-bold text-slate-600 text-[15px] leading-tight">주변역2</div>
-                            <button type="button" onclick="addNearbyStation2Row()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
-                        </div>
-                        <div class="flex-1 p-1">
-                            <input type="hidden" id="nearby_station2" name="nearby_station2" value="">
-                            <div id="nearbyStation2Rows" class="space-y-1 max-h-[150px] overflow-y-auto pr-1"></div>
-                        </div>
-                    </div>
+                    <input type="hidden" id="nearby_station2" name="nearby_station2" value="">
                     
                     <div class="flex border border-slate-400 bg-white items-center">
                         <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">상권</div>
@@ -252,7 +243,7 @@
                 </div>
                 <!-- 입금가, 매매가 -->
                 <div class="p-1 space-y-0.5 border-b border-slate-400">
-                    <div class="flex border border-slate-400 bg-white h-[42px] items-stretch">
+                    <div id="lockHidePriceRow" class="flex border border-slate-400 bg-white h-[42px] items-stretch">
                         <div class="px-3 bg-[#2d3748] text-white text-[10px] font-bold italic flex items-center justify-center text-center leading-none p-0.5">
                             입금가
                         </div>
@@ -2660,14 +2651,18 @@
     let sidebarLocked = false;
     function applySidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
+        const lockHidePriceRow = document.getElementById("lockHidePriceRow");
         if (!sidebar) return;
         sidebar.classList.add("hidden");
+        if (lockHidePriceRow) lockHidePriceRow.classList.add("hidden");
     }
     // ⭐ 페이지 로딩 시 자동 실행
     function removeSidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
+        const lockHidePriceRow = document.getElementById("lockHidePriceRow");
         if (!sidebar) return;
         sidebar.classList.remove("hidden");
+        if (lockHidePriceRow) lockHidePriceRow.classList.remove("hidden");
     }
 
     function toggleSidebarLock() {
