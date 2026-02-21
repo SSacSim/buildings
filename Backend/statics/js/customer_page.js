@@ -1046,7 +1046,7 @@ function setCustomerMatchCount(count) {
     const el = document.getElementById("customerMatchCount");
     if (!el) return;
     const safe = Number.isFinite(Number(count)) ? Number(count) : 0;
-    el.textContent = `(${safe.toLocaleString()}?)`;
+    el.textContent = `(${safe.toLocaleString()}건)`;
 }
 
 function refreshCustomerMatchDownloadButton() {
