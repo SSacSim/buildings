@@ -177,15 +177,20 @@ def _set_cell_text(cell, text, size_pt):
 def _fix_image_orientation(img_path):
     img = Image.open(img_path)
     img = ImageOps.exif_transpose(img)
-    if img.mode in ("RGBA", "LA"):
+    # JPEG 저장 호환 모드로 정규화 (P/CMYK/RGBA 등 포함)
+    if img.mode not in ("RGB", "L"):
         img = img.convert("RGB")
-    tmp_path = BASE_DIR / f"_tmp_{uuid.uuid4().hex}{Path(img_path).suffix}"
-    img.save(tmp_path)
+    tmp_path = BASE_DIR / f"_tmp_{uuid.uuid4().hex}.jpg"
+    img.save(tmp_path, format="JPEG", quality=95)
     return tmp_path
 
 
 def _replace_picture(slide, placeholder_shape, image_path):
-    fixed_path = _fix_image_orientation(image_path)
+    try:
+        fixed_path = _fix_image_orientation(image_path)
+    except Exception:
+        # 이미지가 깨졌거나 변환 실패 시 해당 슬롯은 건너뛰고 전체 생성은 계속 진행
+        return
     try:
         new_pic = slide.shapes.add_picture(
             str(fixed_path),
