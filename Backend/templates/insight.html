@@ -50,6 +50,14 @@
                         <option value="매각">매각</option>
                         <option value="보류">보류</option>
                     </select>
+                    <span class="font-bold min-w-[70px] ml-3">진행상황:</span>
+                    <select id="matchCustomerStatus" class="border-b w-24 text-center outline-none bg-transparent">
+                        <option value="전체">전체</option>
+                        <option value="검토">검토</option>
+                        <option value="집중">집중</option>
+                        <option value="완료">완료</option>
+                        <option value="보류">보류</option>
+                    </select>
                 </div>
 
                 <div class="flex items-center gap-2 flex-wrap">
@@ -355,6 +363,7 @@
             const cashHoldPercent = cashHoldPercentRaw ? Number(cashHoldPercentRaw) : null;
             const elevatorOption = (document.getElementById("matchElevatorOption")?.value || "").trim();
             const buildingStatus = (document.getElementById("matchBuildingStatus")?.value || "전체").trim();
+            const customerStatus = (document.getElementById("matchCustomerStatus")?.value || "전체").trim();
             const locationDecide = (document.getElementById("matchLocationDecide")?.value || "").trim();
             const priceDecide = (document.getElementById("matchPriceDecide")?.value || "").trim();
             const yieldDecide = (document.getElementById("matchYieldDecide")?.value || "").trim();
@@ -395,6 +404,7 @@
             if (cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
             if (elevatorOption) params.set("elevator_option", elevatorOption);
             if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
+            if (customerStatus && customerStatus !== "전체") params.set("customer_status", customerStatus);
             if (locationDecide) params.set("location_decide", locationDecide);
             if (priceDecide) params.set("price_decide", priceDecide);
             if (yieldDecide) params.set("yield_decide", yieldDecide);
@@ -532,6 +542,8 @@
             if (elevator) elevator.value = "";
             const buildingStatus = document.getElementById("matchBuildingStatus");
             if (buildingStatus) buildingStatus.selectedIndex = 0;
+            const customerStatus = document.getElementById("matchCustomerStatus");
+            if (customerStatus) customerStatus.selectedIndex = 0;
             ["matchLocationDecide", "matchPriceDecide", "matchYieldDecide", "matchVacancyDecide", "matchLimitDecide", "matchLoanDecide"].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.value = "";

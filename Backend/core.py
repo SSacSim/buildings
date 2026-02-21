@@ -86,6 +86,7 @@ def get_insight_overview(
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
     building_status: str = Query(""),
+    customer_status: str = Query(""),
     location_decide: str = Query(""),
     price_decide: str = Query(""),
     yield_decide: str = Query(""),
@@ -256,6 +257,10 @@ def get_insight_overview(
 
         customers = []
         for row in customers_raw:
+            if customer_status and customer_status != "전체":
+                if str(row.get("status") or "").strip() != customer_status:
+                    continue
+
             cond = parse_json(row.get("match_conditions_json"))
 
             cond_address = str(cond.get("address") or "").strip().lower()
