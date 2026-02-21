@@ -1254,11 +1254,22 @@
                 </div>
             </div>
 
-            <div class="section-card shrink-0 flex flex-col border border-slate-400 bg-white">
-                <div class="bg-indigo-700 text-white text-[12px] px-2 py-1 font-bold">
-                    소개 고객 목록
+            <div class="section-card shrink-0 flex flex-col border border-slate-400 bg-white -mt-[30px]">
+                <div class="bg-indigo-700 text-white text-[12px] px-2 py-1 font-bold flex items-center justify-between gap-2">
+                    <span>소개 고객 목록</span>
+                    <div class="flex items-center gap-1">
+                        <input
+                            id="introCustomerSearchInput"
+                            type="text"
+                            placeholder="회사명/대표자명/소개금액 검색"
+                            class="w-[210px] px-2 py-0.5 border border-slate-300 rounded text-[11px] text-slate-700 outline-none bg-white">
+                        <button
+                            id="introCustomerSearchBtn"
+                            type="button"
+                            class="px-2 py-0.5 text-[11px] rounded bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap">검색</button>
+                    </div>
                 </div>
-                <div id="intro-customer-list" class="p-2 text-[11px] text-slate-600 space-y-1 max-h-[180px] overflow-y-auto">
+                <div id="intro-customer-list" class="p-2 text-[11px] text-slate-600 space-y-1 max-h-[210px] overflow-y-auto">
                     <div class="text-slate-400">아직 소개 기록이 없습니다.</div>
                 </div>
             </div>
@@ -2270,9 +2281,19 @@
         // 만약 최신글이 위로 오게 하고 싶다면 appendChild 대신 insertBefore(newRow, historyList.firstChild)를 사용하세요.
     }
 
+    let introCustomerRows = [];
+    let introCustomerSearchKeyword = "";
+
+    function runIntroCustomerSearch() {
+        const input = document.getElementById('introCustomerSearchInput');
+        introCustomerSearchKeyword = (input?.value || '').trim().toLowerCase();
+        renderIntroCustomerList(introCustomerRows);
+    }
+
     function renderIntroCustomerList(rows) {
         const list = document.getElementById('intro-customer-list');
         if (!list) return;
+        introCustomerRows = Array.isArray(rows) ? rows : [];
 
         const formatDateOnly = (value) => {
             if (!value) return '-';
@@ -2294,12 +2315,31 @@
             return raw.includes('만원') ? raw : `${raw}만원`;
         };
 
-        if (!rows.length) {
+        const filteredRows = introCustomerSearchKeyword
+            ? introCustomerRows.filter((row) => {
+                const company = String(row?.buyer_name || '').toLowerCase();
+                const ceo = String(row?.ceo_name || '').toLowerCase();
+                const introCost = String(row?.intro_cost || '');
+                const keywordDigits = introCustomerSearchKeyword.replace(/,/g, '').replace(/\s+/g, '');
+                const introCostDigits = introCost.replace(/,/g, '').replace(/\s+/g, '');
+                return company.includes(introCustomerSearchKeyword)
+                    || ceo.includes(introCustomerSearchKeyword)
+                    || String(introCost).toLowerCase().includes(introCustomerSearchKeyword)
+                    || (keywordDigits && introCostDigits.includes(keywordDigits));
+            })
+            : introCustomerRows;
+
+        if (!introCustomerRows.length) {
             list.innerHTML = '<div class="text-slate-400">아직 소개 기록이 없습니다.</div>';
             return;
         }
 
-        list.innerHTML = rows.map(row => `
+        if (!filteredRows.length) {
+            list.innerHTML = '<div class="text-slate-400">검색된 소개 고객이 없습니다.</div>';
+            return;
+        }
+
+        list.innerHTML = filteredRows.map(row => `
             <div class="border border-slate-200 rounded p-2 bg-slate-50 hover:bg-slate-100 cursor-pointer"
                 onclick="openCustomerFromIntro(${row.customer_number})">
                 <div class="text-slate-700 leading-5">
@@ -2667,6 +2707,19 @@
 
         if (sidebarLocked) {
             applySidebarLock();
+        }
+
+        const introSearchBtn = document.getElementById('introCustomerSearchBtn');
+        if (introSearchBtn) introSearchBtn.addEventListener('click', runIntroCustomerSearch);
+
+        const introSearchInput = document.getElementById('introCustomerSearchInput');
+        if (introSearchInput) {
+            introSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    runIntroCustomerSearch();
+                }
+            });
         }
         
     });

@@ -343,7 +343,11 @@ function renderIntroRows() {
     const thead = table ? table.querySelector("thead") : null;
     const keyword = (introSearchKeyword || "").trim().toLowerCase();
     const filteredRows = keyword
-        ? introRows.filter((row) => String(row?.address || "").toLowerCase().includes(keyword))
+        ? introRows.filter((row) => {
+            const address = String(row?.address || "").toLowerCase();
+            const bdName = String(row?.bd_name || "").toLowerCase();
+            return address.includes(keyword) || bdName.includes(keyword);
+        })
         : introRows;
 
     if (!introRows.length) {
