@@ -103,12 +103,12 @@
                 카카오 지도
             </button>
             
-            <button onclick="openDeleteModal()"
+            <button id="deleteBuildingBtn" onclick="openDeleteModal()"
                 class="bg-red-500 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-red-600 shadow-sm active:scale-95 transition-all">
                 삭제
             </button>
             
-            <button onclick="saveBuildingDetail()" class="bg-blue-600 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all">정보 저장하기</button>
+            <button id="saveBuildingBtn" onclick="saveBuildingDetail()" class="bg-blue-600 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all">정보 저장하기</button>
         </div>
     </header>
 
@@ -118,7 +118,7 @@
             <div class="flex-1 flex flex-col overflow-y-auto border-l border-white">
                 <!-- 주소관련 -->
                 <div class="p-1 space-y-0.5 border-b border-slate-400">
-                    <div class="border border-slate-400 bg-white">
+                    <div id="lockHideDecideRows" class="border border-slate-400 bg-white">
                         <!-- 1줄 : 입지 / 가격 / 수익률 -->
                         <div class="grid grid-cols-3 border-b border-slate-300">
                             <!-- 입지 -->
@@ -344,7 +344,7 @@
                         </div>
                     </div>
 
-                    <div class="col-span-2 flex border border-slate-400 min-h-[40px] items-stretch mt-0.5 bg-white">
+                    <div id="lockHideLoanStatusRow" class="col-span-2 flex border border-slate-400 min-h-[40px] items-stretch mt-0.5 bg-white">
                         <div class="w-16 bg-slate-100 border-r border-slate-300 text-[11px] font-bold text-slate-600 flex items-center justify-center whitespace-nowrap shrink-0">
                             대출현황
                         </div>
@@ -495,16 +495,7 @@
                         <input id="road_access" name="road_access" type="text"
                             class="px-2 py-1 bg-white font-bold text-center outline-none border-r border-slate-100 text-[12px] flex-1">
                     </div>
-                    <div class="flex border-b border-slate-200 bg-white items-stretch">
-                        <div class="w-16 bg-slate-50 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
-                            <div class="font-bold text-slate-600 text-[11px] leading-tight">도로2</div>
-                            <button type="button" onclick="addRoadAccess2Row()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
-                        </div>
-                        <div class="flex-1 p-1">
-                            <input type="hidden" id="road_access2" name="road_access2" value="">
-                            <div id="roadAccess2Rows" class="space-y-1 max-h-[150px] overflow-y-auto pr-1"></div>
-                        </div>
-                    </div>
+                    <input type="hidden" id="road_access2" name="road_access2" value="">
 
 
                     <!-- 건물 관련 -->
@@ -523,16 +514,6 @@
                                     <option value="기타">기타</option>
                                 </select>
                                 <div class="absolute inset-y-0 right-2 flex items-center pointer-events-none text-[8px] text-slate-400">▼</div>
-                            </div>
-                        </div>
-                        <div class="flex border-b border-slate-200 bg-white items-stretch">
-                            <div class="w-16 bg-slate-50 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
-                                <div class="font-bold text-slate-600 text-[11px] leading-tight">위반</div>
-                                <button type="button" onclick="addViolationRow()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
-                            </div>
-                            <div class="flex-1 p-1">
-                                <input type="hidden" id="violation_info" name="violation_info" value="">
-                                <div id="violationRows" class="space-y-1 max-h-[140px] overflow-y-auto pr-1"></div>
                             </div>
                         </div>
 
@@ -1004,6 +985,16 @@
                             </div>
 
                         </div>
+                        <div class="flex border-b border-slate-200 bg-white items-stretch">
+                            <div class="w-16 bg-slate-50 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
+                                <div class="font-bold text-slate-600 text-[11px] leading-tight">위반</div>
+                                <button type="button" onclick="addViolationRow()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
+                            </div>
+                            <div class="flex-1 p-1">
+                                <input type="hidden" id="violation_info" name="violation_info" value="">
+                                <div id="violationRows" class="space-y-1 max-h-[140px] overflow-y-auto pr-1"></div>
+                            </div>
+                        </div>
 
                     </div>
                 </div>
@@ -1448,93 +1439,6 @@
         updateNearbyStation2Hidden();
     }
 
-    function createRoadAccess2Row(values = {}) {
-        const row = document.createElement("div");
-        row.className = "group relative text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded px-1 py-1";
-        row.innerHTML = `
-            <button type="button" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-red-100 text-red-700 hover:bg-red-200 text-[12px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" aria-label="삭제">×</button>
-            <div class="pr-7 grid grid-cols-[auto_40px_auto_auto_40px_auto_40px_auto_minmax(0,1fr)_auto_auto_64px] gap-0.5 items-center text-[10px]">
-                <span>도로</span>
-                <input type="text" class="road2-main h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.main || ""}">
-                <span>m</span>
-                <span>{X</span>
-                <input type="text" class="road2-sub1 h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.sub1 || ""}">
-                <span>m X</span>
-                <input type="text" class="road2-sub2 h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.sub2 || ""}">
-                <span>m X</span>
-                <input type="text" class="road2-sub3 h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-center rounded px-0.5" value="${values.sub3 || ""}">
-                <span>m}</span>
-                <span>선택</span>
-                <select class="road2-type h-6 w-full min-w-0 border border-slate-300 bg-white outline-none text-[10px] text-center rounded px-0.5">
-                    <option value="선택" ${values.type === "선택" ? "selected" : ""}>선택</option>
-                    <option value="코너" ${values.type === "코너" ? "selected" : ""}>코너</option>
-                    <option value="양면" ${values.type === "양면" ? "selected" : ""}>양면</option>
-                </select>
-            </div>
-        `;
-
-        const removeBtn = row.querySelector("button");
-        removeBtn.addEventListener("click", () => {
-            row.remove();
-            updateRoadAccess2Hidden();
-        });
-
-        row.querySelectorAll("input, select").forEach(el => {
-            el.addEventListener("input", updateRoadAccess2Hidden);
-            el.addEventListener("change", updateRoadAccess2Hidden);
-        });
-
-        return row;
-    }
-
-    function updateRoadAccess2Hidden() {
-        const rows = Array.from(document.querySelectorAll("#roadAccess2Rows > div"));
-        const serialized = rows
-            .map(row => {
-                const main = sanitizeNearbyPart(row.querySelector(".road2-main")?.value);
-                const sub1 = sanitizeNearbyPart(row.querySelector(".road2-sub1")?.value);
-                const sub2 = sanitizeNearbyPart(row.querySelector(".road2-sub2")?.value);
-                const sub3 = sanitizeNearbyPart(row.querySelector(".road2-sub3")?.value);
-                const type = sanitizeNearbyPart(row.querySelector(".road2-type")?.value || "선택");
-                if (!(main || sub1 || sub2 || sub3 || (type && type !== "선택"))) return "";
-                return [main, sub1, sub2, sub3, type].join("|");
-            })
-            .filter(Boolean)
-            .join("##");
-
-        const hidden = document.getElementById("road_access2");
-        if (hidden) hidden.value = serialized;
-    }
-
-    function renderRoadAccess2RowsFromHidden() {
-        const wrap = document.getElementById("roadAccess2Rows");
-        const hidden = document.getElementById("road_access2");
-        if (!wrap || !hidden) return;
-
-        wrap.innerHTML = "";
-        const raw = hidden.value || "";
-        const entries = raw ? raw.split("##").filter(Boolean) : [];
-
-        if (!entries.length) {
-            wrap.appendChild(createRoadAccess2Row());
-            updateRoadAccess2Hidden();
-            return;
-        }
-
-        entries.forEach(item => {
-            const [main = "", sub1 = "", sub2 = "", sub3 = "", type = "선택"] = item.split("|");
-            wrap.appendChild(createRoadAccess2Row({ main, sub1, sub2, sub3, type }));
-        });
-        updateRoadAccess2Hidden();
-    }
-
-    function addRoadAccess2Row() {
-        const wrap = document.getElementById("roadAccess2Rows");
-        if (!wrap) return;
-        wrap.appendChild(createRoadAccess2Row());
-        updateRoadAccess2Hidden();
-    }
-
     function createViolationRow(values = {}) {
         const row = document.createElement("div");
         row.className = "group relative text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded px-1 py-1";
@@ -1782,7 +1686,6 @@
             }
         });
         renderNearbyStation2RowsFromHidden();
-        renderRoadAccess2RowsFromHidden();
         renderViolationRowsFromHidden();
     }
     // 페이지가 열리면 바로 빌딜 Detail 관련 정보 받아와 뿌리기 
@@ -2652,17 +2555,33 @@
     function applySidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
         const lockHidePriceRow = document.getElementById("lockHidePriceRow");
+        const lockHideDecideRows = document.getElementById("lockHideDecideRows");
+        const lockHideLoanStatusRow = document.getElementById("lockHideLoanStatusRow");
+        const deleteBuildingBtn = document.getElementById("deleteBuildingBtn");
+        const saveBuildingBtn = document.getElementById("saveBuildingBtn");
         if (!sidebar) return;
         sidebar.classList.add("hidden");
         if (lockHidePriceRow) lockHidePriceRow.classList.add("hidden");
+        if (lockHideDecideRows) lockHideDecideRows.classList.add("hidden");
+        if (lockHideLoanStatusRow) lockHideLoanStatusRow.classList.add("hidden");
+        if (deleteBuildingBtn) deleteBuildingBtn.classList.add("hidden");
+        if (saveBuildingBtn) saveBuildingBtn.classList.add("hidden");
     }
     // ⭐ 페이지 로딩 시 자동 실행
     function removeSidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
         const lockHidePriceRow = document.getElementById("lockHidePriceRow");
+        const lockHideDecideRows = document.getElementById("lockHideDecideRows");
+        const lockHideLoanStatusRow = document.getElementById("lockHideLoanStatusRow");
+        const deleteBuildingBtn = document.getElementById("deleteBuildingBtn");
+        const saveBuildingBtn = document.getElementById("saveBuildingBtn");
         if (!sidebar) return;
         sidebar.classList.remove("hidden");
         if (lockHidePriceRow) lockHidePriceRow.classList.remove("hidden");
+        if (lockHideDecideRows) lockHideDecideRows.classList.remove("hidden");
+        if (lockHideLoanStatusRow) lockHideLoanStatusRow.classList.remove("hidden");
+        if (deleteBuildingBtn) deleteBuildingBtn.classList.remove("hidden");
+        if (saveBuildingBtn) saveBuildingBtn.classList.remove("hidden");
     }
 
     function toggleSidebarLock() {
