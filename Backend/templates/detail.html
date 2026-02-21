@@ -1009,18 +1009,18 @@
 
         <!-- 중간 사이드 -->
         <section class="flex-1 flex flex-col gap-1 overflow-y-auto">
-            <div class="section-card h-[350px] flex flex-col -ml-px">
+            <div class="section-card h-[350px] min-h-[300px] shrink-0 flex flex-col -ml-px">
                 <div class="bg-slate-800 text-white text-[13px] px-2 py-1 font-bold text-left">
                     대표 사진 및 도면 (최대 5장)
                 </div>
 
                 <!-- 전체 이미지 영역 -->
-                <div class="flex flex-1 gap-2 p-2 bg-slate-100 w-full">
+                <div class="flex flex-1 gap-2 p-2 bg-slate-100 w-full min-h-[240px]">
                     <!-- 왼쪽 메인 -->
                      
                     <div
                         id="img-main-box" data-box="main"
-                        class="w-[50%] bg-slate-200 border-2 border-dashed border-slate-400
+                        class="w-[50%] min-h-[240px] bg-slate-200 border-2 border-dashed border-slate-400
                                 flex items-center justify-center cursor-pointer hover:bg-slate-300
                                 relative overflow-hidden"
                         onclick="openImageModal('main')">
@@ -1028,7 +1028,7 @@
                     </div>
 
                     <!-- 오른쪽 2x2 -->
-                    <div class="w-[50%] h-full grid grid-cols-2 grid-rows-3 gap-2 min-w-[160px]">
+                    <div class="w-[50%] h-full min-h-[240px] grid grid-cols-2 grid-rows-3 gap-2 min-w-[160px]">
                         <label data-box="sub1"
                             class="min-w-0 bg-slate-200 border-2 border-dashed border-slate-400
                                 flex items-center justify-center cursor-pointer hover:bg-slate-300
