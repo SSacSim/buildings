@@ -653,6 +653,11 @@ function bindCustomerToForm(dataDetail) {
         if (!el) return;
         el.value = value ?? "";
     });
+
+    const desiredPriceEl = document.getElementById("desired_price_manwon");
+    if (desiredPriceEl && desiredPriceEl.value) {
+        desiredPriceEl.value = formatThousandsInputValue(desiredPriceEl.value);
+    }
 }
 
 function bindIntroRows(introList) {
@@ -1136,6 +1141,13 @@ document.addEventListener("DOMContentLoaded", () => {
             e.target.value = formatThousandsInputValue(e.target.value);
         });
     });
+
+    const desiredPriceInput = document.getElementById("desired_price_manwon");
+    if (desiredPriceInput) {
+        desiredPriceInput.addEventListener("input", (e) => {
+            e.target.value = formatThousandsInputValue(e.target.value);
+        });
+    }
 
     renderIntroRows();
     renderOwnedRows();

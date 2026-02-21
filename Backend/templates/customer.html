@@ -88,8 +88,8 @@
                         </div>
 
                         <div class="flex border border-slate-300 items-center h-8">
-                            <div class="w-20 label-cell border-r text-center font-bold"> 최초컨택 </div>
-                            <input id="first_contact" name="first_contact" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                            <div class="w-20 label-cell border-r text-center font-bold"> 이메일 </div>
+                            <input id="email" name="email" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
                         </div>
 
                         <div class="grid grid-cols-2 gap-2 pt-2">
@@ -126,6 +126,19 @@
                                         <option value="X">X(비활성) : 3개월 초과 미접촉, 제외 대상</option>
                                     </select>
                             </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold shrink-0 w-20">유입경로:</span>
+                                    <input id="first_contact" name="first_contact" type="text"
+                                        class="flex-1 border-b border-slate-300 bg-transparent outline-none px-1"
+                                        placeholder="예: 지인 소개, 광고 문의">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="font-bold shrink-0 w-20">매매가:</span>
+                                    <input id="desired_price_manwon" name="desired_price_manwon" type="text"
+                                        class="flex-1 border-b border-slate-300 bg-transparent outline-none px-1"
+                                        placeholder="예: 120,000">
+                                    <span class="text-[12px] text-slate-500 shrink-0">만원</span>
+                                </div>
                                 <div class="flex items-center gap-2">
                                     <span class="font-bold shrink-0 w-20">상권:</span>
                                     <input id="business_area" name="business_area" type="text"

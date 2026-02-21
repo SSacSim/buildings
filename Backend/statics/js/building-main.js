@@ -43,6 +43,54 @@ async function searchCustomer() {
 
         document.getElementById("totalCount").innerText = `전체: ${formatNumberWithComma(data.length)}건`;
 
+        const customerCards = data.map((item) => {
+            const desiredPrice = item.desired_price_manwon
+                ? `${formatNumberWithComma(String(item.desired_price_manwon))}만원`
+                : '-';
+            const customerStateMap = {
+                A: 'A(원활) : 최근 7일 이내 소통, 실행력 높은 매수자',
+                B: 'B(보통) : 반응은 있으나 느림, 조건 제한 많음',
+                C: 'C(어려움) : 응답 지연, 반복 제안에도 무반응',
+                X: 'X(비활성) : 3개월 초과 미접촉, 제외 대상'
+            };
+            const customerStateText = customerStateMap[item.customer_state] || '-';
+
+            return `
+                <div onclick="goToCustomer(${item.customer_number})"
+                     class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer group">
+                    <div class="flex justify-between items-start gap-3 mb-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
+                                CUSTOMER: ${item.customer_number}
+                            </span>
+                            <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                진행상황: ${item.status || '-'}
+                            </span>
+                            <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                                상태: ${customerStateText}
+                            </span>
+                        </div>
+                        <span class="text-slate-300 group-hover:text-emerald-600 text-sm shrink-0">
+                            고객 상세로 이동
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-sm text-slate-600">
+                        <p>회사명: ${item.buyer_name || '-'}</p>
+                        <p>대표자: ${item.ceo_name || '-'}</p>
+                        <p>연락처: ${item.phone || '-'}</p>
+                        <p>이메일: ${item.email || '-'}</p>
+                        <p>유입경로: ${item.first_contact || '-'}</p>
+                        <p>매매가: ${desiredPrice}</p>
+                        <p>상권: ${item.business_area || '-'}</p>
+                        <p>건물: ${item.building_preference || '-'}</p>
+                        <p>주 관심지역: ${item.main_interest_region || '-'}</p>
+                    </div>
+                </div>
+            `;
+        });
+        list.innerHTML = customerCards.join('');
+        return;
+
         data.forEach(item => {
             const card = `
                 <div onclick="goToCustomer(${item.customer_number})"
@@ -56,7 +104,7 @@ async function searchCustomer() {
                         </span>
                     </div>
                     <p class="text-lg font-semibold text-slate-700 mb-2">
-                        고객명: ${item.buyer_name || '-'}
+                        회사명: ${item.buyer_name || '-'}
                     </p>
                     <div class="grid grid-cols-2 gap-2">
                         <p class="text-sm text-slate-500">전화번호: ${item.phone || '-'}</p>

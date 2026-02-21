@@ -78,6 +78,18 @@ def ensure_customer_intro_table(conn, cur):
         ADD COLUMN IF NOT EXISTS owned_properties_json TEXT;
         """
     )
+    cur.execute(
+        """
+        ALTER TABLE customer_info
+        ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE customer_info
+        ADD COLUMN IF NOT EXISTS desired_price_manwon VARCHAR(255);
+        """
+    )
     conn.commit()
 
 
@@ -109,7 +121,7 @@ def get_customer_detail(customer_number: int):
         cur.execute(
             """
             SELECT customer_number, status, buyer_name, company_address, ceo_name,
-                   home_address, phone, first_contact,
+                   home_address, phone, first_contact, email, desired_price_manwon,
                    customer_state, business_area, building_preference,
                    main_interest_region, customer_note, match_conditions_json, owned_properties_json
             FROM customer_info
@@ -168,24 +180,64 @@ def search_customer(
         if keyword:
             cur.execute(
                 """
-                SELECT customer_number, status, buyer_name, company_address, phone
+                SELECT
+                    customer_number,
+                    status,
+                    buyer_name,
+                    ceo_name,
+                    phone,
+                    email,
+                    customer_state,
+                    first_contact,
+                    desired_price_manwon,
+                    business_area,
+                    building_preference,
+                    main_interest_region
                 FROM customer_info
                 WHERE delete_flag = FALSE
                   AND (
                         CAST(customer_number AS TEXT) ILIKE %s
                      OR buyer_name ILIKE %s
+                     OR ceo_name ILIKE %s
                      OR phone ILIKE %s
-                     OR company_address ILIKE %s
-                  )
+                     OR email ILIKE %s
+                     OR first_contact ILIKE %s
+                     OR business_area ILIKE %s
+                     OR building_preference ILIKE %s
+                     OR main_interest_region ILIKE %s
+                   )
                 ORDER BY customer_number DESC
                 LIMIT %s
                 """,
-                (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%", f"%{keyword}%", limit)
+                (
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    f"%{keyword}%",
+                    limit,
+                )
             )
         else:
             cur.execute(
                 """
-                SELECT customer_number, status, buyer_name, company_address, phone
+                SELECT
+                    customer_number,
+                    status,
+                    buyer_name,
+                    ceo_name,
+                    phone,
+                    email,
+                    customer_state,
+                    first_contact,
+                    desired_price_manwon,
+                    business_area,
+                    building_preference,
+                    main_interest_region
                 FROM customer_info
                 WHERE delete_flag = FALSE
                 ORDER BY customer_number DESC
@@ -785,6 +837,8 @@ class CustomerInfo(BaseModel):
     home_address: Optional[str]
     phone: Optional[str]
     first_contact: Optional[str]
+    email: Optional[str]
+    desired_price_manwon: Optional[str]
     customer_state: Optional[str]
     business_area: Optional[str]
     building_preference: Optional[str]
