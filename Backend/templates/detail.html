@@ -263,15 +263,19 @@
                         </div>
                     
                     </div>
-                    <div class="flex border border-slate-400 bg-white">
-                        <div class="px-2 bg-orange-600 text-white px-2 py-1 font-bold italic">매매가</div>
-                        <input id="sale_price" name="sale_price" type="text" class="flex-1 px-2 py-1 text-right outline-none font-black text-blue-700">
-                        <div class="flex items-center bg-slate-50 px-0.5 border-x border-slate-300">
-                            <span class="text-[9px] text-slate-500 leading-tight">만<br>원</span>
+                    <div class="flex border border-slate-400 bg-white h-[54px] items-stretch">
+                        <div class="px-3 bg-orange-600 text-white text-[15px] font-bold italic flex items-center justify-center">
+                            매매가
                         </div>
-                        <div class="bg-yellow-400 px-1 flex items-center gap-1 border-l border-orange-600">
-                            <span class="text-[10px] font-bold">수익률</span>
-                            <input id="yield_rate" name="yield_rate" type="text" class="w-20 bg-transparent text-center font-bold text-red-600 outline-none" readonly value="0">
+                        <input id="sale_price" name="sale_price" type="text"
+                            class="flex-1 min-w-0 px-2 text-right outline-none font-black text-[24px] tracking-tight text-blue-700">
+                        <div class="flex items-center bg-slate-50 px-1 border-x border-slate-300">
+                            <span class="text-[11px] text-slate-500 font-bold leading-none">만원</span>
+                        </div>
+                        <div class="bg-yellow-400 px-2 flex items-center gap-1 border-l border-orange-600">
+                            <span class="text-[15px] font-bold whitespace-nowrap">수익률</span>
+                            <input id="yield_rate" name="yield_rate" type="text"
+                                class="w-20 bg-transparent text-center font-black text-[16px] text-red-600 outline-none" readonly value="0.0">
                         </div>
                     </div>
                 </div>
@@ -765,26 +769,6 @@
 
 
                         <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
-                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
-                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
-                                    층고
-                                </div>
-                                <input id="floor_height" name="floor_height" type="text" placeholder="0"
-                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
-                                <span class="w-6 flex items-center justify-center bg-slate-50 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-100">m</span>
-                            </div>
-
-                            <div class="flex flex-1 items-stretch min-w-0">
-                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
-                                    보 하부
-                                </div>
-                                <input id="beam_clearance_height" name="beam_clearance_height" type="text" placeholder="0"
-                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
-                                <span class="w-6 flex items-center justify-center bg-slate-50 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-100">m</span>
-                            </div>
-                        </div>
-
-                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
                             <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
                                 층
                             </div>
@@ -985,6 +969,28 @@
                             </div>
 
                         </div>
+
+                        <div class="flex border-b border-slate-200 h-[32px] items-stretch w-full">
+                            <div class="flex flex-1 items-stretch border-r border-slate-200 min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    층고
+                                </div>
+                                <input id="floor_height" name="floor_height" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                <span class="w-6 flex items-center justify-center bg-slate-50 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-100">m</span>
+                            </div>
+
+                            <div class="flex flex-1 items-stretch min-w-0">
+                                <div class="w-16 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">
+                                    보 하부
+                                </div>
+                                <input id="beam_clearance_height" name="beam_clearance_height" type="text" placeholder="0"
+                                    class="flex-1 min-w-0 px-2 bg-white font-bold text-right outline-none text-[12px]">
+                                <span class="w-6 flex items-center justify-center bg-slate-50 text-blue-600 font-bold text-[10px] shrink-0 border-l border-slate-100">m</span>
+                            </div>
+                        </div>
+
+                        
                         <div class="flex border-b border-slate-200 bg-white items-stretch">
                             <div class="w-16 bg-slate-50 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
                                 <div class="font-bold text-slate-600 text-[11px] leading-tight">위반</div>
