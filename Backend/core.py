@@ -80,6 +80,8 @@ def get_insight_overview(
     gross_area_max: Optional[int] = Query(None),
     usable_area_min: Optional[int] = Query(None),
     usable_area_max: Optional[int] = Query(None),
+    building_area_min: Optional[int] = Query(None),
+    building_area_max: Optional[int] = Query(None),
     approval_year_min: Optional[int] = Query(None),
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
@@ -249,6 +251,7 @@ def get_insight_overview(
             ("land_area_min", "land_area_max", land_area_min, land_area_max),
             ("gross_area_min", "gross_area_max", gross_area_min, gross_area_max),
             ("usable_area_min", "usable_area_max", usable_area_min, usable_area_max),
+            ("building_area_min", "building_area_max", building_area_min, building_area_max),
         ]
 
         customers = []
@@ -565,6 +568,12 @@ def get_insight_overview(
         if usable_area_max is not None:
             building_sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(usable_area_pyeong, ''), '[^0-9.]', '', 'g'), '')::numeric, 0) <= %s"
             building_params.append(usable_area_max)
+        if building_area_min is not None:
+            building_sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(building_area_pyeong, ''), '[^0-9.]', '', 'g'), '')::numeric, 0) >= %s"
+            building_params.append(building_area_min)
+        if building_area_max is not None:
+            building_sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(building_area_pyeong, ''), '[^0-9.]', '', 'g'), '')::numeric, 0) <= %s"
+            building_params.append(building_area_max)
 
         if approval_year_min is not None:
             building_sql += " AND COALESCE(NULLIF(SUBSTRING(COALESCE(approval_date, '') FROM '([0-9]{4})'), '')::int, 0) >= %s"

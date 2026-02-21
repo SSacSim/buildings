@@ -667,6 +667,8 @@ function collectMatchConditions() {
         gross_area_max: document.getElementById("matchGrossAreaMax")?.value || "",
         usable_area_min: document.getElementById("matchUsableAreaMin")?.value || "",
         usable_area_max: document.getElementById("matchUsableAreaMax")?.value || "",
+        building_area_min: document.getElementById("matchBuildingAreaMin")?.value || "",
+        building_area_max: document.getElementById("matchBuildingAreaMax")?.value || "",
         approval_year_min: document.getElementById("matchApprovalYearMin")?.value || "",
         road_width_min: document.getElementById("matchRoadWidthMin")?.value || "",
         elevator_option: document.getElementById("matchElevatorOption")?.value || "",
@@ -713,6 +715,8 @@ function applyMatchConditions(saved) {
     setInputValue("matchGrossAreaMax", saved.gross_area_max);
     setInputValue("matchUsableAreaMin", saved.usable_area_min);
     setInputValue("matchUsableAreaMax", saved.usable_area_max);
+    setInputValue("matchBuildingAreaMin", saved.building_area_min);
+    setInputValue("matchBuildingAreaMax", saved.building_area_max);
     setInputValue("matchApprovalYearMin", saved.approval_year_min);
     setInputValue("matchRoadWidthMin", saved.road_width_min);
     setInputValue("matchElevatorOption", saved.elevator_option);
@@ -1090,6 +1094,8 @@ async function searchCustomerMatchBuildings(page = 1) {
     const grossAreaMaxInput = document.getElementById("matchGrossAreaMax");
     const usableAreaMinInput = document.getElementById("matchUsableAreaMin");
     const usableAreaMaxInput = document.getElementById("matchUsableAreaMax");
+    const buildingAreaMinInput = document.getElementById("matchBuildingAreaMin");
+    const buildingAreaMaxInput = document.getElementById("matchBuildingAreaMax");
     const approvalYearMinInput = document.getElementById("matchApprovalYearMin");
     const roadWidthMinInput = document.getElementById("matchRoadWidthMin");
     const elevatorOptionInput = document.getElementById("matchElevatorOption");
@@ -1135,6 +1141,8 @@ async function searchCustomerMatchBuildings(page = 1) {
     const grossAreaMaxRaw = (grossAreaMaxInput?.value || "").replace(/[^0-9]/g, "");
     const usableAreaMinRaw = (usableAreaMinInput?.value || "").replace(/[^0-9]/g, "");
     const usableAreaMaxRaw = (usableAreaMaxInput?.value || "").replace(/[^0-9]/g, "");
+    const buildingAreaMinRaw = (buildingAreaMinInput?.value || "").replace(/[^0-9]/g, "");
+    const buildingAreaMaxRaw = (buildingAreaMaxInput?.value || "").replace(/[^0-9]/g, "");
     const approvalYearText = (approvalYearMinInput?.value || "").trim();
     const approvalYearMatch = approvalYearText.match(/(19|20)\d{2}/);
     const roadWidthMinRaw = (roadWidthMinInput?.value || "").replace(/[^0-9.]/g, "");
@@ -1150,6 +1158,8 @@ async function searchCustomerMatchBuildings(page = 1) {
     const grossAreaMax = grossAreaMaxRaw ? Number(grossAreaMaxRaw) : null;
     const usableAreaMin = usableAreaMinRaw ? Number(usableAreaMinRaw) : null;
     const usableAreaMax = usableAreaMaxRaw ? Number(usableAreaMaxRaw) : null;
+    const buildingAreaMin = buildingAreaMinRaw ? Number(buildingAreaMinRaw) : null;
+    const buildingAreaMax = buildingAreaMaxRaw ? Number(buildingAreaMaxRaw) : null;
     const approvalYearMin = approvalYearMatch ? Number(approvalYearMatch[0]) : null;
     const roadWidthMin = roadWidthMinRaw ? Number(roadWidthMinRaw) : null;
     const parkingMin = parkingMinRaw ? Number(parkingMinRaw) : null;
@@ -1182,6 +1192,8 @@ async function searchCustomerMatchBuildings(page = 1) {
         || (grossAreaMax !== null && !Number.isNaN(grossAreaMax))
         || (usableAreaMin !== null && !Number.isNaN(usableAreaMin))
         || (usableAreaMax !== null && !Number.isNaN(usableAreaMax))
+        || (buildingAreaMin !== null && !Number.isNaN(buildingAreaMin))
+        || (buildingAreaMax !== null && !Number.isNaN(buildingAreaMax))
         || (approvalYearMin !== null && !Number.isNaN(approvalYearMin))
         || (roadWidthMin !== null && !Number.isNaN(roadWidthMin))
         || Boolean(elevatorOption)
@@ -1224,6 +1236,8 @@ async function searchCustomerMatchBuildings(page = 1) {
     if (grossAreaMax !== null && !Number.isNaN(grossAreaMax)) params.set("gross_area_max", String(grossAreaMax));
     if (usableAreaMin !== null && !Number.isNaN(usableAreaMin)) params.set("usable_area_min", String(usableAreaMin));
     if (usableAreaMax !== null && !Number.isNaN(usableAreaMax)) params.set("usable_area_max", String(usableAreaMax));
+    if (buildingAreaMin !== null && !Number.isNaN(buildingAreaMin)) params.set("building_area_min", String(buildingAreaMin));
+    if (buildingAreaMax !== null && !Number.isNaN(buildingAreaMax)) params.set("building_area_max", String(buildingAreaMax));
     if (approvalYearMin !== null && !Number.isNaN(approvalYearMin)) params.set("approval_year_min", String(approvalYearMin));
     if (roadWidthMin !== null && !Number.isNaN(roadWidthMin)) params.set("road_width_min", String(roadWidthMin));
     if (elevatorOption) params.set("elevator_option", elevatorOption);
@@ -1392,7 +1406,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword", "matchMinPrice", "matchMaxPrice", "matchStationWalkMin", "matchStationWalkMax", "matchCashHoldManwon", "matchCashHoldPercent", "matchMinYieldInput", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchApprovalYearMin", "matchRoadWidthMin", "matchParkingMin"].forEach((id) => {
+    ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword", "matchMinPrice", "matchMaxPrice", "matchStationWalkMin", "matchStationWalkMax", "matchCashHoldManwon", "matchCashHoldPercent", "matchMinYieldInput", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchBuildingAreaMin", "matchBuildingAreaMax", "matchApprovalYearMin", "matchRoadWidthMin", "matchParkingMin"].forEach((id) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.addEventListener("keydown", (e) => {
@@ -1402,7 +1416,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    ["matchMinPrice", "matchMaxPrice", "matchCashHoldManwon", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchParkingMin"].forEach((id) => {
+    ["matchMinPrice", "matchMaxPrice", "matchCashHoldManwon", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchBuildingAreaMin", "matchBuildingAreaMax", "matchParkingMin"].forEach((id) => {
         const input = document.getElementById(id);
         if (!input) return;
         input.addEventListener("input", (e) => {

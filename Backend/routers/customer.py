@@ -571,6 +571,8 @@ def customer_match_search(
     gross_area_max: Optional[int] = Query(None),
     usable_area_min: Optional[int] = Query(None),
     usable_area_max: Optional[int] = Query(None),
+    building_area_min: Optional[int] = Query(None),
+    building_area_max: Optional[int] = Query(None),
     approval_year_min: Optional[int] = Query(None),
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
@@ -818,6 +820,12 @@ def customer_match_search(
         if usable_area_max is not None:
             sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(usable_area_pyeong, ''), '[^0-9.]', '', 'g'), '')::numeric, 0) <= %s"
             params.append(usable_area_max)
+        if building_area_min is not None:
+            sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(building_area_pyeong, ''), '[^0-9.]', '', 'g'), '')::numeric, 0) >= %s"
+            params.append(building_area_min)
+        if building_area_max is not None:
+            sql += " AND COALESCE(NULLIF(regexp_replace(COALESCE(building_area_pyeong, ''), '[^0-9.]', '', 'g'), '')::numeric, 0) <= %s"
+            params.append(building_area_max)
 
         if approval_year_min is not None:
             sql += " AND COALESCE(NULLIF(SUBSTRING(COALESCE(approval_date, '') FROM '([0-9]{4})'), '')::int, 0) >= %s"
@@ -961,6 +969,7 @@ def customer_match_search(
         has_land_area = (land_area_min is not None) or (land_area_max is not None)
         has_gross_area = (gross_area_min is not None) or (gross_area_max is not None)
         has_usable_area = (usable_area_min is not None) or (usable_area_max is not None)
+        has_building_area = (building_area_min is not None) or (building_area_max is not None)
         has_approval_year = approval_year_min is not None
         has_road_width = road_width_min is not None
         has_elevator_option = normalized_elevator_option in ("있음", "없음")
@@ -991,6 +1000,7 @@ def customer_match_search(
             or has_land_area
             or has_gross_area
             or has_usable_area
+            or has_building_area
             or has_approval_year
             or has_road_width
             or has_elevator_option

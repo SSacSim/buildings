@@ -99,19 +99,14 @@
                         <span class="font-bold min-w-[40px] ml-2">상권:</span>
                         <input id="matchBusinessAreaInput" type="text" class="border-b border-slate-300 outline-none w-36 px-1" placeholder="[ 입지 키워드 ]">
                     </div>
-                    <div class="flex items-center gap-2">
-                        <span class="font-bold w-16">수익률:</span>
-                        <span>≥</span>
-                        <input id="matchMinYieldInput" type="text" class="border-b w-10 text-center outline-none">
-                        <span>%</span>
-                    </div>
+                    <div></div>
                 </div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     <div class="flex items-center gap-2">
                         <span class="font-bold min-w-[70px]">주변역:</span>
                         <input id="matchStationKeyword" type="text" class="border-b border-slate-300 outline-none w-28 px-1" placeholder="[ 역명 ]">
-                        <span class="font-bold min-w-[40px] ml-2">보도:</span>
+                        <span class="font-bold min-w-[40px] ml-2">도보:</span>
                         <input id="matchStationWalkMin" type="text" class="border-b w-10 text-center outline-none" placeholder="1">
                         <span>~</span>
                         <input id="matchStationWalkMax" type="text" class="border-b w-10 text-center outline-none" placeholder="15">
@@ -123,6 +118,7 @@
                         <span class="text-[11px] text-slate-500">만원</span>
                         <input id="matchCashHoldPercent" type="text" class="border-b w-12 text-center outline-none ml-2" placeholder="60">
                         <span>%</span>
+                        <span class="text-[10px] text-slate-400">매매가 ≤ 현금보유액 / (1 - %)</span>
                     </div>
                 </div>
 
@@ -135,15 +131,20 @@
                         <span class="text-[11px] text-slate-500">만원</span>
                     </div>
                     <div class="flex items-center gap-2">
+                        <span class="font-bold w-16">수익률:</span>
+                        <input id="matchMinYieldInput" type="text" class="border-b w-10 text-center outline-none" placeholder="0">
+                        <span>%</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
                         <span class="font-bold w-24">토지 평단가:</span>
                         <input id="matchLandPyeongMin" type="text" class="border-b w-16 text-center" placeholder="1,000">
                         <span>~</span>
                         <input id="matchLandPyeongMax" type="text" class="border-b w-16 text-center" placeholder="10,000">
                         <span class="text-[11px] text-slate-500">만원</span>
                     </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     <div class="flex items-center gap-2">
                         <span class="font-bold w-24">연면적 평단가:</span>
                         <input id="matchGrossPyeongMin" type="text" class="border-b w-16 text-center" placeholder="1,000">
@@ -151,6 +152,9 @@
                         <input id="matchGrossPyeongMax" type="text" class="border-b w-16 text-center" placeholder="10,000">
                         <span class="text-[11px] text-slate-500">만원</span>
                     </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     <div class="flex items-center gap-2">
                         <span class="font-bold w-24">토지면적:</span>
                         <input id="matchLandAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
@@ -158,9 +162,6 @@
                         <input id="matchLandAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
                         <span class="text-[11px] text-slate-500">평</span>
                     </div>
-                </div>
-
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     <div class="flex items-center gap-2">
                         <span class="font-bold w-24">연면적:</span>
                         <input id="matchGrossAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
@@ -168,6 +169,9 @@
                         <input id="matchGrossAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
                         <span class="text-[11px] text-slate-500">평</span>
                     </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     <div class="flex items-center gap-2">
                         <span class="font-bold w-24">사용가능 면적:</span>
                         <input id="matchUsableAreaMin" type="text" class="border-b w-14 text-center" placeholder="100">
@@ -175,9 +179,16 @@
                         <input id="matchUsableAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
                         <span class="text-[11px] text-slate-500">평</span>
                     </div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold w-24">건축면적:</span>
+                        <input id="matchBuildingAreaMin" type="text" class="border-b w-14 text-center" placeholder="10">
+                        <span>~</span>
+                        <input id="matchBuildingAreaMax" type="text" class="border-b w-14 text-center" placeholder="500">
+                        <span class="text-[11px] text-slate-500">평</span>
+                    </div>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     <div class="flex items-center gap-2">
                         <span class="font-bold w-24">사용승인:</span>
                         <input id="matchApprovalYearMin" type="text" class="border-b w-16 text-center" placeholder="2000">
@@ -367,6 +378,8 @@
                 gross_area_max: "matchGrossAreaMax",
                 usable_area_min: "matchUsableAreaMin",
                 usable_area_max: "matchUsableAreaMax",
+                building_area_min: "matchBuildingAreaMin",
+                building_area_max: "matchBuildingAreaMax",
                 approval_year_min: "matchApprovalYearMin",
                 road_width_min: "matchRoadWidthMin",
                 parking_min: "matchParkingMin",
@@ -535,7 +548,7 @@
             "matchMinPrice", "matchMaxPrice", "matchCashHoldManwon", "matchLandPyeongMin", "matchLandPyeongMax",
             "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax",
             "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax",
-            "matchApprovalYearMin", "matchParkingMin"
+            "matchBuildingAreaMin", "matchBuildingAreaMax", "matchApprovalYearMin", "matchParkingMin"
         ].forEach((id) => {
             const input = document.getElementById(id);
             if (!input) return;
