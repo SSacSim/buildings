@@ -206,7 +206,7 @@ def search_customer(
                      OR building_preference ILIKE %s
                      OR main_interest_region ILIKE %s
                    )
-                ORDER BY customer_number DESC
+                ORDER BY update_time DESC, customer_number DESC
                 LIMIT %s
                 """,
                 (
@@ -240,7 +240,7 @@ def search_customer(
                     main_interest_region
                 FROM customer_info
                 WHERE delete_flag = FALSE
-                ORDER BY customer_number DESC
+                ORDER BY update_time DESC, customer_number DESC
                 LIMIT %s
                 """,
                 (limit,)
