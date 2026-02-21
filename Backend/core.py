@@ -317,12 +317,6 @@ def get_insight_overview(
                 if c_cash_max is None or c_cash_max < q_cash_max:
                     continue
 
-            if building_status and building_status != "전체":
-                cond_building_status = str(cond.get("building_status") or "").strip()
-                # insight에서 특정 상태를 선택해도 customer 저장조건이 "전체"면 매칭 포함
-                if cond_building_status not in (building_status, "전체"):
-                    continue
-
             def _cond_equals(key, query_value):
                 if not query_value:
                     return True
