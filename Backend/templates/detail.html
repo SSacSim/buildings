@@ -26,12 +26,12 @@
         <div class="flex flex-wrap items-center gap-2 min-w-0">
             <div class="flex items-center">
                 <span class="text-[10px] text-slate-400 font-bold mr-1 uppercase">고유 건물번호</span>
-                <input id="bd_number" name="bd_number" form="buildingForm" autocomplete="off" readonly class="text-sm text-white px-2 py-0.5 rounded font-mono font-bold min-w-[60px] text-center"></input>
+                <input id="bd_number" name="bd_number" form="buildingForm" autocomplete="off" readonly class="text-sm text-white px-2 py-0.5 rounded font-mono font-bold min-w-[40px] w-[66px] text-center"></input>
             </div>
 
             <div class="flex items-center ml-2">
                 <span class="text-[10px] text-slate-400 font-bold mr-1 uppercase">상태</span>
-                <select id="status" name="status" form="buildingForm" class="bg-blue-50 text-blue-700 font-bold rounded-2xl px-5 py-3 border-none appearance-none w-36 text-center">
+                <select id="status" name="status" form="buildingForm" class="bg-blue-50 text-blue-700 font-bold rounded-2xl px-5 py-3 border-none appearance-none w-20 text-center">
                                 <option value="준비">준비</option>
                                 <option value="완료">완료</option>
                                 <option value="매각">매각</option>
@@ -73,7 +73,7 @@
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2">
             
-            <button onclick="handleCancel()" class="px-3 md:px-6 py-2 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all whitespace-nowrap">취소</button>
+            <button onclick="handleCancel()" class="px-3 py-2 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all whitespace-nowrap">취소</button>
             
             <!-- <button id="lockBtn"
                 onclick="toggleSidebarLock()"
@@ -83,32 +83,32 @@
             </button> -->
             
             <button onclick="generatePPT(event)" 
-                class="flex items-center gap-1 bg-orange-500 text-white px-3 md:px-6 py-2 rounded-xl font-bold hover:bg-orange-600 shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm md:text-base">
+                class="inline-flex items-center gap-1 bg-orange-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-orange-600 shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
-                PPT 생성
+                PPT
             </button>
 
             <button onclick="openMap('naver')" 
-                class="flex items-center gap-1 bg-[#03C75A] text-white px-3 md:px-6 py-2 rounded-xl font-bold hover:bg-[#02b351] shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm md:text-base">
-                <span class="text-sm">N</span> 네이버 지도
+                class="inline-flex items-center gap-1 bg-[#03C75A] text-white px-4 py-2 rounded-xl font-bold hover:bg-[#02b351] shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm">
+                <span class="text-sm">N</span> 지도
             </button>
             
             <button onclick="openMap('kakao')" 
-                class="flex items-center gap-1 bg-[#FEE500] text-[#191919] px-3 md:px-6 py-2 rounded-xl font-bold hover:bg-[#FADA0A] shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm md:text-base">
+                class="inline-flex items-center gap-1 bg-[#FEE500] text-[#191919] px-4 py-2 rounded-xl font-bold hover:bg-[#FADA0A] shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm">
                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                     <path d="M12 3C6.477 3 2 6.485 2 10.785c0 2.746 1.81 5.155 4.54 6.528l-1.14 4.19c-.09.33.28.61.58.42l4.83-3.076c.39.038.78.058 1.19.058 5.523 0 10-3.485 10-7.785S17.523 3 12 3z"/>
                 </svg>
-                카카오 지도
+                지도
             </button>
             
             <button id="deleteBuildingBtn" onclick="openDeleteModal()"
-                class="bg-red-500 text-white px-4 md:px-10 py-2 rounded-xl font-bold hover:bg-red-600 shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm md:text-base">
+                class="inline-flex items-center justify-center bg-red-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-red-600 shadow-sm active:scale-95 transition-all whitespace-nowrap text-sm">
                 삭제
             </button>
             
-            <button id="saveBuildingBtn" onclick="saveBuildingDetail()" class="bg-blue-600 text-white px-4 md:px-10 py-2 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all whitespace-nowrap text-sm md:text-base">정보 저장하기</button>
+            <button id="saveBuildingBtn" onclick="saveBuildingDetail()" class="inline-flex items-center justify-center bg-blue-600 text-white px-4 py-2 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all whitespace-nowrap text-sm">저장</button>
         </div>
     </header>
 
