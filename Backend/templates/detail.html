@@ -1797,9 +1797,10 @@
             'is_development', 
             'is_stable_holding'
         ];
-        // 체크박스 필드들을 True/False로 덮어쓰기
+        // 체크박스는 header 영역(폼 바깥)에 있으므로 FormData.has()가 아니라 DOM checked 값을 사용
         checkboxKeys.forEach(key => {
-            updatedData[key] = formData.has(key);
+            const checkbox = document.getElementById(key);
+            updatedData[key] = Boolean(checkbox && checkbox.checked);
         });
 
         Object.keys(updatedData).forEach(key => {

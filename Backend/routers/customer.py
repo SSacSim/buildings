@@ -309,6 +309,9 @@ def customer_match_search(
         sql = """
             SELECT
                 bi.bd_number, bi.bd_name, bi.address, bi.sale_price, bi.yield_rate,
+                bm.status,
+                bi.location_decide, bi.price_decide, bi.yield_decide, bi.vacancy_decide, bi.limit_decide, bi.loan_decide,
+                bi.land_area_pyeong, bi.gross_area_pyeong, bi.zoning_type, bi.approval_date, bi.elevator, bi.parking_capacity,
                 bi.is_new_site, bi.is_remodeling, bi.is_office_building, bi.is_investment, bi.is_development, bi.is_stable_holding
             FROM building_info bi
             LEFT JOIN building_memo bm

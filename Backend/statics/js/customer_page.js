@@ -1,4 +1,4 @@
-﻿const INTRO_STATUS_OPTIONS = ["준비", "소개", "미팅", "계약협의", "완료", "보류"];
+const INTRO_STATUS_OPTIONS = ["준비", "소개", "미팅", "계약협의", "완료", "보류"];
 
 let introRows = [];
 let ownedRows = [];
@@ -911,7 +911,8 @@ async function searchCustomerMatchBuildings(page = 1) {
     const grossAreaMaxRaw = (grossAreaMaxInput?.value || "").replace(/[^0-9]/g, "");
     const usableAreaMinRaw = (usableAreaMinInput?.value || "").replace(/[^0-9]/g, "");
     const usableAreaMaxRaw = (usableAreaMaxInput?.value || "").replace(/[^0-9]/g, "");
-    const approvalYearMinRaw = (approvalYearMinInput?.value || "").replace(/[^0-9]/g, "");
+    const approvalYearText = (approvalYearMinInput?.value || "").trim();
+    const approvalYearMatch = approvalYearText.match(/(19|20)\d{2}/);
     const roadWidthMinRaw = (roadWidthMinInput?.value || "").replace(/[^0-9.]/g, "");
     const parkingMinRaw = (parkingMinInput?.value || "").replace(/[^0-9]/g, "");
     const elevatorOption = (elevatorOptionInput?.value || "").trim();
@@ -925,7 +926,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     const grossAreaMax = grossAreaMaxRaw ? Number(grossAreaMaxRaw) : null;
     const usableAreaMin = usableAreaMinRaw ? Number(usableAreaMinRaw) : null;
     const usableAreaMax = usableAreaMaxRaw ? Number(usableAreaMaxRaw) : null;
-    const approvalYearMin = approvalYearMinRaw ? Number(approvalYearMinRaw) : null;
+    const approvalYearMin = approvalYearMatch ? Number(approvalYearMatch[0]) : null;
     const roadWidthMin = roadWidthMinRaw ? Number(roadWidthMinRaw) : null;
     const parkingMin = parkingMinRaw ? Number(parkingMinRaw) : null;
     const buildingStatus = (buildingStatusInput?.value || "전체").trim();
@@ -972,7 +973,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         || checkedUsageCategories.length > 0;
 
     if (!hasAnyCondition) {
-        tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">최소 1개 이상의 조건을 선택/입력해 주세요.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-slate-400">최소 1개 이상의 조건을 선택/입력해 주세요.</td></tr>';
         setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
         return;
@@ -1016,7 +1017,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     params.set("page", String(customerMatchCurrentPage));
     params.set("page_size", String(CUSTOMER_MATCH_PAGE_SIZE));
 
-    tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">검색 중...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-slate-400">검색 중...</td></tr>';
 
     try {
         const res = await fetch(`/api/customer/match-search?${params.toString()}`);
@@ -1028,7 +1029,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         const currentPage = Array.isArray(payload) ? customerMatchCurrentPage : Number(payload.page || customerMatchCurrentPage);
 
         if (!Array.isArray(items) || items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">조건에 맞는 매물이 없습니다.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-slate-400">조건에 맞는 매물이 없습니다.</td></tr>';
             setCustomerMatchCount(totalCount || 0);
             renderCustomerMatchPagination(0, 1);
             return;
@@ -1036,18 +1037,35 @@ async function searchCustomerMatchBuildings(page = 1) {
 
         tbody.innerHTML = items.map(item => `
             <tr class="hover:bg-blue-50 cursor-pointer" onclick="openBuildingDetail(${item.bd_number})">
-                <td class="py-2 border-r font-bold text-blue-700">${item.bd_name || "-"}</td>
+                <td class="py-2 border-r font-bold text-blue-700">${item.bd_number || "-"}</td>
+                <td class="border-r">${
+                    [
+                        item.location_decide,
+                        item.price_decide,
+                        item.yield_decide,
+                        item.vacancy_decide,
+                        item.limit_decide,
+                        item.loan_decide
+                    ].map(v => (v === "선택" || !v ? "N" : v)).join("")
+                }</td>
                 <td class="border-r">${item.address || "-"}</td>
+                <td class="border-r font-semibold text-slate-700">${item.bd_name || "-"}</td>
                 <td class="border-r">${item.sale_price || "-"}</td>
+                <td class="border-r">${item.status || "-"}</td>
                 <td class="border-r">${item.yield_rate || "-"}</td>
-                <td class="text-orange-500 font-semibold">${item.match_score || 0}점</td>
+                <td class="border-r">${item.land_area_pyeong || "-"}</td>
+                <td class="border-r">${item.gross_area_pyeong || "-"}</td>
+                <td class="border-r">${item.zoning_type || "-"}</td>
+                <td class="border-r">${item.approval_date || "-"}</td>
+                <td class="border-r">${item.elevator || "-"}</td>
+                <td>${item.parking_capacity || "-"}</td>
             </tr>
         `).join("");
         setCustomerMatchCount(totalCount || items.length);
         renderCustomerMatchPagination(totalPages, currentPage);
     } catch (err) {
         console.error(err);
-        tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-red-400">검색 중 오류가 발생했습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-red-400">검색 중 오류가 발생했습니다.</td></tr>';
         setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
     }
@@ -1111,7 +1129,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    ["matchMinPrice", "matchMaxPrice", "matchCashHoldManwon", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchApprovalYearMin", "matchParkingMin"].forEach((id) => {
+    ["matchMinPrice", "matchMaxPrice", "matchCashHoldManwon", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchParkingMin"].forEach((id) => {
         const input = document.getElementById(id);
         if (!input) return;
         input.addEventListener("input", (e) => {
