@@ -1147,7 +1147,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         || checkedUsageCategories.length > 0;
 
     if (!hasAnyCondition) {
-        tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-slate-400">최소 1개 이상의 조건을 선택/입력해 주세요.</td></tr>';
+        tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">최소 1개 이상 조건을 선택/입력해 주세요.</div>';
         setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
         return;
@@ -1191,7 +1191,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     params.set("page", String(customerMatchCurrentPage));
     params.set("page_size", String(CUSTOMER_MATCH_PAGE_SIZE));
 
-    tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-slate-400">검색 중...</td></tr>';
+    tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">검색 중...</div>';
 
     try {
         const res = await fetch(`/api/customer/match-search?${params.toString()}`);
@@ -1203,43 +1203,48 @@ async function searchCustomerMatchBuildings(page = 1) {
         const currentPage = Array.isArray(payload) ? customerMatchCurrentPage : Number(payload.page || customerMatchCurrentPage);
 
         if (!Array.isArray(items) || items.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-slate-400">조건에 맞는 매물이 없습니다.</td></tr>';
+            tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">조건에 맞는 매물이 없습니다.</div>';
             setCustomerMatchCount(totalCount || 0);
             renderCustomerMatchPagination(0, 1);
             return;
         }
 
         tbody.innerHTML = items.map(item => `
-            <tr class="hover:bg-blue-50 cursor-pointer" onclick="openBuildingDetail(${item.bd_number})">
-                <td class="py-2 border-r font-bold text-blue-700">${item.bd_number || "-"}</td>
-                <td class="border-r">${
-                    [
-                        item.location_decide,
-                        item.price_decide,
-                        item.yield_decide,
-                        item.vacancy_decide,
-                        item.limit_decide,
-                        item.loan_decide
-                    ].map(v => (v === "선택" || !v ? "N" : v)).join("")
-                }</td>
-                <td class="border-r">${item.address || "-"}</td>
-                <td class="border-r font-semibold text-slate-700">${item.bd_name || "-"}</td>
-                <td class="border-r">${item.sale_price || "-"}</td>
-                <td class="border-r">${item.status || "-"}</td>
-                <td class="border-r">${item.yield_rate || "-"}</td>
-                <td class="border-r">${item.land_area_pyeong || "-"}</td>
-                <td class="border-r">${item.gross_area_pyeong || "-"}</td>
-                <td class="border-r">${item.zoning_type || "-"}</td>
-                <td class="border-r">${item.approval_date || "-"}</td>
-                <td class="border-r">${item.elevator || "-"}</td>
-                <td>${item.parking_capacity || "-"}</td>
-            </tr>
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 cursor-pointer hover:border-blue-300" onclick="openBuildingDetail(${item.bd_number})">
+                <div class="flex items-start justify-between gap-3 mb-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded">ID: ${item.bd_number || "-"}</span>
+                        <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">FLAG: ${[
+                            item.location_decide,
+                            item.price_decide,
+                            item.yield_decide,
+                            item.vacancy_decide,
+                            item.limit_decide,
+                            item.loan_decide
+                        ].map(v => (v === "\uC120\uD0DD" || !v ? "N" : v)).join("")}</span>
+                    </div>
+                    <span class="text-sm text-slate-400">\uC0C8 \uCC3D\uC5D0\uC11C \uC0C1\uC138\uC815\uBCF4 \u2197</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-1 text-[13px] text-slate-700">
+                    <p>\uC8FC\uC18C: ${item.address || "-"}</p>
+                    <p>\uAC74\uBB3C\uBA85: ${item.bd_name || "-"}</p>
+                    <p>\uB9E4\uB9E4\uAC00: ${item.sale_price || "-"}</p>
+                    <p>\uC0C1\uD0DC: ${item.status || "-"}</p>
+                    <p>\uC218\uC775\uB960: ${item.yield_rate || "-"}</p>
+                    <p>\uB300\uC9C0 \uD3C9: ${item.land_area_pyeong || "-"}</p>
+                    <p>\uC5F0\uBA74\uC801 \uD3C9: ${item.gross_area_pyeong || "-"}</p>
+                    <p>\uC6A9\uB3C4\uC9C0\uC5ED(\uD1A0\uC9C0): ${item.zoning_type || "-"}</p>
+                    <p>\uC2B9\uC778\uB0A0\uC9DC: ${item.approval_date || "-"}</p>
+                    <p>\uC2B9\uAC15\uAE30: ${item.elevator || "-"}</p>
+                    <p>\uC8FC\uCC28\uB300\uC218: ${item.parking_capacity || "-"}</p>
+                </div>
+            </div>
         `).join("");
         setCustomerMatchCount(totalCount || items.length);
         renderCustomerMatchPagination(totalPages, currentPage);
     } catch (err) {
         console.error(err);
-        tbody.innerHTML = '<tr><td colspan="13" class="py-6 text-red-400">검색 중 오류가 발생했습니다.</td></tr>';
+        tbody.innerHTML = '<div class="py-6 text-red-400 text-center">검색 중 오류가 발생했습니다.</div>';
         setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
     }

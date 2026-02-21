@@ -411,31 +411,8 @@
                     <span class="text-[11px] text-blue-200 underline cursor-pointer">[매칭결과 자료 다운로드]</span>
                 </div>
                 
-                <div class="flex-1 overflow-y-auto">
-                    <table class="w-full text-[13px] border-collapse">
-                        <thead class="bg-slate-100 border-b border-slate-300 sticky top-0 font-bold text-slate-600">
-                            <tr>
-                                <th class="py-2 border-r">ID</th>
-                                <th class="border-r">FLAG</th>
-                                <th class="border-r">주소</th>
-                                <th class="border-r">건물명</th>
-                                <th class="border-r">매매가</th>
-                                <th class="border-r">상태</th>
-                                <th class="border-r">수익률</th>
-                                <th class="border-r">대지 평</th>
-                                <th class="border-r">연면적 평</th>
-                                <th class="border-r">용도지역</th>
-                                <th class="border-r">승인날짜</th>
-                                <th class="border-r">승강기</th>
-                                <th>주차대수</th>
-                            </tr>
-                        </thead>
-                        <tbody id="customerMatchResultBody" class="text-center divide-y divide-slate-100">
-                            <tr>
-                                <td colspan="13" class="py-6 text-slate-400">조건을 입력하고 매칭 검색 버튼을 눌러주세요.</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div id="customerMatchResultBody" class="flex-1 overflow-y-auto p-3 space-y-3">
+                    <div class="py-6 text-slate-400 text-center">조건을 입력하고 매칭 검색 버튼을 눌러주세요.</div>
                 </div>
                 <div id="customerMatchPagination" class="px-3 py-2 border-t border-slate-200 flex items-center justify-center gap-1 flex-wrap bg-white"></div>
             </div>

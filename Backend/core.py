@@ -115,12 +115,17 @@ def get_insight_overview(
         customer_sql = """
             SELECT
                 customer_number,
+                status,
+                customer_state,
                 buyer_name,
+                ceo_name,
                 phone,
+                email,
+                first_contact,
+                desired_price_manwon,
                 company_address,
                 business_area,
                 building_preference,
-                customer_state,
                 main_interest_region,
                 customer_note,
                 match_conditions_json
@@ -142,20 +147,23 @@ def get_insight_overview(
                         OR COALESCE(home_address, '') ILIKE %s
                         OR COALESCE(main_interest_region, '') ILIKE %s
                         OR COALESCE(buyer_name, '') ILIKE %s
+                        OR COALESCE(match_conditions_json, '') ILIKE %s
                     )
                     """
                 )
-                customer_params.extend([f"%{term}%"] * 4)
+                customer_params.extend([f"%{term}%"] * 5)
             customer_sql += " AND (" + " OR ".join(address_ors) + ")"
 
         if site_location_terms:
             site_ors = []
             for term in site_location_terms:
-                site_ors.append("COALESCE(business_area, '') ILIKE %s")
-                customer_params.append(f"%{term}%")
+                site_ors.append(
+                    "(COALESCE(business_area, '') ILIKE %s OR COALESCE(match_conditions_json, '') ILIKE %s)"
+                )
+                customer_params.extend([f"%{term}%", f"%{term}%"])
             customer_sql += " AND (" + " OR ".join(site_ors) + ")"
 
-        customer_sql += " ORDER BY customer_number DESC"
+        customer_sql += " ORDER BY update_time DESC, customer_number DESC"
 
         cur.execute(customer_sql, tuple(customer_params))
         customer_rows = cur.fetchall()
@@ -247,6 +255,14 @@ def get_insight_overview(
         for row in customers_raw:
             cond = parse_json(row.get("match_conditions_json"))
 
+            cond_address = str(cond.get("address") or "").strip().lower()
+            if address_terms and not any(term.lower() in cond_address for term in address_terms):
+                continue
+
+            cond_business_area = str(cond.get("business_area") or "").strip().lower()
+            if site_location_terms and not any(term.lower() in cond_business_area for term in site_location_terms):
+                continue
+
             cond_types = cond.get("types") if isinstance(cond.get("types"), list) else []
             cond_zoning = cond.get("zoning_categories") if isinstance(cond.get("zoning_categories"), list) else []
             cond_usage = cond.get("usage_categories") if isinstance(cond.get("usage_categories"), list) else []
@@ -293,6 +309,37 @@ def get_insight_overview(
                 if c_cash_max is None or c_cash_max < q_cash_max:
                     continue
 
+            if building_status and building_status != "전체":
+                cond_building_status = str(cond.get("building_status") or "").strip()
+                # insight에서 특정 상태를 선택해도 customer 저장조건이 "전체"면 매칭 포함
+                if cond_building_status not in (building_status, "전체"):
+                    continue
+
+            def _cond_equals(key, query_value):
+                if not query_value:
+                    return True
+                return str(cond.get(key) or "").strip().upper() == str(query_value).strip().upper()
+
+            if not _cond_equals("location_decide", location_decide):
+                continue
+            if not _cond_equals("price_decide", price_decide):
+                continue
+            if not _cond_equals("yield_decide", yield_decide):
+                continue
+            if not _cond_equals("vacancy_decide", vacancy_decide):
+                continue
+            if not _cond_equals("limit_decide", limit_decide):
+                continue
+            if not _cond_equals("loan_decide", loan_decide):
+                continue
+
+            if elevator_option:
+                normalized_query_elevator = "HAS" if elevator_option in ("HAS", "있음") else ("NONE" if elevator_option in ("NONE", "없음") else "")
+                cond_elevator_raw = str(cond.get("elevator_option") or "").strip()
+                normalized_cond_elevator = "HAS" if cond_elevator_raw in ("HAS", "있음") else ("NONE" if cond_elevator_raw in ("NONE", "없음") else "")
+                if normalized_query_elevator and normalized_cond_elevator != normalized_query_elevator:
+                    continue
+
             row.pop("match_conditions_json", None)
             customers.append(row)
 
@@ -301,12 +348,21 @@ def get_insight_overview(
                 bi.bd_number,
                 bi.bd_name,
                 bi.address,
-                bi.site_location,
                 bi.sale_price,
                 bi.yield_rate,
-                bi.price_per_pyeong,
+                bm.status,
+                bi.location_decide,
+                bi.price_decide,
+                bi.yield_decide,
+                bi.vacancy_decide,
+                bi.limit_decide,
+                bi.loan_decide,
+                bi.land_area_pyeong,
                 bi.gross_area_pyeong,
-                bi.usable_area_pyeong
+                bi.zoning_type,
+                bi.approval_date,
+                bi.elevator,
+                bi.parking_capacity
             FROM building_info bi
             LEFT JOIN building_memo bm
               ON bi.bd_number = bm.bd_number
@@ -631,7 +687,7 @@ def get_insight_overview(
         if type_columns:
             building_sql += " AND (" + " OR ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        building_sql += " ORDER BY bi.bd_number DESC"
+        building_sql += " ORDER BY bi.update_time DESC, bi.bd_number DESC"
 
         cur.execute(building_sql, tuple(building_params))
         building_rows = cur.fetchall()

@@ -186,7 +186,7 @@ async function fetchBuildings(page , category) {
                         <p class="text-sm text-slate-500">상태: ${item.status || '준비'}</p>
                         <p class="text-sm text-slate-500">수익률: ${item.yield_rate || '0'}</p>
                         <p class="text-sm text-slate-500">대지 평: ${item.land_area_pyeong || '0'}평</p>
-                        <p class="text-sm text-slate-500">연면적 평: ${item.land_area_sqm || '0'}㎡</p>
+                        <p class="text-sm text-slate-500">연면적 평: ${item.land_area_sqm || '0'}평</p>
                         <p class="text-sm text-slate-500">용도지역(토지): ${item.zoning_type || '-'}</p>
                         <p class="text-sm text-slate-500">승인날짜: ${item.approval_date || '-'}</p>
                         <p class="text-sm text-slate-500">승강기: ${item.elevator || '-'}</p>

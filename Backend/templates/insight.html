@@ -48,6 +48,7 @@
                         <option value="준비">준비</option>
                         <option value="완료">완료</option>
                         <option value="매각">매각</option>
+                        <option value="보류">보류</option>
                     </select>
                 </div>
 
@@ -211,18 +212,7 @@
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <div class="px-4 py-2 border-b border-slate-200 bg-slate-100 font-bold text-slate-700">고객명 섹션 (<span id="customerCount">0</span>)</div>
                 <div class="overflow-auto max-h-[70vh]">
-                    <table class="w-full text-sm">
-                        <thead class="sticky top-0 bg-slate-50 text-slate-700">
-                            <tr>
-                                <th class="px-3 py-2 text-left border-b">고객번호</th>
-                                <th class="px-3 py-2 text-left border-b">고객명</th>
-                                <th class="px-3 py-2 text-left border-b">연락처</th>
-                                <th class="px-3 py-2 text-left border-b">상권</th>
-                                <th class="px-3 py-2 text-left border-b">건물선호</th>
-                            </tr>
-                        </thead>
-                        <tbody id="customerBody" class="divide-y divide-slate-100"></tbody>
-                    </table>
+                    <div id="customerBody" class="overflow-auto max-h-[70vh] p-3 space-y-3"></div>
                 </div>
                 <div id="insightCustomerPagination" class="px-3 py-2 border-t border-slate-200 flex items-center justify-center gap-1 flex-wrap bg-white"></div>
             </div>
@@ -230,18 +220,7 @@
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <div class="px-4 py-2 border-b border-slate-200 bg-slate-100 font-bold text-slate-700">빌딩 섹션 (<span id="buildingCount">0</span>)</div>
                 <div class="overflow-auto max-h-[70vh]">
-                    <table class="w-full text-sm">
-                        <thead class="sticky top-0 bg-slate-50 text-slate-700">
-                            <tr>
-                                <th class="px-3 py-2 text-left border-b">건물번호</th>
-                                <th class="px-3 py-2 text-left border-b">건물명</th>
-                                <th class="px-3 py-2 text-left border-b">주소</th>
-                                <th class="px-3 py-2 text-left border-b">상권(입지)</th>
-                                <th class="px-3 py-2 text-left border-b">매매가</th>
-                            </tr>
-                        </thead>
-                        <tbody id="buildingBody" class="divide-y divide-slate-100"></tbody>
-                    </table>
+                    <div id="buildingBody" class="overflow-auto max-h-[70vh] p-3 space-y-3"></div>
                 </div>
                 <div id="insightBuildingPagination" class="px-3 py-2 border-t border-slate-200 flex items-center justify-center gap-1 flex-wrap bg-white"></div>
             </div>
@@ -266,14 +245,29 @@
                 .replaceAll("'", "&#39;");
         }
 
-        function setEmptyRow(tbody, colspan, text) {
-            tbody.innerHTML = `<tr><td colspan="${colspan}" class="px-3 py-6 text-center text-slate-400">${text}</td></tr>`;
+        function setEmptyRow(container, colspan, text) {
+            const tag = (container?.tagName || "").toLowerCase();
+            if (tag === "tbody") {
+                container.innerHTML = `<tr><td colspan="${colspan}" class="px-3 py-6 text-center text-slate-400">${text}</td></tr>`;
+                return;
+            }
+            container.innerHTML = `<div class="px-3 py-6 text-center text-slate-400">${text}</div>`;
         }
 
         function formatThousandsInputValue(raw) {
             const digits = String(raw || "").replace(/[^0-9]/g, "");
             if (!digits) return "";
             return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        function customerStateText(code) {
+            const map = {
+                A: "A(원활) : 최근 7일 이내 소통, 실행력 높은 매수자",
+                B: "B(보통) : 반응은 있으나 느림, 조건 제한 많음",
+                C: "C(어려움) : 응답 지연, 반복 제안에도 무반응",
+                X: "X(비활성) : 3개월 초과 미접촉, 제외 대상",
+            };
+            return map[code] || "-";
         }
 
         const INSIGHT_PAGE_SIZE = 20;
@@ -409,8 +403,8 @@
             params.set("building_page", String(insightBuildingPage));
             params.set("page_size", String(INSIGHT_PAGE_SIZE));
 
-            setEmptyRow(customerBody, 5, "조회 중...");
-            setEmptyRow(buildingBody, 5, "조회 중...");
+            setEmptyRow(customerBody, 1, "조회 중 오류가 발생했습니다.");
+            setEmptyRow(buildingBody, 1, "조회 중...");
 
             try {
                 const res = await fetch(`/api/insight/overview?${params.toString()}`);
@@ -430,37 +424,83 @@
                 document.getElementById("buildingCount").textContent = String(buildingTotalCount);
 
                 if (!customers.length) {
-                    setEmptyRow(customerBody, 5, "조건에 맞는 고객이 없습니다.");
+                    setEmptyRow(customerBody, 1, "??? ?? ??? ????.");
                 } else {
-                    customerBody.innerHTML = customers.map((row) => `
-                        <tr class="hover:bg-slate-50">
-                            <td class="px-3 py-2"><a class="text-blue-600 hover:underline" target="_blank" href="/customer/${esc(row.customer_number)}">${esc(row.customer_number)}</a></td>
-                            <td class="px-3 py-2">${esc(row.buyer_name || "-")}</td>
-                            <td class="px-3 py-2">${esc(row.phone || "-")}</td>
-                            <td class="px-3 py-2">${esc(row.business_area || "-")}</td>
-                            <td class="px-3 py-2">${esc(row.building_preference || "-")}</td>
-                        </tr>
-                    `).join("");
+                    customerBody.innerHTML = customers.map((row) => {
+                        const desiredPrice = row.desired_price_manwon
+                            ? `${formatThousandsInputValue(String(row.desired_price_manwon))}만원`
+                            : "-";
+                        return `
+                        <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+                            <div class="flex items-start justify-between gap-3 mb-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <a class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-1 rounded" target="_blank" href="/customer/${esc(row.customer_number)}">CUSTOMER: ${esc(row.customer_number)}</a>
+                                    <span class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded">진행상황: ${esc(row.status || "-")}</span>
+                                    <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">상태: ${esc(customerStateText(row.customer_state))}</span>
+                                </div>
+                                <a class="text-sm text-slate-400 hover:text-blue-600" target="_blank" href="/customer/${esc(row.customer_number)}">고객 상세로 이동</a>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-1 text-[13px] text-slate-700">
+                                <p>회사명: ${esc(row.buyer_name || "-")}</p>
+                                <p>대표자: ${esc(row.ceo_name || "-")}</p>
+                                <p>연락처: ${esc(row.phone || "-")}</p>
+                                <p>이메일: ${esc(row.email || "-")}</p>
+                                <p>유입경로: ${esc(row.first_contact || "-")}</p>
+                                <p>매매가: ${esc(desiredPrice)}</p>
+                                <p>상권: ${esc(row.business_area || "-")}</p>
+                                <p>건물: ${esc(row.building_preference || "-")}</p>
+                                <p>주 관심지역: ${esc(row.main_interest_region || "-")}</p>
+                            </div>
+                        </div>
+                    `;
+                    }).join("");
                 }
 
                 if (!buildings.length) {
-                    setEmptyRow(buildingBody, 5, "조건에 맞는 빌딩이 없습니다.");
+                    setEmptyRow(buildingBody, 1, "조건에 맞는 빌딩이 없습니다.");
                 } else {
-                    buildingBody.innerHTML = buildings.map((row) => `
-                        <tr class="hover:bg-slate-50">
-                            <td class="px-3 py-2"><a class="text-blue-600 hover:underline" target="_blank" href="/detail/${esc(row.bd_number)}">${esc(row.bd_number)}</a></td>
-                            <td class="px-3 py-2">${esc(row.bd_name || "-")}</td>
-                            <td class="px-3 py-2">${esc(row.address || "-")}</td>
-                            <td class="px-3 py-2">${esc(row.site_location || "-")}</td>
-                            <td class="px-3 py-2">${esc(row.sale_price || "-")}</td>
-                        </tr>
-                    `).join("");
+                    buildingBody.innerHTML = buildings.map((row) => {
+                        const flagText = [
+                            row.location_decide,
+                            row.price_decide,
+                            row.yield_decide,
+                            row.vacancy_decide,
+                            row.limit_decide,
+                            row.loan_decide,
+                        ].map(v => (v === "선택" || !v ? "N" : v)).join("");
+
+                        return `
+                        <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+                            <div class="flex items-start justify-between gap-3 mb-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <a class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded" target="_blank" href="/detail/${esc(row.bd_number)}">ID: ${esc(row.bd_number)}</a>
+                                    <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">FLAG: ${esc(flagText)}</span>
+                                </div>
+                                <a class="text-sm text-slate-400 hover:text-blue-600" target="_blank" href="/detail/${esc(row.bd_number)}">새 창에서 상세정보 ↗</a>
+                            </div>
+
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-x-6 gap-y-1 text-[13px] text-slate-700">
+                                <p>주소: ${esc(row.address || "-")}</p>
+                                <p>건물명: ${esc(row.bd_name || "-")}</p>
+                                <p>매매가: ${esc(row.sale_price || "-")}</p>
+                                <p>상태: ${esc(row.status || "-")}</p>
+                                <p>수익률: ${esc(row.yield_rate || "-")}</p>
+                                <p>대지 평: ${esc(row.land_area_pyeong || "-")}</p>
+                                <p>연면적 평: ${esc(row.gross_area_pyeong || "-")}</p>
+                                <p>용도지역(토지): ${esc(row.zoning_type || "-")}</p>
+                                <p>승인날짜: ${esc(row.approval_date || "-")}</p>
+                                <p>승강기: ${esc(row.elevator || "-")}</p>
+                                <p>주차대수: ${esc(row.parking_capacity || "-")}</p>
+                            </div>
+                        </div>
+                    `;
+                    }).join("");
                 }
                 renderInsightPagination("insightCustomerPagination", customerTotalPages, currentCustomerPage, "goInsightCustomerPage");
                 renderInsightPagination("insightBuildingPagination", buildingTotalPages, currentBuildingPage, "goInsightBuildingPage");
             } catch (e) {
-                setEmptyRow(customerBody, 5, "조회 중 오류가 발생했습니다.");
-                setEmptyRow(buildingBody, 5, "조회 중 오류가 발생했습니다.");
+                setEmptyRow(customerBody, 1, "조회 중 오류가 발생했습니다.");
+                setEmptyRow(buildingBody, 1, "조회 중 오류가 발생했습니다.");
             }
         }
 
@@ -478,15 +518,15 @@
             const elevator = document.getElementById("matchElevatorOption");
             if (elevator) elevator.value = "";
             const buildingStatus = document.getElementById("matchBuildingStatus");
-            if (buildingStatus) buildingStatus.value = "전체";
+            if (buildingStatus) buildingStatus.selectedIndex = 0;
             ["matchLocationDecide", "matchPriceDecide", "matchYieldDecide", "matchVacancyDecide", "matchLimitDecide", "matchLoanDecide"].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.value = "";
             });
             document.getElementById("customerCount").textContent = "0";
             document.getElementById("buildingCount").textContent = "0";
-            setEmptyRow(document.getElementById("customerBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
-            setEmptyRow(document.getElementById("buildingBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
+            setEmptyRow(document.getElementById("customerBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");
+            setEmptyRow(document.getElementById("buildingBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");
             renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
             renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
         });
@@ -515,8 +555,8 @@
             });
         });
 
-        setEmptyRow(document.getElementById("customerBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
-        setEmptyRow(document.getElementById("buildingBody"), 5, "조건을 입력하고 매칭 검색을 눌러주세요.");
+        setEmptyRow(document.getElementById("customerBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");
+        setEmptyRow(document.getElementById("buildingBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");
         renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
         renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
     </script>
