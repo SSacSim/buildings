@@ -215,7 +215,7 @@ def make_GI(slide , ppt, GI_data ,rows =13, cols = 2):
     table.first_row = False  # 머리글 행 특수 서식 해제
     table.first_col = False  # 첫 번째 열 특수 서식 해제
     # 표 너비를 도형 폭 기준 비율로 채움(좌:우 = 34:66)
-    left_col_width = int(width * 0.34)
+    left_col_width = int(width * 0.36)
     table.columns[0].width = left_col_width
     table.columns[1].width = int(width - left_col_width)
 

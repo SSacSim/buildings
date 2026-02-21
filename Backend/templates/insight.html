@@ -424,7 +424,7 @@
                 document.getElementById("buildingCount").textContent = String(buildingTotalCount);
 
                 if (!customers.length) {
-                    setEmptyRow(customerBody, 1, "??? ?? ??? ????.");
+                    setEmptyRow(customerBody, 1, "조건에 맞는 고객이 없습니다.");
                 } else {
                     customerBody.innerHTML = customers.map((row) => {
                         const desiredPrice = row.desired_price_manwon
