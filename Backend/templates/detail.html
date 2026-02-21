@@ -2317,13 +2317,11 @@
 
         const filteredRows = introCustomerSearchKeyword
             ? introCustomerRows.filter((row) => {
-                const company = String(row?.buyer_name || '').toLowerCase();
                 const ceo = String(row?.ceo_name || '').toLowerCase();
                 const introCost = String(row?.intro_cost || '');
                 const keywordDigits = introCustomerSearchKeyword.replace(/,/g, '').replace(/\s+/g, '');
                 const introCostDigits = introCost.replace(/,/g, '').replace(/\s+/g, '');
-                return company.includes(introCustomerSearchKeyword)
-                    || ceo.includes(introCustomerSearchKeyword)
+                return ceo.includes(introCustomerSearchKeyword)
                     || String(introCost).toLowerCase().includes(introCustomerSearchKeyword)
                     || (keywordDigits && introCostDigits.includes(keywordDigits));
             })
@@ -2343,7 +2341,7 @@
             <div class="border border-slate-200 rounded p-2 bg-slate-50 hover:bg-slate-100 cursor-pointer"
                 onclick="openCustomerFromIntro(${row.customer_number})">
                 <div class="text-slate-700 leading-5">
-                    날짜: ${formatDateOnly(row.intro_date)} / 회사명: ${row.buyer_name || '-'} / 대표자명: ${row.ceo_name || '-'} / 소개금액: ${formatManwon(row.intro_cost)} / 담당자: ${row.manager_name || '-'}
+                    날짜: ${formatDateOnly(row.intro_date)} / 대표자명: ${row.ceo_name || '-'} / 소개금액: ${formatManwon(row.intro_cost)} / 담당자: ${row.manager_name || '-'}
                 </div>
                 <div class="text-slate-500 leading-5">내용: ${row.intro_note || '-'}</div>
             </div>

@@ -298,6 +298,15 @@ def run(bd_numbers):
     finally:
         conn.close()
 
+    # 매도희망가격(매매가) 낮은 순으로 정렬
+    def _sale_price_sort_key(info):
+        building_info = (info or {}).get("building_info") or {}
+        sale_price_num = _to_number(building_info.get("sale_price"))
+        # 매매가가 비어있는 값은 뒤로 보냄
+        return (sale_price_num is None, sale_price_num if sale_price_num is not None else float("inf"))
+
+    infos_all.sort(key=_sale_price_sort_key)
+
     template_path = PPT_DIR / "statics" / "template2.pptx"
     prs = Presentation(str(template_path))
     template_slide = prs.slides[0]
