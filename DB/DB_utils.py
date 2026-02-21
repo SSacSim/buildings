@@ -373,18 +373,49 @@ def extract_intro_customers_by_building(conn, bd_number: str) -> dict:
                 x.intro_id,
                 x.customer_number,
                 x.buyer_name,
+                x.company_address,
+                x.ceo_name,
                 x.intro_date,
                 x.progress_status,
-                x.intro_cost,
+                COALESCE(
+                    NULLIF(TRIM(x.sale_price), ''),
+                    (
+                        SELECT cip2.sale_price
+                        FROM customer_intro_property cip2
+                        WHERE cip2.delete_flag = FALSE
+                          AND cip2.bd_number = x.bd_number
+                          AND cip2.customer_number = x.customer_number
+                          AND NULLIF(TRIM(cip2.sale_price), '') IS NOT NULL
+                        ORDER BY COALESCE(cip2.update_time, cip2.intro_date) DESC, cip2.intro_id ASC
+                        LIMIT 1
+                    )
+                ) AS sale_price,
+                COALESCE(
+                    NULLIF(TRIM(x.intro_cost), ''),
+                    (
+                        SELECT cip3.intro_cost
+                        FROM customer_intro_property cip3
+                        WHERE cip3.delete_flag = FALSE
+                          AND cip3.bd_number = x.bd_number
+                          AND cip3.customer_number = x.customer_number
+                          AND NULLIF(TRIM(cip3.intro_cost), '') IS NOT NULL
+                        ORDER BY COALESCE(cip3.update_time, cip3.intro_date) DESC, cip3.intro_id ASC
+                        LIMIT 1
+                    )
+                ) AS intro_cost,
                 x.manager_name,
                 x.intro_note
             FROM (
                 SELECT DISTINCT ON (cip.customer_number)
                     cip.intro_id,
+                    cip.bd_number,
                     cip.customer_number,
                     ci.buyer_name,
+                    ci.company_address,
+                    ci.ceo_name,
                     cip.intro_date,
                     cip.progress_status,
+                    cip.sale_price,
                     cip.intro_cost,
                     cip.manager_name,
                     cip.intro_note
@@ -394,9 +425,9 @@ def extract_intro_customers_by_building(conn, bd_number: str) -> dict:
                 WHERE cip.bd_number = %s
                   AND cip.delete_flag = FALSE
                   AND ci.delete_flag = FALSE
-                ORDER BY cip.customer_number, cip.intro_date DESC, cip.intro_id DESC
+                ORDER BY cip.customer_number, COALESCE(cip.update_time, cip.intro_date) DESC, cip.intro_id ASC
             ) x
-            ORDER BY x.intro_date DESC, x.intro_id DESC
+            ORDER BY COALESCE(x.intro_date, CURRENT_TIMESTAMP) DESC, x.intro_id ASC
             """,
             (bd_number,)
         )
@@ -669,4 +700,3 @@ def delete_row(conn, bd_number :int) -> dict:
         cur.close()
         conn.close()
         
-

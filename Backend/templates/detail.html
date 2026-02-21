@@ -245,7 +245,7 @@
                     </div>
                     
                     <div class="flex border border-slate-400 bg-white items-center">
-                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">입지</div>
+                        <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">상권</div>
                         <input id="site_location" name="site_location" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
                     </div>
 
@@ -2274,6 +2274,26 @@
         const list = document.getElementById('intro-customer-list');
         if (!list) return;
 
+        const formatDateOnly = (value) => {
+            if (!value) return '-';
+            const raw = String(value).trim();
+            const matched = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+            if (matched) return matched[1];
+            const parsed = new Date(raw);
+            if (!Number.isNaN(parsed.getTime())) {
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const d = String(parsed.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return raw;
+        };
+        const formatManwon = (value) => {
+            const raw = (value ?? '').toString().trim();
+            if (!raw) return '-';
+            return raw.includes('만원') ? raw : `${raw}만원`;
+        };
+
         if (!rows.length) {
             list.innerHTML = '<div class="text-slate-400">아직 소개 기록이 없습니다.</div>';
             return;
@@ -2282,13 +2302,10 @@
         list.innerHTML = rows.map(row => `
             <div class="border border-slate-200 rounded p-2 bg-slate-50 hover:bg-slate-100 cursor-pointer"
                 onclick="openCustomerFromIntro(${row.customer_number})">
-                <div class="flex justify-between">
-                    <div class="font-bold text-slate-700">${row.buyer_name || '이름없음'} (${row.customer_number})</div>
-                    <div class="text-indigo-600 font-semibold">${row.progress_status || '-'}</div>
+                <div class="text-slate-700 leading-5">
+                    날짜: ${formatDateOnly(row.intro_date)} / 회사명: ${row.buyer_name || '-'} / 대표자명: ${row.ceo_name || '-'} / 소개금액: ${formatManwon(row.intro_cost)} / 담당자: ${row.manager_name || '-'}
                 </div>
-                <div class="text-slate-500">소개일: ${(row.intro_date ? String(row.intro_date).replace('T', ' ') : '-')}</div>
-                <div class="text-slate-500">소개금액: ${row.intro_cost ? `${row.intro_cost}만원` : '-'} / 담당자: ${row.manager_name || '-'}</div>
-                <div class="text-slate-500">내용: ${row.intro_note || '-'}</div>
+                <div class="text-slate-500 leading-5">내용: ${row.intro_note || '-'}</div>
             </div>
         `).join('');
     }

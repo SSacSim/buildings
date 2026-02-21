@@ -6,6 +6,7 @@ let pickingContext = null;
 let customerMatchCurrentPage = 1;
 const CUSTOMER_MATCH_PAGE_SIZE = 20;
 const selectedMatchBuildingIds = new Set();
+let introSearchKeyword = "";
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -340,6 +341,10 @@ function renderIntroRows() {
     if (!tbody) return;
     const table = tbody.closest("table");
     const thead = table ? table.querySelector("thead") : null;
+    const keyword = (introSearchKeyword || "").trim().toLowerCase();
+    const filteredRows = keyword
+        ? introRows.filter((row) => String(row?.address || "").toLowerCase().includes(keyword))
+        : introRows;
 
     if (!introRows.length) {
         if (thead) thead.classList.add("hidden");
@@ -352,8 +357,16 @@ function renderIntroRows() {
     }
 
     if (thead) thead.classList.remove("hidden");
+    if (!filteredRows.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="p-3 text-slate-400">검색된 소개 매물이 없습니다.</td>
+            </tr>
+        `;
+        return;
+    }
 
-    tbody.innerHTML = introRows.map(row => `
+    tbody.innerHTML = filteredRows.map(row => `
         <tr class="border-b border-slate-200">
             <td class="p-1">
                 <button type="button" onclick="openBuildingSearchModal('intro','${row.row_id}')"
@@ -413,14 +426,14 @@ function renderIntroRows() {
                             <div class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center mb-2">
                                 <div class="flex items-center gap-2">
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">소개금액</span>
-                                    <input type="text" value="${formatThousandsInputValue(detail.intro_cost || "")}" 
+                                    <input type="text" value="${formatThousandsInputValue(detail.intro_cost || "")}"
                                         oninput="updateIntroDetailCostField('${row.row_id}','${detail.detail_id}', this)"
                                         class="w-full min-w-0 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right"
                                         placeholder="0">
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">담당자</span>
-                                    <input type="text" value="${detail.manager_name || ""}" 
+                                    <input type="text" value="${detail.manager_name || ""}"
                                         oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','manager_name', this.value)"
                                         class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px]"
                                         placeholder="담당자">
@@ -442,6 +455,12 @@ function renderIntroRows() {
         </tr>
         ` : ""}
     `).join("");
+}
+
+function runIntroSearch() {
+    const input = document.getElementById("introSearchInput");
+    introSearchKeyword = (input?.value || "").trim();
+    renderIntroRows();
 }
 
 function toggleIntroDetails(rowId) {
@@ -1023,7 +1042,7 @@ function setCustomerMatchCount(count) {
     const el = document.getElementById("customerMatchCount");
     if (!el) return;
     const safe = Number.isFinite(Number(count)) ? Number(count) : 0;
-    el.textContent = `(${safe.toLocaleString()}\uAC74)`;
+    el.textContent = `(${safe.toLocaleString()}?)`;
 }
 
 function refreshCustomerMatchDownloadButton() {
@@ -1406,6 +1425,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const addBtn = document.getElementById("addIntroRowBtn");
     if (addBtn) addBtn.addEventListener("click", addIntroRow);
+    const introSearchBtn = document.getElementById("introSearchBtn");
+    if (introSearchBtn) introSearchBtn.addEventListener("click", runIntroSearch);
+    const introSearchInput = document.getElementById("introSearchInput");
+    if (introSearchInput) {
+        introSearchInput.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            runIntroSearch();
+        });
+    }
     const addOwnedBtn = document.getElementById("addOwnedRowBtn");
     if (addOwnedBtn) addOwnedBtn.addEventListener("click", addOwnedRow);
 
