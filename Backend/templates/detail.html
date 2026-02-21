@@ -2656,38 +2656,18 @@
     }
 
 
-    // sidebar blur 
+    // sidebar lock: hide right section
     let sidebarLocked = false;
-    let overlay = null;
     function applySidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
-        if (!sidebar || overlay) return; // 이미 오버레이가 있으면 중단
-        sidebar.style.filter = "blur(10px)";
-        sidebar.style.pointerEvents = "none";
-        sidebar.style.userSelect = "none";
-
-        overlay = document.createElement("div");
-        overlay.style.position = "absolute";
-        overlay.style.inset = "0";
-        overlay.style.background = "rgba(255,255,255,0.45)";
-        overlay.style.zIndex = "999";
-        overlay.style.pointerEvents = "none";
-
-        sidebar.style.position = "relative";
-        sidebar.appendChild(overlay);
+        if (!sidebar) return;
+        sidebar.classList.add("hidden");
     }
     // ⭐ 페이지 로딩 시 자동 실행
     function removeSidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
-
-        sidebar.style.filter = "";
-        sidebar.style.pointerEvents = "";
-        sidebar.style.userSelect = "";
-
-        if (overlay) {
-            overlay.remove();
-            overlay = null;
-        }
+        if (!sidebar) return;
+        sidebar.classList.remove("hidden");
     }
 
     function toggleSidebarLock() {

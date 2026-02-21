@@ -26,7 +26,92 @@
     </div>
 </div>
 
+<button id="advancedFilterToggle" type="button" onclick="toggleAdvancedFilterPanel()"
+        class="fixed left-0 top-1/2 -translate-y-1/2 z-40 w-7 h-10 rounded-r-md bg-slate-700 text-white text-sm font-bold hover:bg-slate-800">
+    <
+</button>
+
+<aside id="advancedFilterPanel"
+       class="fixed left-0 top-0 z-30 h-screen w-[760px] max-w-[92vw] bg-white border-r border-slate-200 shadow-xl p-4 overflow-y-auto transform -translate-x-full transition-transform duration-200">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-bold text-blue-700">[매수 조건 - 실제 매칭 필터]</h2>
+        <div class="flex items-center gap-2">
+            <button id="advancedFilterResetBtn" type="button"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200">초기화</button>
+            <button id="advancedFilterApplyBtn" type="button"
+                    class="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white hover:bg-blue-700">매칭 검색</button>
+        </div>
+    </div>
+
+    <div class="space-y-2 text-[12px] text-slate-700">
+        <div class="flex items-center gap-2">
+            <span class="w-16 font-semibold shrink-0">유형 조건:</span>
+            <label><input type="checkbox" name="matchType" value="NEW_SITE"> 신축부지</label>
+            <label><input type="checkbox" name="matchType" value="REMODELING"> 리모델링</label>
+            <label><input type="checkbox" name="matchType" value="OFFICE"> 사옥형</label>
+            <label><input type="checkbox" name="matchType" value="INVESTMENT"> 수익형</label>
+            <label><input type="checkbox" name="matchType" value="DEVELOPMENT"> 개발/전환</label>
+            <label><input type="checkbox" name="matchType" value="STABLE"> 보유안정</label>
+            <span class="ml-2 font-semibold">건물상태:</span>
+            <select id="matchBuildingStatus" class="border-b w-20 text-center outline-none bg-transparent">
+                <option value="전체">전체</option>
+                <option value="준비">준비</option>
+                <option value="완료">완료</option>
+                <option value="매각">매각</option>
+                <option value="보류">보류</option>
+            </select>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <span class="w-16 font-semibold shrink-0">등급 조건:</span>
+            <select id="matchLocationDecide" class="border-b w-14 text-center outline-none bg-transparent"><option value="">입지</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option></select>
+            <select id="matchPriceDecide" class="border-b w-14 text-center outline-none bg-transparent"><option value="">가격</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option></select>
+            <select id="matchYieldDecide" class="border-b w-14 text-center outline-none bg-transparent"><option value="">수익률</option><option value="A">A</option><option value="B">B</option><option value="C">C</option><option value="X">X</option></select>
+            <select id="matchVacancyDecide" class="border-b w-14 text-center outline-none bg-transparent"><option value="">명도</option><option value="a">a</option><option value="b">b</option><option value="c">c</option><option value="x">x</option></select>
+            <select id="matchLimitDecide" class="border-b w-14 text-center outline-none bg-transparent"><option value="">제한</option><option value="a">a</option><option value="b">b</option><option value="c">c</option><option value="x">x</option></select>
+            <select id="matchLoanDecide" class="border-b w-14 text-center outline-none bg-transparent"><option value="">상태</option><option value="a">a</option><option value="b">b</option><option value="c">c</option><option value="x">x</option></select>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <span class="w-16 font-semibold shrink-0">용도지역:</span>
+            <label><input type="checkbox" name="matchZoningCategory" value="COMMERCIAL"> 상업</label>
+            <label><input type="checkbox" name="matchZoningCategory" value="INDUSTRIAL"> 공업</label>
+            <label><input type="checkbox" name="matchZoningCategory" value="RESIDENTIAL"> 주거</label>
+            <label><input type="checkbox" name="matchZoningCategory" value="OTHER"> 기타</label>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="w-16 font-semibold shrink-0">건축용도:</span>
+            <label><input type="checkbox" name="matchUsageCategory" value="NEIGHBORHOOD"> 근린</label>
+            <label><input type="checkbox" name="matchUsageCategory" value="OFFICE_USE"> 업무</label>
+            <label><input type="checkbox" name="matchUsageCategory" value="LODGING"> 숙박</label>
+            <label><input type="checkbox" name="matchUsageCategory" value="ENTERTAINMENT"> 위락</label>
+            <label><input type="checkbox" name="matchUsageCategory" value="HOUSING"> 주택</label>
+            <label><input type="checkbox" name="matchUsageCategory" value="OTHER"> 기타</label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-x-6 gap-y-2 pt-1 border-t border-slate-200">
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">주소조건:</span><input id="matchAddressInput" type="text" class="border-b flex-1 px-1 outline-none" placeholder="[ 시/구/동/지번 ]"></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">상권:</span><input id="matchBusinessAreaInput" type="text" class="border-b flex-1 px-1 outline-none" placeholder="[ 입지 키워드 ]"></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">주변역:</span><input id="matchStationKeyword" type="text" class="border-b w-20 px-1 outline-none" placeholder="[ 역명 ]"><span class="font-semibold">도보:</span><input id="matchStationWalkMin" type="text" class="border-b w-10 text-center"><span>~</span><input id="matchStationWalkMax" type="text" class="border-b w-10 text-center"><span>분</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">현금보유액:</span><input id="matchCashHoldManwon" type="text" class="border-b w-20 text-center" placeholder="400,000"><span>만원</span><input id="matchCashHoldPercent" type="text" class="border-b w-12 text-center" placeholder="60"><span>%</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">매매가:</span><input id="matchMinPrice" type="text" class="border-b w-16 text-center"><span>~</span><input id="matchMaxPrice" type="text" class="border-b w-16 text-center"><span>만원</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">수익률:</span><span>≥</span><input id="matchMinYieldInput" type="text" class="border-b w-16 text-center"><span>%</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">토지 평단가:</span><input id="matchLandPyeongMin" type="text" class="border-b w-16 text-center"><span>~</span><input id="matchLandPyeongMax" type="text" class="border-b w-16 text-center"><span>만원</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">연면적 평단가:</span><input id="matchGrossPyeongMin" type="text" class="border-b w-16 text-center"><span>~</span><input id="matchGrossPyeongMax" type="text" class="border-b w-16 text-center"><span>만원</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">토지면적:</span><input id="matchLandAreaMin" type="text" class="border-b w-14 text-center"><span>~</span><input id="matchLandAreaMax" type="text" class="border-b w-14 text-center"><span>평</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">연면적:</span><input id="matchGrossAreaMin" type="text" class="border-b w-14 text-center"><span>~</span><input id="matchGrossAreaMax" type="text" class="border-b w-14 text-center"><span>평</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">사용가능면적:</span><input id="matchUsableAreaMin" type="text" class="border-b w-14 text-center"><span>~</span><input id="matchUsableAreaMax" type="text" class="border-b w-14 text-center"><span>평</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">건축면적:</span><input id="matchBuildingAreaMin" type="text" class="border-b w-14 text-center"><span>~</span><input id="matchBuildingAreaMax" type="text" class="border-b w-14 text-center"><span>평</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">사용승인:</span><input id="matchApprovalYearMin" type="text" class="border-b w-16 text-center"><span>년 이후</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">도로폭:</span><input id="matchRoadWidthMin" type="text" class="border-b w-16 text-center"><span>m 이상</span></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">승강기:</span><select id="matchElevatorOption" class="border-b w-20 text-center outline-none bg-transparent"><option value="">선택</option><option value="HAS">있음</option><option value="NONE">없음</option></select></div>
+            <div class="flex items-center gap-2"><span class="w-16 font-semibold">주차대수:</span><input id="matchParkingMin" type="text" class="border-b w-16 text-center"><span>대 이상</span></div>
+        </div>
+    </div>
+</aside>
+
 <main class="max-w-4xl mx-auto px-6 py-10">
+
     <div class="flex justify-end mb-4">
         <div class="flex items-center gap-3 mr-auto">
             <div id="totalCount"

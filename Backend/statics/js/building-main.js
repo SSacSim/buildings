@@ -3,6 +3,7 @@ let currentAddress = '';
 let currentcategory = '';
 let currentSearchMode = 'building';
 let customerSearchCache = [];
+let currentBuildingTotalPages = null;
 const pageGroupSize = 5;
 
 function setStatusOptions(mode) {
@@ -35,6 +36,84 @@ function filterByStatus() {
         return;
     }
     search();
+}
+
+function toggleAdvancedFilterPanel() {
+    const panel = document.getElementById('advancedFilterPanel');
+    const toggle = document.getElementById('advancedFilterToggle');
+    if (!panel || !toggle) return;
+    const isClosed = panel.classList.contains('-translate-x-full');
+    panel.classList.toggle('-translate-x-full', !isClosed);
+    toggle.textContent = isClosed ? '>' : '<';
+}
+
+function resetAdvancedFilters() {
+    const panel = document.getElementById('advancedFilterPanel');
+    if (!panel) return;
+    panel.querySelectorAll('input').forEach((el) => {
+        if (el.type === 'checkbox') el.checked = false;
+        else el.value = '';
+    });
+    panel.querySelectorAll('select').forEach((el) => {
+        if (el.id === 'matchBuildingStatus') el.value = '전체';
+        else el.value = '';
+    });
+}
+
+function collectAdvancedFilters() {
+    const get = (id) => document.getElementById(id)?.value?.trim() || '';
+    const numeric = (id) => (get(id) || '').replace(/[^0-9.]/g, '');
+    return {
+        address: get('matchAddressInput'),
+        site_location: get('matchBusinessAreaInput'),
+        station_keyword: get('matchStationKeyword'),
+        station_walk_min: numeric('matchStationWalkMin'),
+        station_walk_max: numeric('matchStationWalkMax'),
+        cash_hold_manwon: numeric('matchCashHoldManwon'),
+        cash_hold_percent: numeric('matchCashHoldPercent'),
+        min_price: numeric('matchMinPrice'),
+        max_price: numeric('matchMaxPrice'),
+        min_yield: numeric('matchMinYieldInput'),
+        land_pp_min: numeric('matchLandPyeongMin'),
+        land_pp_max: numeric('matchLandPyeongMax'),
+        gross_pp_min: numeric('matchGrossPyeongMin'),
+        gross_pp_max: numeric('matchGrossPyeongMax'),
+        land_area_min: numeric('matchLandAreaMin'),
+        land_area_max: numeric('matchLandAreaMax'),
+        gross_area_min: numeric('matchGrossAreaMin'),
+        gross_area_max: numeric('matchGrossAreaMax'),
+        usable_area_min: numeric('matchUsableAreaMin'),
+        usable_area_max: numeric('matchUsableAreaMax'),
+        building_area_min: numeric('matchBuildingAreaMin'),
+        building_area_max: numeric('matchBuildingAreaMax'),
+        approval_year_min: numeric('matchApprovalYearMin'),
+        road_width_min: numeric('matchRoadWidthMin'),
+        parking_min: numeric('matchParkingMin'),
+        elevator_option: get('matchElevatorOption'),
+        building_status: get('matchBuildingStatus'),
+        location_decide: get('matchLocationDecide'),
+        price_decide: get('matchPriceDecide'),
+        yield_decide: get('matchYieldDecide'),
+        vacancy_decide: get('matchVacancyDecide'),
+        limit_decide: get('matchLimitDecide'),
+        loan_decide: get('matchLoanDecide'),
+        types: Array.from(document.querySelectorAll('input[name="matchType"]:checked')).map((el) => el.value).join(','),
+        zoning_categories: Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked')).map((el) => el.value).join(','),
+        usage_categories: Array.from(document.querySelectorAll('input[name="matchUsageCategory"]:checked')).map((el) => el.value).join(','),
+    };
+}
+
+function hasAdvancedFilters() {
+    const f = collectAdvancedFilters();
+    if (f.building_status && f.building_status !== '전체') return true;
+    return Object.entries(f).some(([k, v]) => k !== 'building_status' && String(v || '').trim() !== '');
+}
+
+function applyAdvancedFilters() {
+    currentPage = 1;
+    currentAddress = document.getElementById('addressInput').value;
+    currentcategory = document.getElementById('statusSelect').value;
+    fetchBuildings(currentPage, currentcategory);
 }
 
 function search() {
@@ -120,6 +199,130 @@ function renderCustomerCards(data) {
     list.innerHTML = customerCards.join('');
 }
 
+function renderBuildingCards(items) {
+    const list = document.getElementById('addressList');
+    list.innerHTML = '';
+
+    items.forEach(item => {
+        const card = `
+            <div onclick="goToDetail('${item.bd_number}')"
+                 class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group">
+                <div class="flex justify-between items-start">
+                    <span class="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded">
+                        ID: ${item.bd_number}
+                    </span>
+                    <span class="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded">
+                    FLAG: ${
+                        [item.location_decide,
+                        item.price_decide,
+                        item.yield_decide,
+                        item.vacancy_decide,
+                        item.limit_decide,
+                        item.loan_decide]
+                        .map(v => v === "선택" ? "N" : v)
+                        .join("")
+                    }
+                    </span>
+                    <span class="text-slate-300 group-hover:text-blue-500 text-sm">
+                        새 창에서 상세정보 ↗
+                    </span>
+                </div>
+                <p class="text-lg font-semibold text-slate-700">
+                    주소: ${item.address || '정보 없음'}
+                </p>
+                <div class="grid grid-cols-4 gap-2">
+                    <p class="text-sm text-slate-500">건물명: ${item.bd_name || '-'}</p>
+                    <p class="text-sm text-slate-500">매매가: ${item.sale_price || '0'}</p>
+                    <p class="text-sm text-slate-500">상태: ${item.status || '준비'}</p>
+                    <p class="text-sm text-slate-500">수익률: ${item.yield_rate || '0'}</p>
+                    <p class="text-sm text-slate-500">대지 평: ${item.land_area_pyeong || '0'}평</p>
+                    <p class="text-sm text-slate-500">연면적 평: ${item.gross_area_pyeong || '0'}평</p>
+                    <p class="text-sm text-slate-500">용도지역(토지): ${item.zoning_type || '-'}</p>
+                    <p class="text-sm text-slate-500">승인날짜: ${item.approval_date || '-'}</p>
+                    <p class="text-sm text-slate-500">승강기: ${item.elevator || '-'}</p>
+                    <p class="text-sm text-slate-500">주차대수: ${item.parking_capacity || '-'}</p>
+                </div>
+            </div>
+        `;
+        list.innerHTML += card;
+    });
+}
+
+async function fetchBuildingsAdvanced(page, category) {
+    const list = document.getElementById('addressList');
+    const loading = document.getElementById('loading');
+    const pagination = document.getElementById('pagination');
+    const advanced = collectAdvancedFilters();
+
+    list.innerHTML = '';
+    pagination.innerHTML = '';
+    loading.classList.remove('hidden');
+
+    const params = new URLSearchParams();
+    params.set('building_page', String(page));
+    params.set('page_size', '20');
+    params.set('address', advanced.address || currentAddress || '');
+    if (advanced.site_location) params.set('site_location', advanced.site_location);
+    if (advanced.station_keyword) params.set('station_keyword', advanced.station_keyword);
+    if (advanced.station_walk_min) params.set('station_walk_min', advanced.station_walk_min);
+    if (advanced.station_walk_max) params.set('station_walk_max', advanced.station_walk_max);
+    if (advanced.cash_hold_manwon) params.set('cash_hold_manwon', advanced.cash_hold_manwon);
+    if (advanced.cash_hold_percent) params.set('cash_hold_percent', advanced.cash_hold_percent);
+    if (advanced.min_price) params.set('min_price', advanced.min_price);
+    if (advanced.max_price) params.set('max_price', advanced.max_price);
+    if (advanced.min_yield) params.set('min_yield', advanced.min_yield);
+    if (advanced.land_pp_min) params.set('land_pp_min', advanced.land_pp_min);
+    if (advanced.land_pp_max) params.set('land_pp_max', advanced.land_pp_max);
+    if (advanced.gross_pp_min) params.set('gross_pp_min', advanced.gross_pp_min);
+    if (advanced.gross_pp_max) params.set('gross_pp_max', advanced.gross_pp_max);
+    if (advanced.land_area_min) params.set('land_area_min', advanced.land_area_min);
+    if (advanced.land_area_max) params.set('land_area_max', advanced.land_area_max);
+    if (advanced.gross_area_min) params.set('gross_area_min', advanced.gross_area_min);
+    if (advanced.gross_area_max) params.set('gross_area_max', advanced.gross_area_max);
+    if (advanced.usable_area_min) params.set('usable_area_min', advanced.usable_area_min);
+    if (advanced.usable_area_max) params.set('usable_area_max', advanced.usable_area_max);
+    if (advanced.building_area_min) params.set('building_area_min', advanced.building_area_min);
+    if (advanced.building_area_max) params.set('building_area_max', advanced.building_area_max);
+    if (advanced.approval_year_min) params.set('approval_year_min', advanced.approval_year_min);
+    if (advanced.road_width_min) params.set('road_width_min', advanced.road_width_min);
+    if (advanced.parking_min) params.set('parking_min', advanced.parking_min);
+    if (advanced.elevator_option) params.set('elevator_option', advanced.elevator_option);
+    const mergedBuildingStatus = (advanced.building_status && advanced.building_status !== '전체')
+        ? advanced.building_status
+        : (category || '');
+    params.set('building_status', mergedBuildingStatus);
+    if (advanced.location_decide) params.set('location_decide', advanced.location_decide);
+    if (advanced.price_decide) params.set('price_decide', advanced.price_decide);
+    if (advanced.yield_decide) params.set('yield_decide', advanced.yield_decide);
+    if (advanced.vacancy_decide) params.set('vacancy_decide', advanced.vacancy_decide);
+    if (advanced.limit_decide) params.set('limit_decide', advanced.limit_decide);
+    if (advanced.loan_decide) params.set('loan_decide', advanced.loan_decide);
+    if (advanced.types) params.set('types', advanced.types);
+    if (advanced.zoning_categories) params.set('zoning_categories', advanced.zoning_categories);
+    if (advanced.usage_categories) params.set('usage_categories', advanced.usage_categories);
+
+    try {
+        const res = await fetch(`/api/insight/overview?${params.toString()}`);
+        const data = await res.json();
+        loading.classList.add('hidden');
+
+        const items = Array.isArray(data?.buildings) ? data.buildings : [];
+        if (!items.length) {
+            document.getElementById("totalCount").innerText = "전체: 0건";
+            list.innerHTML = '<div class="text-center text-slate-400 py-20">검색 결과가 없습니다.</div>';
+            return;
+        }
+
+        currentBuildingTotalPages = Number(data?.buildings_total_pages || 0);
+        renderBuildingCards(items);
+        renderPagination(page, Number(data?.buildings_total_count || items.length), currentBuildingTotalPages);
+    } catch (err) {
+        loading.classList.add('hidden');
+        console.error(err);
+        list.innerHTML = '<div class="text-center text-red-400 py-20">데이터를 가져오는데 실패했습니다.</div>';
+    }
+}
+
 async function searchCustomer() {
     const keyword = document.getElementById('addressInput').value.trim();
     const list = document.getElementById('addressList');
@@ -171,6 +374,11 @@ async function searchCustomer() {
 
 // 
 async function fetchBuildings(page , category) {
+    if (hasAdvancedFilters()) {
+        await fetchBuildingsAdvanced(page, category);
+        return;
+    }
+
     const list = document.getElementById('addressList');
     const loading = document.getElementById('loading');
     const pagination = document.getElementById('pagination');
@@ -194,60 +402,11 @@ async function fetchBuildings(page , category) {
             list.innerHTML = '<div class="text-center text-slate-400 py-20">검색 결과가 없습니다.</div>';
             return;
         }
-        console.log("DB search DATA")
-        console.log(data)
-        
-        // 실질적 card 생성하는 곳 
-        // slice(1) : 0번째에 해당 자료 수가 들어가기 때문에 undefine 카드 생성 막기위해
-        data.slice(1).forEach(item => {
-            const card = `
-                <div onclick="goToDetail('${item.bd_number}')"
-                     class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-400 hover:shadow-md transition-all cursor-pointer group">
-                    <div class="flex justify-between items-start">
-                        <span class="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded">
-                            ID: ${item.bd_number}
-                        </span>
-                        <span class="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-1 rounded">
-                        FLAG: ${
-                            [item.location_decide,
-                            item.price_decide,
-                            item.yield_decide,
-                            item.vacancy_decide,
-                            item.limit_decide,
-                            item.loan_decide]
-                            .map(v => v === "선택" ? "N" : v)
-                            .join("")
-                        }
-                        </span>
-                        <span class="text-slate-300 group-hover:text-blue-500 text-sm">
-                            새 창에서 상세정보 ↗
-                        </span>
-                        
-                    </div>
-                    <p class="text-lg font-semibold text-slate-700">
-                        주소: ${item.address || '정보 없음'}
-                    </p>
-                    <div class="grid grid-cols-4 gap-2">
-                        <p class="text-sm text-slate-500">건물명: ${item.bd_name || '-'}</p>
-                        <p class="text-sm text-slate-500">매매가: ${item.sale_price || '0'}</p>
-                        <p class="text-sm text-slate-500">상태: ${item.status || '준비'}</p>
-                        <p class="text-sm text-slate-500">수익률: ${item.yield_rate || '0'}</p>
-                        <p class="text-sm text-slate-500">대지 평: ${item.land_area_pyeong || '0'}평</p>
-                        <p class="text-sm text-slate-500">연면적 평: ${item.land_area_sqm || '0'}평</p>
-                        <p class="text-sm text-slate-500">용도지역(토지): ${item.zoning_type || '-'}</p>
-                        <p class="text-sm text-slate-500">승인날짜: ${item.approval_date || '-'}</p>
-                        <p class="text-sm text-slate-500">승강기: ${item.elevator || '-'}</p>
-                        <p class="text-sm text-slate-500">주차대수: ${item.parking_capacity || '-'}</p>
-                        
-                    </div>
-                </div>
-            `;
-            list.innerHTML += card;
-        });
+        currentBuildingTotalPages = null;
+        renderBuildingCards(data.slice(1));
 
         const totalCount = data.length > 0 ? data[0].total_count : 0;
-
-        renderPagination(page, totalCount );
+        renderPagination(page, totalCount, null);
 
     } catch (err) {
         loading.classList.add('hidden');
@@ -256,7 +415,7 @@ async function fetchBuildings(page , category) {
     }
 }
 
-function renderPagination(page , item_count) {
+function renderPagination(page , item_count, total_pages = null) {
     const pagination = document.getElementById('pagination');
     const start = Math.floor((page - 1) / pageGroupSize) * pageGroupSize + 1;
     const total_count = item_count;
@@ -278,7 +437,11 @@ function renderPagination(page , item_count) {
         `;
     }
 
-    for (let i = start; i < start + pageGroupSize; i++) {
+    const end = total_pages && total_pages > 0
+        ? Math.min(start + pageGroupSize - 1, total_pages)
+        : start + pageGroupSize - 1;
+
+    for (let i = start; i <= end; i++) {
         const active = i === page
             ? 'bg-blue-600 text-white border-blue-600'
             : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
@@ -291,12 +454,14 @@ function renderPagination(page , item_count) {
         `;
     }
 
-    pagination.innerHTML += `
-        <button onclick="goPage(${start + pageGroupSize})"
-            class="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600">
-            다음
-        </button>
-    `;
+    if (!total_pages || page < total_pages) {
+        pagination.innerHTML += `
+            <button onclick="goPage(${start + pageGroupSize})"
+                class="px-4 py-2 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 text-slate-600">
+                다음
+            </button>
+        `;
+    }
 }
 
 function goPage(p) {
@@ -396,4 +561,10 @@ document.addEventListener('DOMContentLoaded', () => {
         .addEventListener('keydown', e => {
             if (e.key === 'Enter') unifiedSearch();
         });
+
+    const advApplyBtn = document.getElementById('advancedFilterApplyBtn');
+    if (advApplyBtn) advApplyBtn.addEventListener('click', applyAdvancedFilters);
+
+    const advResetBtn = document.getElementById('advancedFilterResetBtn');
+    if (advResetBtn) advResetBtn.addEventListener('click', resetAdvancedFilters);
 });
