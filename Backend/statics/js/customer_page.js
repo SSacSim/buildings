@@ -783,6 +783,13 @@ function getMatchMaxPriceInput() {
     return document.getElementById("matchMaxPrice");
 }
 
+function setCustomerMatchCount(count) {
+    const el = document.getElementById("customerMatchCount");
+    if (!el) return;
+    const safe = Number.isFinite(Number(count)) ? Number(count) : 0;
+    el.textContent = `(${safe.toLocaleString()}건)`;
+}
+
 function renderCustomerMatchPagination(totalPages, currentPage) {
     const container = document.getElementById("customerMatchPagination");
     if (!container) return;
@@ -966,6 +973,7 @@ async function searchCustomerMatchBuildings(page = 1) {
 
     if (!hasAnyCondition) {
         tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">최소 1개 이상의 조건을 선택/입력해 주세요.</td></tr>';
+        setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
         return;
     }
@@ -1015,11 +1023,13 @@ async function searchCustomerMatchBuildings(page = 1) {
         if (!res.ok) throw new Error("match search failed");
         const payload = await res.json();
         const items = Array.isArray(payload) ? payload : (Array.isArray(payload.items) ? payload.items : []);
+        const totalCount = Array.isArray(payload) ? items.length : Number(payload.total_count ?? items.length);
         const totalPages = Array.isArray(payload) ? 1 : Number(payload.total_pages || 1);
         const currentPage = Array.isArray(payload) ? customerMatchCurrentPage : Number(payload.page || customerMatchCurrentPage);
 
         if (!Array.isArray(items) || items.length === 0) {
             tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-slate-400">조건에 맞는 매물이 없습니다.</td></tr>';
+            setCustomerMatchCount(totalCount || 0);
             renderCustomerMatchPagination(0, 1);
             return;
         }
@@ -1033,10 +1043,12 @@ async function searchCustomerMatchBuildings(page = 1) {
                 <td class="text-orange-500 font-semibold">${item.match_score || 0}점</td>
             </tr>
         `).join("");
+        setCustomerMatchCount(totalCount || items.length);
         renderCustomerMatchPagination(totalPages, currentPage);
     } catch (err) {
         console.error(err);
         tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-red-400">검색 중 오류가 발생했습니다.</td></tr>';
+        setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
     }
 }
