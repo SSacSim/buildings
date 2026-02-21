@@ -1547,16 +1547,10 @@
                     <span>세부내용</span>
                     <input type="text" class="violation-detail h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.detail || ""}">
                 </div>
-                <div class="grid grid-cols-[auto_72px_auto_auto_64px_auto_minmax(0,1fr)] gap-0.5 items-center text-[10px]">
+                <div class="grid grid-cols-[auto_72px_auto_auto_minmax(0,1fr)] gap-0.5 items-center text-[10px]">
                     <span class="whitespace-nowrap">이행강제금</span>
                     <input type="text" class="violation-fine h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.fine || ""}">
                     <span>원</span>
-                    <span class="whitespace-nowrap">종류</span>
-                    <select class="violation-type h-6 border border-slate-300 bg-white outline-none min-w-0 text-center rounded px-0.5">
-                        <option value="선백" ${values.type === "선백" ? "selected" : ""}>선백</option>
-                        <option value="대수선" ${values.type === "대수선" ? "selected" : ""}>대수선</option>
-                        <option value="리모델링" ${values.type === "리모델링" ? "selected" : ""}>리모델링</option>
-                    </select>
                     <span class="whitespace-nowrap">비고</span>
                     <input type="text" class="violation-remark h-6 border border-slate-300 bg-white outline-none w-full min-w-0 text-center rounded px-1" value="${values.remark || ""}">
                 </div>
@@ -1586,10 +1580,9 @@
                 const detail = sanitizeNearbyPart(row.querySelector(".violation-detail")?.value);
                 const fine = sanitizeNearbyPart(row.querySelector(".violation-fine")?.value);
                 const remark = sanitizeNearbyPart(row.querySelector(".violation-remark")?.value);
-                const type = sanitizeNearbyPart(row.querySelector(".violation-type")?.value || "선백");
 
-                if (!(date || content || detail || fine || remark || type !== "선백")) return "";
-                return [date, content, detail, fine, type, remark].join("|");
+                if (!(date || content || detail || fine || remark)) return "";
+                return [date, content, detail, fine, remark].join("|");
             })
             .filter(Boolean)
             .join("##");
@@ -1614,8 +1607,23 @@
         }
 
         entries.forEach(item => {
-            const [date = "", content = "", detail = "", fine = "", type = "선백", remark = ""] = item.split("|");
-            wrap.appendChild(createViolationRow({ date, content, detail, fine, remark, type }));
+            const parts = item.split("|");
+            let date = "";
+            let content = "";
+            let detail = "";
+            let fine = "";
+            let remark = "";
+
+            if (parts.length >= 6) {
+                // Legacy format: date|content|detail|fine|type|remark
+                [date, content, detail, fine] = parts;
+                remark = parts[5] || "";
+            } else {
+                // New format: date|content|detail|fine|remark
+                [date, content, detail, fine, remark] = parts;
+            }
+
+            wrap.appendChild(createViolationRow({ date, content, detail, fine, remark }));
         });
         updateViolationHidden();
     }
@@ -1826,12 +1834,7 @@
         /* ===============================
         진행 이력
         =============================== */
-        const historyRows = document.querySelectorAll('.history-row');
-        updatedData.history_data = Array.from(historyRows).map(row => ({
-            writer: row.querySelector('.h_writer').innerText,
-            write_time: row.querySelector('.h_time').innerText,
-            memo: row.querySelector('.h_memo').innerText,
-        }));
+        updatedData.history_data = getCurrentHistoryData();
 
         /* ===============================
         이미지 메타 정보 (개수만)
@@ -1877,6 +1880,29 @@
             console.error(err);
             alert("저장 중 오류가 발생했습니다.");
         }
+    }
+
+    function getCurrentHistoryData() {
+        const rows = document.querySelectorAll('#history-list > div');
+        return Array.from(rows).map(row => {
+            const writer = row.querySelector('.h_writer')?.innerText?.trim() || row.querySelector('input')?.value?.trim() || "";
+            const write_time = row.querySelector('.h_time')?.innerText?.trim() || row.querySelector('span')?.innerText?.trim() || "";
+            const memo = row.querySelector('.h_memo')?.innerText?.trim() || row.querySelector('textarea')?.value?.trim() || "";
+            return { writer, write_time, memo };
+        }).filter(item => item.writer || item.write_time || item.memo);
+    }
+
+    async function saveHistoryOnly() {
+        const bd_number = document.getElementById("bd_number")?.value;
+        if (!bd_number || bd_number === "new") return;
+
+        const payload = { history_data: getCurrentHistoryData() };
+        const res = await fetch(`/api/building/${bd_number}/history`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error("history save failed");
     }
     
     // Image 저장 function
@@ -2137,7 +2163,7 @@
     }
 
     // 2. 저장 함수 (저장된 텍스트 옆에 삭제 버튼 자동 생성)
-    function confirmHistory(btn) {
+    async function confirmHistory(btn) {
         const row = btn.closest('.py-2, .py-3');
 
         const time = row.querySelector('span')?.innerText;
@@ -2164,6 +2190,13 @@
             </div>
             <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${content}</p>
         `;
+
+        try {
+            await saveHistoryOnly();
+        } catch (err) {
+            console.error(err);
+            alert("진행내역 저장에 실패했습니다. 정보 저장하기로 다시 저장해 주세요.");
+        }
     }
 
     // 수정 함수 

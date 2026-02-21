@@ -856,6 +856,10 @@ class historyDetail(BaseModel):
     write_time: Optional[str] = ""
     memo: Optional[str] = ""
 
+
+class HistoryUpdate(BaseModel):
+    history_data: List[historyDetail]
+
 class BuildingCreate(BaseModel):
     bd_number : str
     address: str
@@ -1355,6 +1359,37 @@ async def update_building(bd_id: int, data: BuildingCreate):
         print(data.lease_details)
         raise HTTPException(status_code=500, detail=f"수정 오류: {str(e)}")
         
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.put("/api/building/{bd_id:int}/history")
+async def update_building_history(bd_id: int, data: HistoryUpdate):
+    conn = DB_utils.join_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM working_history WHERE bd_number = %s", (bd_id,))
+
+        for item in data.history_data:
+            detail_dict = item.dict()
+            detail_dict = {k: (v if v != "" else "0") for k, v in detail_dict.items()}
+
+            columns = list(detail_dict.keys())
+            params = list(detail_dict.values())
+            columns.insert(0, "bd_number")
+            params.insert(0, bd_id)
+
+            col_names = ", ".join(columns)
+            placeholders = ", ".join(["%s"] * len(columns))
+            insert_sql = f"INSERT INTO working_history ({col_names}) VALUES ({placeholders})"
+            cur.execute(insert_sql, params)
+
+        conn.commit()
+        return {"status": "updated", "bd_number": bd_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"history update error: {str(e)}")
     finally:
         cur.close()
         conn.close()
