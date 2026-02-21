@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional, List
@@ -21,7 +21,7 @@ def ensure_customer_intro_table(conn, cur):
             intro_id BIGSERIAL PRIMARY KEY,
             customer_number INTEGER NOT NULL,
             bd_number INTEGER NOT NULL,
-            intro_date DATE DEFAULT CURRENT_DATE,
+            intro_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             progress_status VARCHAR(255),
             intro_cost VARCHAR(255),
             manager_name VARCHAR(255),
@@ -46,6 +46,30 @@ def ensure_customer_intro_table(conn, cur):
         """
         ALTER TABLE customer_intro_property
         ADD COLUMN IF NOT EXISTS intro_cost VARCHAR(255);
+        """
+    )
+    cur.execute(
+        """
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'customer_intro_property'
+                  AND column_name = 'intro_date'
+                  AND data_type = 'date'
+            ) THEN
+                ALTER TABLE customer_intro_property
+                ALTER COLUMN intro_date TYPE TIMESTAMP
+                USING intro_date::timestamp;
+            END IF;
+        END $$;
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE customer_intro_property
+        ALTER COLUMN intro_date SET DEFAULT CURRENT_TIMESTAMP;
         """
     )
     cur.execute(
@@ -292,29 +316,43 @@ def customer_match_search(
             WHERE bi.delete_flag = FALSE
         """
         params: list = []
+        address_terms = [term.strip() for term in (address or "").split(",") if term.strip()]
+        business_area_terms = [term.strip() for term in (business_area or "").split(",") if term.strip()]
+        station_terms = [term.strip() for term in (station_keyword or "").split(",") if term.strip()]
 
-        if address.strip():
-            sql += " AND (address ILIKE %s OR bd_name ILIKE %s)"
-            params.extend([f"%{address.strip()}%", f"%{address.strip()}%"])
-        if business_area.strip():
-            sql += " AND COALESCE(site_location, '') ILIKE %s"
-            params.append(f"%{business_area.strip()}%")
-        if station_keyword.strip():
-            sql += """
-                AND (
-                    COALESCE(nearby_station, '') ILIKE %s
-                    OR EXISTS (
-                        SELECT 1
-                        FROM regexp_split_to_table(COALESCE(nearby_station2, ''), '##') AS station_row
-                        WHERE
-                            split_part(station_row, '|', 1) ILIKE %s
-                            OR split_part(station_row, '|', 2) ILIKE %s
-                            OR split_part(station_row, '|', 3) ILIKE %s
+        if address_terms:
+            address_ors = []
+            for term in address_terms:
+                address_ors.append("(COALESCE(address, '') ILIKE %s OR COALESCE(address_detail, '') ILIKE %s)")
+                params.extend([f"%{term}%", f"%{term}%"])
+            sql += " AND (" + " OR ".join(address_ors) + ")"
+        if business_area_terms:
+            business_ors = []
+            for term in business_area_terms:
+                business_ors.append("COALESCE(site_location, '') ILIKE %s")
+                params.append(f"%{term}%")
+            sql += " AND (" + " OR ".join(business_ors) + ")"
+        if station_terms:
+            station_ors = []
+            for term in station_terms:
+                station_ors.append(
+                    """
+                    (
+                        COALESCE(nearby_station, '') ILIKE %s
+                        OR EXISTS (
+                            SELECT 1
+                            FROM regexp_split_to_table(COALESCE(nearby_station2, ''), '##') AS station_row
+                            WHERE
+                                split_part(station_row, '|', 1) ILIKE %s
+                                OR split_part(station_row, '|', 2) ILIKE %s
+                                OR split_part(station_row, '|', 3) ILIKE %s
+                        )
                     )
+                    """
                 )
-            """
-            kw = f"%{station_keyword.strip()}%"
-            params.extend([kw, kw, kw, kw])
+                kw = f"%{term}%"
+                params.extend([kw, kw, kw, kw])
+            sql += " AND (" + " OR ".join(station_ors) + ")"
 
         if min_price is not None:
             sql += " AND NULLIF(regexp_replace(COALESCE(sale_price, ''), '[^0-9]', '', 'g'), '')::bigint >= %s"
@@ -619,9 +657,9 @@ def customer_match_search(
                 sql += " AND (" + " OR ".join(usage_ors) + ")"
 
         selected_types = [t.strip() for t in types.split(",") if t.strip()]
-        has_address = bool(address.strip())
-        has_business_area = bool(business_area.strip())
-        has_station_keyword = bool(station_keyword.strip())
+        has_address = bool(address_terms)
+        has_business_area = bool(business_area_terms)
+        has_station_keyword = bool(station_terms)
         has_min_price = min_price is not None
         has_max_price = max_price is not None
         has_cash_hold = (effective_cash_hold_manwon is not None) or (cash_hold_percent is not None)
@@ -691,8 +729,7 @@ def customer_match_search(
         }
         type_columns = [type_map[t] for t in selected_types if t in type_map]
         if type_columns:
-            # 체크된 유형은 모두 충족해야 하므로 AND 조건으로 필터링
-            sql += " AND (" + " AND ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
+            sql += " AND (" + " OR ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
         count_sql = f"SELECT COUNT(*) FROM ({sql}) AS matched_buildings"
         cur.execute(count_sql, tuple(params))

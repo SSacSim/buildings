@@ -376,6 +376,7 @@ def extract_intro_customers_by_building(conn, bd_number: str) -> dict:
                 x.intro_date,
                 x.progress_status,
                 x.intro_cost,
+                x.manager_name,
                 x.intro_note
             FROM (
                 SELECT DISTINCT ON (cip.customer_number)
@@ -385,6 +386,7 @@ def extract_intro_customers_by_building(conn, bd_number: str) -> dict:
                     cip.intro_date,
                     cip.progress_status,
                     cip.intro_cost,
+                    cip.manager_name,
                     cip.intro_note
                 FROM customer_intro_property cip
                 LEFT JOIN customer_info ci

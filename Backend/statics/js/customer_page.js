@@ -46,31 +46,71 @@ function removeSidebarLock() {
     }
 }
 
-function todayIsoDate() {
+function nowLocalDateTimeMinute() {
     const now = new Date();
+    const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const dd = String(now.getDate()).padStart(2, "0");
-    return `${now.getFullYear()}-${mm}-${dd}`;
+    const hh = String(now.getHours()).padStart(2, "0");
+    const mi = String(now.getMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+function normalizeDateTimeLocal(value) {
+    if (!value) return nowLocalDateTimeMinute();
+    const str = String(value).trim();
+    if (!str) return nowLocalDateTimeMinute();
+
+    const parsed = new Date(str);
+    if (!Number.isNaN(parsed.getTime())) {
+        const yyyy = parsed.getFullYear();
+        const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+        const dd = String(parsed.getDate()).padStart(2, "0");
+        const hh = String(parsed.getHours()).padStart(2, "0");
+        const mi = String(parsed.getMinutes()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        return `${str}T00:00`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str)) {
+        return str.slice(0, 16);
+    }
+
+    return nowLocalDateTimeMinute();
+}
+
+function formatDateTimeForDisplay(value) {
+    return normalizeDateTimeLocal(value).replace("T", " ");
 }
 
 function generateRowId() {
     return `row_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function createEmptyIntroRow() {
+function createEmptyIntroDetail(overrides = {}) {
     return {
-        row_id: generateRowId(),
+        detail_id: generateRowId(),
         intro_id: null,
-        intro_date: todayIsoDate(),
+        intro_date: nowLocalDateTimeMinute(),
         progress_status: "소개",
         intro_cost: "",
         manager_name: "",
+        intro_note: "",
+        ...overrides
+    };
+}
+
+function createEmptyIntroRow() {
+    return {
+        row_id: generateRowId(),
         bd_number: "",
         address: "",
         bd_name: "",
         sale_price: "",
         price_per_pyeong: "",
-        intro_note: ""
+        details: [createEmptyIntroDetail()]
     };
 }
 
@@ -99,70 +139,103 @@ function renderIntroRows() {
         if (thead) thead.classList.add("hidden");
         tbody.innerHTML = `
             <tr>
-                <td colspan="7" class="p-3 text-slate-400">소개 매물이 없습니다. [+ 추가]로 등록하세요.</td>
+                <td colspan="6" class="p-3 text-slate-400">소개 매물이 없습니다. [+ 추가]로 등록하세요.</td>
             </tr>
         `;
         return;
     }
 
-    if (thead) thead.classList.add("hidden");
+    if (thead) thead.classList.remove("hidden");
 
     tbody.innerHTML = introRows.map(row => `
+        <tr class="border-b border-slate-200">
+            <td class="p-1">
+                <button type="button" onclick="openBuildingSearchModal('intro','${row.row_id}')"
+                    class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
+            </td>
+            <td class="p-1">
+                <button type="button" onclick="openIntroBuildingFromRow('${row.row_id}')"
+                    class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-emerald-600 text-white hover:bg-emerald-700">열기</button>
+            </td>
+            <td class="p-1 text-left">
+                <input type="text" value="${row.address || ""}" readonly
+                    onclick="openIntroBuildingFromRow('${row.row_id}')"
+                    class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]"
+                    placeholder="주소">
+            </td>
+            <td class="p-1 text-left">
+                <input type="text" value="${row.bd_name || ""}" readonly
+                    class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]"
+                    placeholder="건물명">
+            </td>
+            <td class="p-1">
+                <input type="text" value="${row.sale_price || ""}" readonly
+                    class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right"
+                    placeholder="매매가">
+            </td>
+            <td class="p-1">
+                <button type="button" onclick="addIntroDetail('${row.row_id}')"
+                    class="px-2 py-1 text-[11px] whitespace-nowrap rounded bg-slate-700 text-white hover:bg-slate-800">+</button>
+            </td>
+        </tr>
         <tr>
-            <td colspan="7" class="p-2 border-b border-slate-200 bg-white">
-                <div class="space-y-1.5">
-                    <div class="grid grid-cols-[1.2fr_1fr_1fr_1fr_auto] gap-1 items-center">
-                        <input type="date" value="${row.intro_date || ""}"
-                            onchange="updateIntroField('${row.row_id}','intro_date', this.value)"
-                            class="w-full px-1 py-0.5 border border-slate-200 rounded text-[10px]">
-                        <select onchange="updateIntroField('${row.row_id}','progress_status', this.value)"
-                            class="w-full px-1 py-0.5 border border-slate-200 rounded text-[10px]">
-                            ${renderStatusOptions(row.progress_status || "준비")}
-                        </select>
-                        <div class="flex items-center gap-1 w-full">
-                            <input type="text" value="${formatThousandsInputValue(row.intro_cost || "")}"
-                                oninput="updateIntroCostField('${row.row_id}', this)"
-                                class="w-full min-w-0 px-1 py-0.5 border border-slate-200 rounded text-[10px] text-right"
-                                placeholder="소개비용">
-                            <span class="shrink-0 text-[10px] text-slate-500">만원</span>
+            <td colspan="6" class="p-2 bg-slate-50 border-b border-slate-200">
+                ${(Array.isArray(row.details) && row.details.length)
+                    ? row.details.map(detail => `
+                        <div class="border border-slate-200 rounded bg-white p-2 ${detail === row.details[row.details.length - 1] ? "" : "mb-2"}">
+                            <div class="grid grid-cols-[1.5fr_1fr] gap-2 items-center mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] font-bold text-slate-600 shrink-0">날짜</span>
+                                    <input type="text" value="${formatDateTimeForDisplay(detail.intro_date)}" readonly
+                                        class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px] bg-slate-50 text-slate-700 cursor-not-allowed">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] font-bold text-slate-600 shrink-0">소개</span>
+                                    <select onchange="updateIntroDetailField('${row.row_id}','${detail.detail_id}','progress_status', this.value)"
+                                        class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px]">
+                                        ${renderStatusOptions(detail.progress_status || "준비")}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] font-bold text-slate-600 shrink-0">소개금액</span>
+                                    <input type="text" value="${formatThousandsInputValue(detail.intro_cost || "")}"
+                                        oninput="updateIntroDetailCostField('${row.row_id}','${detail.detail_id}', this)"
+                                        class="w-full min-w-0 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right"
+                                        placeholder="0">
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] font-bold text-slate-600 shrink-0">담당자</span>
+                                    <input type="text" value="${detail.manager_name || ""}"
+                                        oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','manager_name', this.value)"
+                                        class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px]"
+                                        placeholder="담당자">
+                                </div>
+                                <button type="button" onclick="removeIntroDetail('${row.row_id}','${detail.detail_id}')"
+                                    class="px-2 py-1 text-[11px] rounded bg-red-100 text-red-700 hover:bg-red-200 whitespace-nowrap">삭제</button>
+                            </div>
+                            <div class="flex items-start gap-2">
+                                <span class="text-[11px] font-bold text-slate-600 shrink-0 pt-1">내용</span>
+                                <textarea
+                                    oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','intro_note', this.value)"
+                                    class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px] bg-white resize-y min-h-[56px] leading-4 whitespace-pre-wrap"
+                                    placeholder="소개매물 관련 메모를 입력하세요">${detail.intro_note || ""}</textarea>
+                            </div>
                         </div>
-                        <input type="text" value="${row.manager_name || ""}"
-                            oninput="updateIntroField('${row.row_id}','manager_name', this.value)"
-                            class="w-full px-1 py-0.5 border border-slate-200 rounded text-[10px]"
-                            placeholder="담당자">
-                        <button type="button" onclick="removeIntroRow('${row.row_id}')"
-                            class="px-1.5 py-0.5 text-[10px] rounded bg-red-100 text-red-700 hover:bg-red-200">삭제</button>
-                    </div>
-                    <div class="grid grid-cols-[2.3fr_1.4fr_1fr] gap-1 items-center">
-                        <div class="flex items-center gap-1">
-                            <button type="button" onclick="openBuildingSearchModal('intro','${row.row_id}')"
-                                class="shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
-                            <button type="button"
-                                onclick="openIntroBuildingFromRow('${row.row_id}')"
-                                class="shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[10px] rounded bg-emerald-600 text-white hover:bg-emerald-700">열기</button>
-                            <input type="text" value="${row.address || ""}" readonly
-                                onclick="openIntroBuildingFromRow('${row.row_id}')"
-                                class="w-full min-w-0 bg-slate-50 px-1 py-0.5 border border-slate-200 rounded text-[10px]"
-                                placeholder="주소">
-                        </div>
-                        <input type="text" value="${row.bd_name || ""}" readonly
-                            class="w-full min-w-0 bg-slate-50 px-1 py-0.5 border border-slate-200 rounded text-[10px]"
-                            placeholder="건물명">
-                        <input type="text" value="${row.sale_price || ""}" readonly
-                            class="w-full min-w-0 bg-slate-50 px-1 py-0.5 border border-slate-200 rounded text-[10px] text-right"
-                            placeholder="매매가">
-                    </div>
-                    <div class="flex items-start gap-2">
-                        <span class="text-[10px] font-bold text-slate-500 shrink-0 pt-1">내용</span>
-                        <textarea
-                            oninput="updateIntroField('${row.row_id}','intro_note', this.value)"
-                            class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px] bg-white resize-y min-h-[56px] leading-4 whitespace-pre-wrap"
-                            placeholder="소개매물 관련 메모를 입력하세요">${row.intro_note || ""}</textarea>
-                    </div>
-                </div>
+                    `).join("")
+                    : `<div class="text-[11px] text-slate-400 px-1 py-2">상세 내역이 없습니다. 우측 + 버튼으로 추가하세요.</div>`}
             </td>
         </tr>
     `).join("");
+}
+
+function addIntroDetail(rowId) {
+    const row = introRows.find(r => r.row_id === rowId);
+    if (!row) return;
+    if (!Array.isArray(row.details)) row.details = [];
+    row.details.push(createEmptyIntroDetail());
+    renderIntroRows();
 }
 
 function renderOwnedRows() {
@@ -218,21 +291,25 @@ function addOwnedRow() {
     renderOwnedRows();
 }
 
-function updateIntroField(rowId, key, value) {
+function updateIntroDetailField(rowId, detailId, key, value) {
     const row = introRows.find(r => r.row_id === rowId);
     if (!row) return;
-    row[key] = value;
+    const detail = (row.details || []).find(d => d.detail_id === detailId);
+    if (!detail) return;
+    detail[key] = value;
 }
 
-function updateIntroCostField(rowId, inputEl) {
+function updateIntroDetailCostField(rowId, detailId, inputEl) {
     if (!inputEl) return;
     const formatted = formatThousandsInputValue(inputEl.value);
     inputEl.value = formatted;
-    updateIntroField(rowId, "intro_cost", formatted);
+    updateIntroDetailField(rowId, detailId, "intro_cost", formatted);
 }
 
-function removeIntroRow(rowId) {
-    introRows = introRows.filter(r => r.row_id !== rowId);
+function removeIntroDetail(rowId, detailId) {
+    const row = introRows.find(r => r.row_id === rowId);
+    if (!row || !Array.isArray(row.details)) return;
+    row.details = row.details.filter(d => d.detail_id !== detailId);
     renderIntroRows();
 }
 
@@ -501,19 +578,20 @@ function buildSavePayload() {
 
     const intro_properties = introRows
         .filter(row => row.bd_number)
-        .map(row => ({
-            intro_id: row.intro_id || null,
-            intro_date: row.intro_date || todayIsoDate(),
-            progress_status: row.progress_status || "준비",
-            intro_cost: row.intro_cost || "",
-            manager_name: row.manager_name || "",
-            bd_number: Number(row.bd_number),
-            address: row.address || "",
-            bd_name: row.bd_name || "",
-            sale_price: row.sale_price || "",
-            price_per_pyeong: row.price_per_pyeong || "",
-            intro_note: row.intro_note || ""
-        }));
+        .flatMap(row => (Array.isArray(row.details) ? row.details : [])
+            .map(detail => ({
+                intro_id: detail.intro_id || null,
+                intro_date: detail.intro_date || nowLocalDateTimeMinute(),
+                progress_status: detail.progress_status || "준비",
+                intro_cost: detail.intro_cost || "",
+                manager_name: detail.manager_name || "",
+                bd_number: Number(row.bd_number),
+                address: row.address || "",
+                bd_name: row.bd_name || "",
+                sale_price: row.sale_price || "",
+                price_per_pyeong: row.price_per_pyeong || "",
+                intro_note: detail.intro_note || ""
+            })));
 
     data_detail.owned_properties_json = JSON.stringify(
         ownedRows
@@ -584,20 +662,37 @@ function bindIntroRows(introList) {
         return;
     }
 
-    introRows = introList.map(item => ({
-        row_id: generateRowId(),
-        intro_id: item.intro_id ?? null,
-        intro_date: item.intro_date ? String(item.intro_date).slice(0, 10) : todayIsoDate(),
-        progress_status: item.progress_status || "준비",
-        intro_cost: item.intro_cost || "",
-        manager_name: item.manager_name || "",
-        bd_number: item.bd_number ? String(item.bd_number) : "",
-        address: item.address || "",
-        bd_name: item.bd_name || "",
-        sale_price: item.sale_price || "",
-        price_per_pyeong: item.price_per_pyeong || "",
-        intro_note: item.intro_note || ""
-    }));
+    const grouped = new Map();
+    introList.forEach((item) => {
+        const key = item?.bd_number !== null && item?.bd_number !== undefined
+            ? String(item.bd_number)
+            : `nogroup_${item?.intro_id ?? generateRowId()}`;
+
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                row_id: generateRowId(),
+                bd_number: item?.bd_number !== null && item?.bd_number !== undefined ? String(item.bd_number) : "",
+                address: item?.address || "",
+                bd_name: item?.bd_name || "",
+                sale_price: item?.sale_price || "",
+                price_per_pyeong: item?.price_per_pyeong || "",
+                details: []
+            });
+        }
+
+        const row = grouped.get(key);
+        row.details.push(createEmptyIntroDetail({
+            detail_id: generateRowId(),
+            intro_id: item?.intro_id ?? null,
+            intro_date: normalizeDateTimeLocal(item?.intro_date),
+            progress_status: item?.progress_status || "준비",
+            intro_cost: item?.intro_cost || "",
+            manager_name: item?.manager_name || "",
+            intro_note: item?.intro_note || ""
+        }));
+    });
+
+    introRows = Array.from(grouped.values());
 
     renderIntroRows();
 }

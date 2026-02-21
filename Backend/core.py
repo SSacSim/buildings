@@ -125,21 +125,32 @@ def get_insight_overview(
             WHERE delete_flag = FALSE
         """
         customer_params: list = []
+        address_terms = [term.strip() for term in (address or "").split(",") if term.strip()]
+        site_location_terms = [term.strip() for term in (site_location or "").split(",") if term.strip()]
+        station_terms = [term.strip() for term in (station_keyword or "").split(",") if term.strip()]
 
-        if address.strip():
-            customer_sql += """
-                AND (
-                    COALESCE(company_address, '') ILIKE %s
-                    OR COALESCE(home_address, '') ILIKE %s
-                    OR COALESCE(main_interest_region, '') ILIKE %s
-                    OR COALESCE(buyer_name, '') ILIKE %s
+        if address_terms:
+            address_ors = []
+            for term in address_terms:
+                address_ors.append(
+                    """
+                    (
+                        COALESCE(company_address, '') ILIKE %s
+                        OR COALESCE(home_address, '') ILIKE %s
+                        OR COALESCE(main_interest_region, '') ILIKE %s
+                        OR COALESCE(buyer_name, '') ILIKE %s
+                    )
+                    """
                 )
-            """
-            customer_params.extend([f"%{address.strip()}%"] * 4)
+                customer_params.extend([f"%{term}%"] * 4)
+            customer_sql += " AND (" + " OR ".join(address_ors) + ")"
 
-        if site_location.strip():
-            customer_sql += " AND COALESCE(business_area, '') ILIKE %s"
-            customer_params.append(f"%{site_location.strip()}%")
+        if site_location_terms:
+            site_ors = []
+            for term in site_location_terms:
+                site_ors.append("COALESCE(business_area, '') ILIKE %s")
+                customer_params.append(f"%{term}%")
+            customer_sql += " AND (" + " OR ".join(site_ors) + ")"
 
         customer_sql += " ORDER BY customer_number DESC"
 
@@ -254,9 +265,10 @@ def get_insight_overview(
             if not range_ok:
                 continue
 
-            if station_keyword.strip():
+            if station_terms:
                 cond_station_keyword = str(cond.get("station_keyword") or "").strip()
-                if not cond_station_keyword or station_keyword.strip() not in cond_station_keyword:
+                cond_station_keyword_lower = cond_station_keyword.lower()
+                if not cond_station_keyword or not any(term.lower() in cond_station_keyword_lower for term in station_terms):
                     continue
 
             if not range_overlap(
@@ -299,30 +311,41 @@ def get_insight_overview(
         """
         building_params: list = []
 
-        if address.strip():
-            building_sql += " AND (COALESCE(address, '') ILIKE %s OR COALESCE(bd_name, '') ILIKE %s)"
-            building_params.extend([f"%{address.strip()}%", f"%{address.strip()}%"])
+        if address_terms:
+            address_ors = []
+            for term in address_terms:
+                address_ors.append("(COALESCE(address, '') ILIKE %s OR COALESCE(address_detail, '') ILIKE %s)")
+                building_params.extend([f"%{term}%", f"%{term}%"])
+            building_sql += " AND (" + " OR ".join(address_ors) + ")"
 
-        if site_location.strip():
-            building_sql += " AND COALESCE(site_location, '') ILIKE %s"
-            building_params.append(f"%{site_location.strip()}%")
+        if site_location_terms:
+            site_ors = []
+            for term in site_location_terms:
+                site_ors.append("COALESCE(site_location, '') ILIKE %s")
+                building_params.append(f"%{term}%")
+            building_sql += " AND (" + " OR ".join(site_ors) + ")"
 
-        if station_keyword.strip():
-            building_sql += """
-                AND (
-                    COALESCE(nearby_station, '') ILIKE %s
-                    OR EXISTS (
-                        SELECT 1
-                        FROM regexp_split_to_table(COALESCE(nearby_station2, ''), '##') AS station_row
-                        WHERE
-                            split_part(station_row, '|', 1) ILIKE %s
-                            OR split_part(station_row, '|', 2) ILIKE %s
-                            OR split_part(station_row, '|', 3) ILIKE %s
+        if station_terms:
+            station_ors = []
+            for term in station_terms:
+                station_ors.append(
+                    """
+                    (
+                        COALESCE(nearby_station, '') ILIKE %s
+                        OR EXISTS (
+                            SELECT 1
+                            FROM regexp_split_to_table(COALESCE(nearby_station2, ''), '##') AS station_row
+                            WHERE
+                                split_part(station_row, '|', 1) ILIKE %s
+                                OR split_part(station_row, '|', 2) ILIKE %s
+                                OR split_part(station_row, '|', 3) ILIKE %s
+                        )
                     )
+                    """
                 )
-            """
-            kw = f"%{station_keyword.strip()}%"
-            building_params.extend([kw, kw, kw, kw])
+                kw = f"%{term}%"
+                building_params.extend([kw, kw, kw, kw])
+            building_sql += " AND (" + " OR ".join(station_ors) + ")"
 
         if min_price is not None:
             building_sql += " AND NULLIF(regexp_replace(COALESCE(sale_price, ''), '[^0-9]', '', 'g'), '')::bigint >= %s"
@@ -603,7 +626,7 @@ def get_insight_overview(
 
         type_columns = [type_map[t] for t in selected_types_codes if t in type_map]
         if type_columns:
-            building_sql += " AND (" + " AND ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
+            building_sql += " AND (" + " OR ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
         building_sql += " ORDER BY bi.bd_number DESC"
 

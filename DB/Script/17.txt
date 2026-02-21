@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS customer_intro_property (
     intro_id BIGSERIAL PRIMARY KEY,
     customer_number INTEGER NOT NULL,
     bd_number INTEGER NOT NULL,
-    intro_date DATE DEFAULT CURRENT_DATE,
+    intro_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     progress_status VARCHAR(255),
     address VARCHAR(255),
     bd_name VARCHAR(255),
