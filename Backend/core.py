@@ -23,12 +23,15 @@ app = FastAPI(title="Building Search API")
 
 BASE_DIR = Path(__file__).resolve().parent
 mount_BASE_UPLOAD_DIR = BASE_DIR / "save_file"
+mount_BASE_PHOTO_DIR = BASE_DIR / "photo"
 # 📁 폴더 없으면 자동 생성
 mount_BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+mount_BASE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
 
 # 정적 파일 등록
 app.mount("/statics", StaticFiles(directory="statics"), name="statics")
 app.mount("/save_file",StaticFiles(directory=str(mount_BASE_UPLOAD_DIR)),name="save_file")
+app.mount("/photo",StaticFiles(directory=str(mount_BASE_PHOTO_DIR)),name="photo")
 
 # ✅ router 등록
 app.include_router(customer.router)

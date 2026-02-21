@@ -95,11 +95,21 @@
                         <div class="grid grid-cols-2 gap-2 pt-2">
                             <div class="space-y-1">
                                 <span class="text-[10px] font-bold text-slate-500">[사진]</span>
-                                <div class="h-24 bg-white border border-dashed border-slate-400 flex items-center justify-center text-slate-400 text-[11px] cursor-pointer hover:bg-slate-50">인물 사진</div>
+                                <div id="customerProfilePhotoBox"
+                                    onclick="handleCustomerImageBoxClick('profile')"
+                                    class="h-24 bg-white border border-dashed border-slate-400 flex items-center justify-center text-slate-400 text-[11px] cursor-pointer hover:bg-slate-50 overflow-hidden">
+                                    인물 사진
+                                </div>
+                                <input id="customerImageInput_profile" type="file" accept="image/*" class="hidden">
                             </div>
                             <div class="space-y-1">
                                 <span class="text-[10px] font-bold text-slate-500">[명함]</span>
-                                <div class="h-24 bg-white border border-dashed border-slate-400 flex items-center justify-center text-slate-400 text-[11px] cursor-pointer hover:bg-slate-50">명함 사진(앞, 뒤)</div>
+                                <div id="customerCardPhotoBox"
+                                    onclick="handleCustomerImageBoxClick('card')"
+                                    class="h-24 bg-white border border-dashed border-slate-400 flex items-center justify-center text-slate-400 text-[11px] cursor-pointer hover:bg-slate-50 overflow-hidden">
+                                    명함 사진
+                                </div>
+                                <input id="customerImageInput_card" type="file" accept="image/*" class="hidden">
                             </div>
                         </div>
                     </div>
@@ -516,6 +526,18 @@
                     </thead>
                     <tbody id="buildingSearchResultBody"></tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+    <div id="customerImagePreviewModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl w-[90vw] max-w-[900px] max-h-[90vh] p-3 flex flex-col">
+            <div class="flex justify-end gap-2 mb-2">
+                <button id="customerImageReplaceBtn" type="button" class="px-3 py-1 rounded bg-blue-600 text-white text-sm hover:bg-blue-700">이미지 변경</button>
+                <button id="customerImageDeleteBtn" type="button" class="px-3 py-1 rounded bg-red-600 text-white text-sm hover:bg-red-700">Delete Image</button>
+                <button id="customerImagePreviewCloseBtn" type="button" class="px-3 py-1 rounded bg-slate-100 text-slate-700 text-sm hover:bg-slate-200">닫기</button>
+            </div>
+            <div class="flex-1 min-h-0">
+                <img id="customerImagePreviewImg" src="" alt="미리보기" class="w-full h-full object-contain bg-slate-50 rounded border border-slate-200">
             </div>
         </div>
     </div>

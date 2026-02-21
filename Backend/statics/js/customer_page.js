@@ -12,6 +12,172 @@ const confirmBtn = document.getElementById("confirmDeleteBtn");
 
 let sidebarLocked = false;
 let sidebarOverlay = null;
+const CUSTOMER_IMAGE_SLOTS = ["profile", "card"];
+const customerImageFiles = {
+    profile: null,
+    card: null
+};
+const customerImageUrls = {
+    profile: null,
+    card: null
+};
+let currentPreviewSlot = null;
+
+function isDataUrl(value) {
+    return typeof value === "string" && value.startsWith("data:");
+}
+
+function clearCustomerImageSlot(slot) {
+    customerImageFiles[slot] = null;
+    setCustomerImagePreview(slot, null);
+    const inputEl = document.getElementById(`customerImageInput_${slot}`);
+    if (inputEl) inputEl.value = "";
+}
+
+function getCustomerImageBoxId(slot) {
+    if (slot === "profile") return "customerProfilePhotoBox";
+    if (slot === "card") return "customerCardPhotoBox";
+    return "";
+}
+
+function setCustomerImagePreview(slot, src) {
+    const box = document.getElementById(getCustomerImageBoxId(slot));
+    if (!box) return;
+
+    const placeholder = slot === "profile" ? "인물 사진" : "명함 사진";
+    if (!src) {
+        box.innerHTML = placeholder;
+        customerImageUrls[slot] = null;
+        return;
+    }
+
+    box.innerHTML = `<img src="${src}" class="w-full h-full object-cover" alt="${placeholder}">`;
+    customerImageUrls[slot] = src;
+}
+
+function openCustomerImagePicker(slot) {
+    const inputEl = document.getElementById(`customerImageInput_${slot}`);
+    if (!inputEl) return;
+    inputEl.click();
+}
+
+function handleCustomerImageBoxClick(slot) {
+    const currentSrc = customerImageUrls[slot];
+    if (currentSrc) {
+        openCustomerImagePreview(slot, currentSrc);
+        return;
+    }
+    openCustomerImagePicker(slot);
+}
+
+function openCustomerImagePreview(slot, src) {
+    const modalEl = document.getElementById("customerImagePreviewModal");
+    const imgEl = document.getElementById("customerImagePreviewImg");
+    if (!modalEl || !imgEl || !src) return;
+    currentPreviewSlot = slot;
+    imgEl.src = src;
+    modalEl.classList.remove("hidden");
+    modalEl.classList.add("flex");
+}
+
+function closeCustomerImagePreview() {
+    const modalEl = document.getElementById("customerImagePreviewModal");
+    const imgEl = document.getElementById("customerImagePreviewImg");
+    if (!modalEl || !imgEl) return;
+    modalEl.classList.add("hidden");
+    modalEl.classList.remove("flex");
+    imgEl.src = "";
+    currentPreviewSlot = null;
+}
+
+function handleCustomerImageChange(slot, inputEl) {
+    const file = inputEl?.files?.[0];
+    if (!file) return;
+    customerImageFiles[slot] = file;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        setCustomerImagePreview(slot, e.target?.result);
+    };
+    reader.readAsDataURL(file);
+}
+
+async function uploadCustomerImages(customerNumber) {
+    if (!customerNumber) return;
+    const hasFiles = CUSTOMER_IMAGE_SLOTS.some((slot) => customerImageFiles[slot]);
+    if (!hasFiles) return;
+
+    const fd = new FormData();
+    CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
+        const file = customerImageFiles[slot];
+        if (file) {
+            fd.append(slot, file);
+        }
+    });
+
+    const res = await fetch(`/api/customer/${customerNumber}/images`, {
+        method: "POST",
+        body: fd
+    });
+    if (!res.ok) throw new Error("customer image upload failed");
+    const payload = await res.json();
+    const images = payload?.images || {};
+    CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
+        setCustomerImagePreview(slot, images[slot] || null);
+        customerImageFiles[slot] = null;
+        const inputEl = document.getElementById(`customerImageInput_${slot}`);
+        if (inputEl) inputEl.value = "";
+    });
+}
+
+async function loadCustomerImages(customerNumber) {
+    CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
+        clearCustomerImageSlot(slot);
+    });
+
+    if (!customerNumber) return;
+    try {
+        const res = await fetch(`/api/customer/${customerNumber}/images`);
+        if (!res.ok) return;
+        const payload = await res.json();
+        CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
+            setCustomerImagePreview(slot, payload?.[slot] || null);
+        });
+    } catch (e) {
+        console.error("customer image load failed", e);
+    }
+}
+
+async function deleteCustomerImage(slot) {
+    if (!slot) return;
+
+    const customerNumber = getCustomerNumberFromPath();
+    const currentUrl = customerImageUrls[slot];
+    const hasUnsavedLocalFile = Boolean(customerImageFiles[slot]) || isDataUrl(currentUrl);
+
+    if (!customerNumber || hasUnsavedLocalFile) {
+        clearCustomerImageSlot(slot);
+        closeCustomerImagePreview();
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/customer/${customerNumber}/images/${slot}`, {
+            method: "DELETE"
+        });
+        if (!res.ok) throw new Error("customer image delete failed");
+
+        const payload = await res.json();
+        const images = payload?.images || {};
+        CUSTOMER_IMAGE_SLOTS.forEach((imageSlot) => {
+            setCustomerImagePreview(imageSlot, images[imageSlot] || null);
+        });
+        closeCustomerImagePreview();
+    } catch (e) {
+        console.error("customer image delete failed", e);
+        alert("Failed to delete image.");
+    }
+}
 
 function applySidebarLock() {
     const sidebar = document.getElementById("rightSidebar");
@@ -626,6 +792,7 @@ async function saveBuildingDetail() {
 
         const result = await res.json();
         const savedCustomerNumber = isNew ? result.customer_number : customer_number;
+        await uploadCustomerImages(savedCustomerNumber);
 
         alert("저장 완료");
 
@@ -744,6 +911,7 @@ async function loadCustomerDetail() {
         ownedRows = [];
         renderIntroRows();
         renderOwnedRows();
+        await loadCustomerImages(null);
         return;
     }
 
@@ -763,6 +931,7 @@ async function loadCustomerDetail() {
         }
         bindIntroRows(payload.intro_properties || []);
         bindOwnedRows(payload?.data_detail?.owned_properties_json || "[]");
+        await loadCustomerImages(customerNumber);
     } catch (err) {
         console.error(err);
         alert("고객 정보 로드 실패");
@@ -1122,6 +1291,40 @@ document.addEventListener("DOMContentLoaded", () => {
     const customerMatchSearchBtn = document.getElementById("customerMatchSearchBtn");
     if (customerMatchSearchBtn) {
         customerMatchSearchBtn.addEventListener("click", () => searchCustomerMatchBuildings(1));
+    }
+
+    CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
+        const inputEl = document.getElementById(`customerImageInput_${slot}`);
+        if (!inputEl) return;
+        inputEl.addEventListener("change", (e) => handleCustomerImageChange(slot, e.target));
+    });
+
+    const previewCloseBtn = document.getElementById("customerImagePreviewCloseBtn");
+    if (previewCloseBtn) {
+        previewCloseBtn.addEventListener("click", closeCustomerImagePreview);
+    }
+    const previewReplaceBtn = document.getElementById("customerImageReplaceBtn");
+    if (previewReplaceBtn) {
+        previewReplaceBtn.addEventListener("click", () => {
+            const slotToReplace = currentPreviewSlot;
+            if (!slotToReplace) return;
+            closeCustomerImagePreview();
+            openCustomerImagePicker(slotToReplace);
+        });
+    }
+    const previewDeleteBtn = document.getElementById("customerImageDeleteBtn");
+    if (previewDeleteBtn) {
+        previewDeleteBtn.addEventListener("click", async () => {
+            const slotToDelete = currentPreviewSlot;
+            if (!slotToDelete) return;
+            await deleteCustomerImage(slotToDelete);
+        });
+    }
+    const previewModal = document.getElementById("customerImagePreviewModal");
+    if (previewModal) {
+        previewModal.addEventListener("click", (e) => {
+            if (e.target === previewModal) closeCustomerImagePreview();
+        });
     }
 
     ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword", "matchMinPrice", "matchMaxPrice", "matchStationWalkMin", "matchStationWalkMax", "matchCashHoldManwon", "matchCashHoldPercent", "matchMinYieldInput", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchApprovalYearMin", "matchRoadWidthMin", "matchParkingMin"].forEach((id) => {

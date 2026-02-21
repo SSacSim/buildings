@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS customer_image_info (
+    img_number BIGSERIAL PRIMARY KEY,
+    customer_number INTEGER NOT NULL,
+    slot VARCHAR(30) NOT NULL,
+    root_path VARCHAR(255) NOT NULL,
+    img_name VARCHAR(255) NOT NULL,
+    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    delete_flag BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_image_info_lookup
+ON customer_image_info (customer_number, slot, delete_flag, img_number DESC);

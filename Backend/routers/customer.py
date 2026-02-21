@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Request, HTTPException, Query
+from fastapi import APIRouter, Request, HTTPException, Query, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional, List
 from pydantic import BaseModel, Field
+from pathlib import Path
+import shutil
+import uuid
 
 import sys
 
@@ -12,6 +15,143 @@ import DB_utils
 
 router = APIRouter()
 templates = Jinja2Templates(directory="./templates")
+CUSTOMER_PHOTO_BASE_DIR = Path(__file__).resolve().parent.parent / "photo"
+CUSTOMER_IMAGE_SLOTS = {"profile", "card"}
+
+
+def _ensure_customer_image_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_image_info (
+            img_number BIGSERIAL PRIMARY KEY,
+            customer_number INTEGER NOT NULL,
+            slot VARCHAR(30) NOT NULL,
+            root_path VARCHAR(255) NOT NULL,
+            img_name VARCHAR(255) NOT NULL,
+            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            delete_flag BOOLEAN DEFAULT FALSE
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customer_image_info_lookup
+        ON customer_image_info (customer_number, slot, delete_flag, img_number DESC);
+        """
+    )
+
+
+def _customer_photo_dir(customer_number: int) -> Path:
+    return CUSTOMER_PHOTO_BASE_DIR / str(customer_number)
+
+
+def _customer_image_url(customer_number: int, image_name: str) -> str:
+    return f"/photo/{customer_number}/{image_name}"
+
+
+def _get_customer_images_from_db(cur, customer_number: int) -> dict:
+    cur.execute(
+        """
+        SELECT slot, img_name
+        FROM (
+            SELECT
+                slot,
+                img_name,
+                ROW_NUMBER() OVER (PARTITION BY slot ORDER BY img_number DESC) AS rn
+            FROM customer_image_info
+            WHERE customer_number = %s
+              AND delete_flag = FALSE
+        ) x
+        WHERE x.rn = 1
+        """,
+        (customer_number,)
+    )
+    images = {"profile": None, "card": None}
+    for slot, img_name in cur.fetchall():
+        if slot in images and img_name:
+            images[slot] = _customer_image_url(customer_number, img_name)
+    return images
+
+
+def _upsert_customer_image_record(cur, customer_number: int, slot: str, image_name: str):
+    cur.execute(
+        """
+        UPDATE customer_image_info
+        SET delete_flag = TRUE,
+            update_time = CURRENT_TIMESTAMP
+        WHERE customer_number = %s
+          AND slot = %s
+          AND delete_flag = FALSE
+        """,
+        (customer_number, slot)
+    )
+    cur.execute(
+        """
+        INSERT INTO customer_image_info (customer_number, slot, root_path, img_name, delete_flag)
+        VALUES (%s, %s, %s, %s, FALSE)
+        """,
+        (customer_number, slot, "photo", image_name)
+    )
+
+
+def _save_customer_photo(customer_number: int, slot: str, upload: UploadFile) -> str:
+    if slot not in CUSTOMER_IMAGE_SLOTS:
+        raise HTTPException(status_code=400, detail="invalid slot")
+
+    folder = _customer_photo_dir(customer_number)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    ext = Path(upload.filename or "").suffix.lower() or ".jpg"
+    image_name = f"{slot}_{uuid.uuid4().hex}{ext}"
+    target = folder / image_name
+
+    with target.open("wb") as buffer:
+        shutil.copyfileobj(upload.file, buffer)
+
+    return image_name
+
+
+def _delete_customer_photo_file(customer_number: int, image_name: Optional[str]):
+    if not image_name:
+        return
+    target = _customer_photo_dir(customer_number) / image_name
+    if not target.exists():
+        return
+    try:
+        target.unlink()
+    except Exception:
+        pass
+
+
+def _soft_delete_customer_image(cur, customer_number: int, slot: str) -> Optional[str]:
+    cur.execute(
+        """
+        SELECT img_number, img_name
+        FROM customer_image_info
+        WHERE customer_number = %s
+          AND slot = %s
+          AND delete_flag = FALSE
+        ORDER BY img_number DESC
+        LIMIT 1
+        """,
+        (customer_number, slot)
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    img_number, image_name = row
+    cur.execute(
+        """
+        UPDATE customer_image_info
+        SET delete_flag = TRUE,
+            update_time = CURRENT_TIMESTAMP
+        WHERE img_number = %s
+        """,
+        (img_number,)
+    )
+    return image_name
 
 
 def ensure_customer_intro_table(conn, cur):
@@ -90,6 +230,7 @@ def ensure_customer_intro_table(conn, cur):
         ADD COLUMN IF NOT EXISTS desired_price_manwon VARCHAR(255);
         """
     )
+    _ensure_customer_image_table(cur)
     conn.commit()
 
 
@@ -253,6 +394,101 @@ def search_customer(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.get("/api/customer/{customer_number:int}/images")
+def get_customer_images(customer_number: int):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        return _get_customer_images_from_db(cur, customer_number)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.post("/api/customer/{customer_number:int}/images")
+async def upload_customer_images(
+    customer_number: int,
+    profile: Optional[UploadFile] = File(None),
+    card: Optional[UploadFile] = File(None),
+):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        uploads = {
+            "profile": profile,
+            "card": card,
+        }
+        for slot, upload in uploads.items():
+            if upload is None:
+                continue
+            image_name = _save_customer_photo(customer_number, slot, upload)
+            _upsert_customer_image_record(cur, customer_number, slot, image_name)
+
+        conn.commit()
+        return {
+            "status": "ok",
+            "images": _get_customer_images_from_db(cur, customer_number)
+        }
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.delete("/api/customer/{customer_number:int}/images/{slot}")
+def delete_customer_image(customer_number: int, slot: str):
+    normalized_slot = (slot or "").strip().lower()
+    if normalized_slot not in CUSTOMER_IMAGE_SLOTS:
+        raise HTTPException(status_code=400, detail="invalid slot")
+
+    conn = None
+    cur = None
+    deleted_image_name = None
+
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        deleted_image_name = _soft_delete_customer_image(cur, customer_number, normalized_slot)
+        conn.commit()
+
+        images = _get_customer_images_from_db(cur, customer_number)
+        return {
+            "status": "ok",
+            "deleted": deleted_image_name is not None,
+            "images": images,
+        }
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if deleted_image_name:
+            _delete_customer_photo_file(customer_number, deleted_image_name)
         if cur:
             cur.close()
         if conn:
@@ -987,6 +1223,15 @@ def delete_customer(req: CustomerDeleteRequest):
             UPDATE customer_id
             SET delete_flag = TRUE
             WHERE customer_number = %s
+            """,
+            (customer_number,)
+        )
+
+        cur.execute(
+            """
+            UPDATE customer_image_info
+            SET delete_flag = TRUE, update_time = CURRENT_TIMESTAMP
+            WHERE customer_number = %s AND delete_flag = FALSE
             """,
             (customer_number,)
         )
