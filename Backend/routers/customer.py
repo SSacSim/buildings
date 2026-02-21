@@ -587,6 +587,8 @@ def customer_match_search(
     zoning_categories: str = Query(""),
     usage_categories: str = Query(""),
     types: str = Query(""),
+    customer_number: Optional[int] = Query(None),
+    exclude_intro: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100)
 ):
@@ -595,6 +597,7 @@ def customer_match_search(
     try:
         conn = DB_utils.join_db()
         cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
 
         sql = """
             SELECT
@@ -1031,6 +1034,24 @@ def customer_match_search(
         type_columns = [type_map[t] for t in selected_types if t in type_map]
         if type_columns:
             sql += " AND (" + " OR ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
+
+        if exclude_intro and customer_number is not None:
+            sql += """
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM customer_intro_property cip
+                    WHERE cip.delete_flag = FALSE
+                      AND cip.customer_number = %s
+                      AND (
+                          (cip.bd_number IS NOT NULL AND cip.bd_number = bi.bd_number)
+                          OR (
+                              COALESCE(NULLIF(TRIM(cip.address), ''), '__NO_ADDR__') =
+                              COALESCE(NULLIF(TRIM(bi.address), ''), '__NO_ADDR__')
+                          )
+                      )
+                )
+            """
+            params.append(customer_number)
 
         count_sql = f"SELECT COUNT(*) FROM ({sql}) AS matched_buildings"
         cur.execute(count_sql, tuple(params))

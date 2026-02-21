@@ -277,7 +277,8 @@ function createEmptyIntroRow() {
         bd_name: "",
         sale_price: "",
         price_per_pyeong: "",
-        details: [createEmptyIntroDetail()]
+        details: [createEmptyIntroDetail()],
+        is_expanded: false
     };
 }
 
@@ -294,6 +295,44 @@ function renderStatusOptions(selected) {
     return INTRO_STATUS_OPTIONS
         .map(opt => `<option value="${opt}" ${opt === selected ? "selected" : ""}>${opt}</option>`)
         .join("");
+}
+
+function getLatestIntroCostForRow(row) {
+    if (!row || !Array.isArray(row.details) || !row.details.length) return "";
+
+    let best = null;
+    row.details.forEach((detail, idx) => {
+        const amountRaw = String(detail?.intro_cost || "").replace(/[^0-9]/g, "");
+        if (!amountRaw) return;
+        const amount = Number(amountRaw);
+        if (!Number.isFinite(amount) || amount <= 0) return;
+
+        const dtLocal = normalizeDateTimeLocal(detail?.intro_date);
+        const ts = Date.parse(String(dtLocal || "").replace("T", " "));
+        const timeScore = Number.isFinite(ts) ? ts : 0;
+
+        // 화면 상단(작은 idx)을 최신 우선으로 간주
+        if (!best || timeScore > best.timeScore || (timeScore === best.timeScore && idx < best.idx)) {
+            best = { amount, timeScore, idx };
+        }
+    });
+
+    if (!best) return "";
+    return formatThousandsInputValue(String(best.amount));
+}
+
+function getDisplaySalePriceForIntroRow(row) {
+    const latestIntroCost = getLatestIntroCostForRow(row);
+    if (latestIntroCost) return latestIntroCost;
+    return row?.sale_price || "";
+}
+
+function refreshIntroRowSalePrice(rowId) {
+    const row = introRows.find(r => r.row_id === rowId);
+    if (!row) return;
+    const input = document.querySelector(`[data-intro-sale-row="${rowId}"]`);
+    if (!input) return;
+    input.value = getDisplaySalePriceForIntroRow(row);
 }
 
 function renderIntroRows() {
@@ -336,15 +375,22 @@ function renderIntroRows() {
                     placeholder="건물명">
             </td>
             <td class="p-1">
-                <input type="text" value="${row.sale_price || ""}" readonly
+                <input type="text" value="${getDisplaySalePriceForIntroRow(row)}" readonly
+                    data-intro-sale-row="${row.row_id}"
                     class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right"
                     placeholder="매매가">
             </td>
             <td class="p-1">
-                <button type="button" onclick="addIntroDetail('${row.row_id}')"
-                    class="px-2 py-1 text-[11px] whitespace-nowrap rounded bg-slate-700 text-white hover:bg-slate-800">+</button>
+                <div class="flex items-center justify-center gap-1">
+                    <button type="button" onclick="addIntroDetail('${row.row_id}')"
+                        class="px-2 py-1 text-[11px] whitespace-nowrap rounded bg-slate-700 text-white hover:bg-slate-800">+</button>
+                    <button type="button" onclick="toggleIntroDetails('${row.row_id}')"
+                        class="px-2 py-1 text-[11px] whitespace-nowrap rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                        title="${row.is_expanded ? "접기" : "펼치기"}">${row.is_expanded ? "▲" : "▼"}</button>
+                </div>
             </td>
         </tr>
+        ${row.is_expanded ? `
         <tr>
             <td colspan="6" class="p-2 bg-slate-50 border-b border-slate-200">
                 ${(Array.isArray(row.details) && row.details.length)
@@ -360,21 +406,21 @@ function renderIntroRows() {
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">소개</span>
                                     <select onchange="updateIntroDetailField('${row.row_id}','${detail.detail_id}','progress_status', this.value)"
                                         class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px]">
-                                        ${renderStatusOptions(detail.progress_status || "준비")}
+                                        ${renderStatusOptions(detail.progress_status || "소개")}
                                     </select>
                                 </div>
                             </div>
                             <div class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center mb-2">
                                 <div class="flex items-center gap-2">
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">소개금액</span>
-                                    <input type="text" value="${formatThousandsInputValue(detail.intro_cost || "")}"
+                                    <input type="text" value="${formatThousandsInputValue(detail.intro_cost || "")}" 
                                         oninput="updateIntroDetailCostField('${row.row_id}','${detail.detail_id}', this)"
                                         class="w-full min-w-0 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right"
                                         placeholder="0">
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">담당자</span>
-                                    <input type="text" value="${detail.manager_name || ""}"
+                                    <input type="text" value="${detail.manager_name || ""}" 
                                         oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','manager_name', this.value)"
                                         class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px]"
                                         placeholder="담당자">
@@ -394,7 +440,15 @@ function renderIntroRows() {
                     : `<div class="text-[11px] text-slate-400 px-1 py-2">상세 내역이 없습니다. 우측 + 버튼으로 추가하세요.</div>`}
             </td>
         </tr>
+        ` : ""}
     `).join("");
+}
+
+function toggleIntroDetails(rowId) {
+    const row = introRows.find(r => r.row_id === rowId);
+    if (!row) return;
+    row.is_expanded = !row.is_expanded;
+    renderIntroRows();
 }
 
 function addIntroDetail(rowId) {
@@ -402,6 +456,7 @@ function addIntroDetail(rowId) {
     if (!row) return;
     if (!Array.isArray(row.details)) row.details = [];
     row.details.push(createEmptyIntroDetail());
+    row.is_expanded = true;
     renderIntroRows();
 }
 
@@ -471,6 +526,7 @@ function updateIntroDetailCostField(rowId, detailId, inputEl) {
     const formatted = formatThousandsInputValue(inputEl.value);
     inputEl.value = formatted;
     updateIntroDetailField(rowId, detailId, "intro_cost", formatted);
+    refreshIntroRowSalePrice(rowId);
 }
 
 function removeIntroDetail(rowId, detailId) {
@@ -853,7 +909,8 @@ function bindIntroRows(introList) {
                 bd_name: item?.bd_name || "",
                 sale_price: item?.sale_price || "",
                 price_per_pyeong: item?.price_per_pyeong || "",
-                details: []
+                details: [],
+                is_expanded: false
             });
         }
 
@@ -966,7 +1023,7 @@ function setCustomerMatchCount(count) {
     const el = document.getElementById("customerMatchCount");
     if (!el) return;
     const safe = Number.isFinite(Number(count)) ? Number(count) : 0;
-    el.textContent = `(${safe.toLocaleString()}건)`;
+    el.textContent = `(${safe.toLocaleString()}\uAC74)`;
 }
 
 function refreshCustomerMatchDownloadButton() {
@@ -1252,6 +1309,11 @@ async function searchCustomerMatchBuildings(page = 1) {
     if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
     if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
     if (checkedTypes.length) params.set("types", checkedTypes.join(","));
+    const customerNumber = getCustomerNumberFromPath();
+    if (customerNumber) {
+        params.set("customer_number", String(customerNumber));
+        params.set("exclude_intro", "true");
+    }
     params.set("page", String(customerMatchCurrentPage));
     params.set("page_size", String(CUSTOMER_MATCH_PAGE_SIZE));
 
