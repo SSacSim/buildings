@@ -1082,8 +1082,11 @@ async function downloadSelectedMatchPpt() {
 
         const blob = await res.blob();
         const cd = res.headers.get("content-disposition") || "";
-        const match = cd.match(/filename=\"?([^\";]+)\"?/i);
-        const filename = match ? decodeURIComponent(match[1]) : `compare_${Date.now()}.pptx`;
+        const filenameStarMatch = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+        const filenameMatch = cd.match(/filename\s*=\s*\"?([^\";]+)\"?/i);
+        const filename = filenameStarMatch
+            ? decodeURIComponent(filenameStarMatch[1])
+            : (filenameMatch ? decodeURIComponent(filenameMatch[1]) : `[ERA]매매물건비교표_${Date.now()}.pptx`);
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;

@@ -327,7 +327,7 @@ def run(bd_numbers):
     for idx, chunk in enumerate(chunks):
         _fill_slide(slides_to_fill[idx], chunk)
 
-    out_name = f"compare_{datetime.now().strftime('%Y%m%d')}_{uuid.uuid4().hex[:6]}.pptx"
+    out_name = f"[ERA]매매물건비교표_{datetime.now().strftime('%Y%m%d')}.pptx"
     out_path = PPT_DIR / "statics" / out_name
     prs.save(str(out_path))
     return str(out_path), out_name

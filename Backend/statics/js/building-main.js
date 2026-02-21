@@ -4,6 +4,7 @@ let currentcategory = '';
 let currentSearchMode = 'building';
 let customerSearchCache = [];
 let currentBuildingTotalPages = null;
+const BUILDING_PAGE_SIZE = 15;
 const pageGroupSize = 5;
 
 function setStatusOptions(mode) {
@@ -406,7 +407,8 @@ async function fetchBuildings(page , category) {
         renderBuildingCards(data.slice(1));
 
         const totalCount = data.length > 0 ? data[0].total_count : 0;
-        renderPagination(page, totalCount, null);
+        currentBuildingTotalPages = totalCount > 0 ? Math.ceil(totalCount / BUILDING_PAGE_SIZE) : 0;
+        renderPagination(page, totalCount, currentBuildingTotalPages);
 
     } catch (err) {
         loading.classList.add('hidden');
@@ -465,8 +467,11 @@ function renderPagination(page , item_count, total_pages = null) {
 }
 
 function goPage(p) {
-    currentPage = p;
-    fetchBuildings(p,currentcategory);
+    const safePage = currentBuildingTotalPages && currentBuildingTotalPages > 0
+        ? Math.min(Math.max(1, p), currentBuildingTotalPages)
+        : Math.max(1, p);
+    currentPage = safePage;
+    fetchBuildings(safePage,currentcategory);
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
