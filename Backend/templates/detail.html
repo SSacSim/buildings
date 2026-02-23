@@ -1217,7 +1217,7 @@
 
                         <div class="flex items-stretch flex-1 min-h-[64px]">
                             <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">비고</div>
-                            <textarea id="etc_memo" name="etc_memo" class="flex-1 p-2 bg-white text-[12px] outline-none resize overflow-auto"></textarea>
+                            <textarea id="etc_memo" name="etc_memo" class="flex-1 p-2 bg-white text-[12px] outline-none resize-y overflow-auto min-h-[64px] max-w-full"></textarea>
                         </div>
                     </div>
 
@@ -2134,7 +2134,7 @@
 
             <textarea
                 placeholder="진행 내용을 입력하세요..."
-                class="h_memo w-full p-2 bg-white border border-slate-300 outline-none text-[12px] resize-none rounded-md h-16 shadow-inner"
+                class="h_memo w-full max-w-full p-2 bg-white border border-slate-300 outline-none text-[12px] resize-y overflow-auto rounded-md h-16 min-h-[4rem] shadow-inner"
             >${content}</textarea>
         `;
     }

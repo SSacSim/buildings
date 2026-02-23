@@ -14,6 +14,7 @@ const confirmBtn = document.getElementById("confirmDeleteBtn");
 
 let sidebarLocked = false;
 let sidebarOverlay = null;
+let isCustomerSidebarResizing = false;
 const CUSTOMER_IMAGE_SLOTS = ["profile", "card"];
 const customerImageFiles = {
     profile: null,
@@ -212,6 +213,50 @@ function removeSidebarLock() {
         sidebarOverlay.remove();
         sidebarOverlay = null;
     }
+}
+
+function initCustomerSidebarResize() {
+    const resizer = document.getElementById("customerSidebarResizer");
+    const sidebar = document.getElementById("rightSidebar");
+    const customerForm = document.getElementById("customerForm");
+    if (!resizer || !sidebar || !customerForm) return;
+
+    const minWidth = 360;
+    if (!sidebar.style.width) sidebar.style.width = `${Math.round(sidebar.getBoundingClientRect().width)}px`;
+
+    let startX = 0;
+    let startWidth = 0;
+
+    const onMouseMove = (e) => {
+        if (!isCustomerSidebarResizing) return;
+        const formWidth = customerForm.getBoundingClientRect().width;
+        const maxWidth = Math.max(minWidth, Math.min(900, formWidth - 680));
+        const delta = startX - e.clientX;
+        const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + delta));
+        sidebar.style.width = `${Math.round(nextWidth)}px`;
+    };
+
+    const onMouseUp = () => {
+        if (!isCustomerSidebarResizing) return;
+        isCustomerSidebarResizing = false;
+        resizer.classList.remove("dragging");
+        document.body.style.userSelect = "";
+        document.body.style.cursor = "";
+        window.removeEventListener("mousemove", onMouseMove);
+        window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    resizer.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        isCustomerSidebarResizing = true;
+        startX = e.clientX;
+        startWidth = sidebar.getBoundingClientRect().width;
+        resizer.classList.add("dragging");
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "col-resize";
+        window.addEventListener("mousemove", onMouseMove);
+        window.addEventListener("mouseup", onMouseUp);
+    });
 }
 
 function nowLocalDateTimeMinute() {
@@ -1417,6 +1462,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
         removeSidebarLock();
     }
+    initCustomerSidebarResize();
 
     loadCustomerDetail();
 
