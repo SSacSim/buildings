@@ -1450,6 +1450,7 @@ async def upload_building_images(
 
     # ✅ section별 업로드 개수 카운트
     for action, section, index in zip(actions, sections, indices):
+        index = int(index)
         print(action, section, index)
         if action == "D":
             ## Image DB 업데이트 flag True 변경  
@@ -1462,7 +1463,6 @@ async def upload_building_images(
             ext = Path(image.filename).suffix or ".jpg"
 
             # 🔢 section_번호_파일명
-            index = image.filename.split("_")[1].split(".jpg")[0]
             image_name= f"{uuid.uuid4().hex}{ext}"
             filename = f"{section}_{index}_{image_name}"
 

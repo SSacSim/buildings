@@ -1281,13 +1281,15 @@
             <!-- 숨긴 파일 input -->
             <input id="imageInput"
                 type="file"
+                multiple
                 accept="image/*"
                 onchange="handleImageUpload(this)"
                 class="hidden">
 
             <!-- 커스텀 버튼 -->
             <div class="mb-3 bg-blue-600 hover:bg-blue-700
-                        text-white font-semibold py-2 rounded-lg transition text-center" >
+                        text-white font-semibold py-2 rounded-lg transition text-center cursor-pointer"
+                onclick="openImageUploadDialog()">
                 📷 이미지 업로드 (최대 6장)
             </div>
 
@@ -1310,10 +1312,41 @@
 
     <div id="previewModal"
         class="fixed inset-0 bg-black/80 hidden flex items-center justify-center z-[60]"
-        onclick="closePreviewModal()">
+        onclick="handlePreviewBackdropClick(event)">
+        <div class="relative w-[92vw] h-[92vh] flex items-center justify-center">
+            <div class="absolute inset-y-0 left-0 w-1/2 cursor-w-resize" onclick="showPrevPreviewImage(event)"></div>
+            <div class="absolute inset-y-0 right-0 w-1/2 cursor-e-resize" onclick="showNextPreviewImage(event)"></div>
 
-    <img id="previewImage"
-        class="max-w-[90vw] max-h-[90vh] rounded shadow-lg">
+            <img id="previewImage"
+                class="max-w-[90vw] max-h-[90vh] rounded shadow-lg relative z-10 pointer-events-none">
+
+            <button type="button"
+                class="absolute left-3 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white w-10 h-10 rounded-full text-xl"
+                onclick="showPrevPreviewImage(event)">&#8249;</button>
+            <button type="button"
+                class="absolute right-3 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white w-10 h-10 rounded-full text-xl"
+                onclick="showNextPreviewImage(event)">&#8250;</button>
+            <button type="button"
+                class="absolute top-3 right-3 z-20 bg-black/50 hover:bg-black/70 text-white w-9 h-9 rounded-full text-lg"
+                onclick="closePreviewModal(); event.stopPropagation();">&times;</button>
+
+            <div id="previewCounter"
+                class="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 bg-black/55 text-white text-xs px-3 py-1 rounded-full"></div>
+
+            <div id="previewLoadingBadge"
+                class="hidden absolute top-3 left-3 z-20 bg-black/55 text-white text-xs px-3 py-1 rounded-full flex items-center gap-2">
+                <span class="inline-block w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"></span>
+                <span>이미지 로딩 중...</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageLoadingOverlay"
+        class="hidden fixed inset-0 z-[70] bg-black/35 flex items-center justify-center">
+        <div class="bg-white text-slate-800 rounded-xl shadow-xl px-4 py-3 flex items-center gap-3">
+            <span class="inline-block w-5 h-5 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></span>
+            <span id="imageLoadingText" class="text-sm font-semibold">이미지 처리 중...</span>
+        </div>
     </div>
 
     <!-- 삭제 확인 모달 -->
@@ -1658,6 +1691,8 @@
                 
                 // Image load setting 
                 if (item.image_info){
+                    const preloadTargets = [];
+                    showImageLoading("이미지 불러오는 중...");
                     Object.entries(item.image_info).forEach(([boxKey, imageList]) => {
 
                         // boxKey 없으면 초기화
@@ -1668,8 +1703,10 @@
 
                         imageList.forEach(img => {
                             const index = Number(img.section_index);
+                            revokeIfLocalPreviewUrl(imageStore[boxKey][index]);
                             imageStore[boxKey][index] = img.url;   // ⭐ URL 주입
                             imagechange[boxKey][index] = false;    // 변경 아님
+                            if (img.url) preloadTargets.push(img.url);
                         });
 
                         // UI 갱신
@@ -1680,9 +1717,14 @@
                     if (currentBox) {
                         renderModalImages();
                     }
+                    if (preloadTargets.length) {
+                        await Promise.all(preloadTargets.map(preloadImage));
+                    }
+                    hideImageLoading();
                 }
             }
         } catch (error) {
+            hideImageLoading();
             console.error("데이터 로드 실패:", error);
             alert("정보를 불러오지 못했습니다.");
         }
@@ -1828,20 +1870,23 @@
         console.log(changes)
         if (!changes.length) return; // 🔥 변경 없으면 업로드 안 함
 
+        showImageLoading("이미지 업로드 중...");
+        try {
         const fd = new FormData();
         
-        changes.forEach(item => {
+        for (const item of changes) {
             fd.append("sections", item.section);
             fd.append("indices", item.index);
             fd.append("actions", item.image ? "U" : "D");
 
             if (item.image) {
-                fd.append(
-                    "images",
-                    base64ToFile(item.image, `${item.section}_${item.index}.jpg`)
+                const file = await imageSourceToFile(
+                    item.image,
+                    `${item.section}_${item.index}.jpg`
                 );
+                fd.append("images", file);
             }
-        });
+        }
         
 
         console.log("fd 객체 확인 ")
@@ -1859,6 +1904,10 @@
 
         if (!res.ok) {
             throw new Error("이미지 업로드 실패");
+        }
+        markImageSlotsSynced(changes);
+        } finally {
+            hideImageLoading();
         }
     }
 
@@ -1903,14 +1952,20 @@
                         index,
                         image: imageStore[section][index] // null or base64
                     });
-                    // 변경했다고 체크 진행
-                    imagechange[section][index] = false
                 }
             });
         });
         console.log("after check changes")
         console.log(imagechange)
         return changes;
+    }
+
+    function markImageSlotsSynced(changes) {
+        changes.forEach(({ section, index }) => {
+            if (!imagechange[section]) return;
+            if (index < 0 || index >= imagechange[section].length) return;
+            imagechange[section][index] = false;
+        });
     }
 
     // 파일로 변환
@@ -1929,6 +1984,23 @@
         }
 
         return new File([u8arr], filename, { type: mime });
+    }
+
+    async function imageSourceToFile(source, filename) {
+        if (typeof source === "string" && source.startsWith("data:")) {
+            return base64ToFile(source, filename);
+        }
+
+        const res = await fetch(source);
+        if (!res.ok) {
+            throw new Error("기존 이미지 파일 변환 실패");
+        }
+        const blob = await res.blob();
+        const ext = (blob.type && blob.type.includes("/"))
+            ? `.${blob.type.split("/")[1].replace("jpeg", "jpg")}`
+            : ".jpg";
+        const safeName = filename.replace(/\.[a-zA-Z0-9]+$/, "") + ext;
+        return new File([blob], safeName, { type: blob.type || "image/jpeg" });
     }
 
 
@@ -2501,6 +2573,49 @@
     let currentBox = null;
     // 이미지 업로드에서 어떤 Slot을 눌렀는가?
     let selectedSlotIndex = null;
+    let draggedImageSlotIndex = null;
+    let previewImages = [];
+    let previewCurrentIndex = -1;
+    let imageLoadingDepth = 0;
+    const localObjectUrls = new Set();
+
+    function showImageLoading(message = "이미지 처리 중...") {
+        imageLoadingDepth += 1;
+        const overlay = document.getElementById('imageLoadingOverlay');
+        const text = document.getElementById('imageLoadingText');
+        if (text) text.innerText = message;
+        if (overlay) overlay.classList.remove('hidden');
+    }
+
+    function hideImageLoading() {
+        imageLoadingDepth = Math.max(0, imageLoadingDepth - 1);
+        if (imageLoadingDepth > 0) return;
+        const overlay = document.getElementById('imageLoadingOverlay');
+        if (overlay) overlay.classList.add('hidden');
+    }
+
+    function preloadImage(src) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            img.src = src;
+        });
+    }
+
+    function createLocalPreviewUrl(file) {
+        const url = URL.createObjectURL(file);
+        localObjectUrls.add(url);
+        return url;
+    }
+
+    function revokeIfLocalPreviewUrl(src) {
+        if (typeof src !== "string") return;
+        if (!src.startsWith("blob:")) return;
+        if (!localObjectUrls.has(src)) return;
+        URL.revokeObjectURL(src);
+        localObjectUrls.delete(src);
+    }
 
     function closeImageModal() {
         document.getElementById('imageModal').classList.add('hidden');
@@ -2513,29 +2628,131 @@
         renderModalImages();
     }
 
+    function openImageUploadDialog() {
+        selectedSlotIndex = null;
+        document.getElementById('imageInput').click();
+    }
+
+    function findNextEmptySlot(boxKey, startIndex = 0) {
+        const images = imageStore[boxKey] || [];
+        const begin = Math.max(0, startIndex);
+        for (let i = begin; i < images.length; i++) {
+            if (!images[i]) return i;
+        }
+        for (let i = 0; i < begin; i++) {
+            if (!images[i]) return i;
+        }
+        return -1;
+    }
+
+    function markSlotChanged(boxKey, index) {
+        if (!imagechange[boxKey]) return;
+        if (index < 0 || index >= imagechange[boxKey].length) return;
+        imagechange[boxKey][index] = true;
+    }
+
+    function moveImageSlot(boxKey, fromIndex, toIndex) {
+        const images = imageStore[boxKey];
+        if (!images) return;
+        if (fromIndex === toIndex) return;
+        if (fromIndex < 0 || toIndex < 0 || fromIndex >= images.length || toIndex >= images.length) return;
+        if (!images[fromIndex]) return;
+
+        if (!images[toIndex]) {
+            // 빈 슬롯으로 이동: 다른 슬롯은 유지, 소스만 비움
+            images[toIndex] = images[fromIndex];
+            images[fromIndex] = null;
+        } else {
+            // 이미지 슬롯끼리 드롭: 자리 교환
+            const temp = images[toIndex];
+            images[toIndex] = images[fromIndex];
+            images[fromIndex] = temp;
+        }
+        markSlotChanged(boxKey, fromIndex);
+        markSlotChanged(boxKey, toIndex);
+    }
+
     function handleImageUpload(input) {
-        const file = input.files[0];
+        const files = Array.from(input.files || []);
+        if (!files.length) return;
                  // ⭐ 비동기로 인한 값 변경 방지 
         const slotIndex = selectedSlotIndex;
         const boxKey = currentBox;
-        if (!file) return;
+        if (!boxKey) return;
+
+        if (selectedSlotIndex !== null && files.length > 1) {
+            const targetIndices = [slotIndex];
+            for (let i = slotIndex + 1; i < imageStore[boxKey].length; i++) {
+                if (!imageStore[boxKey][i]) targetIndices.push(i);
+            }
+            for (let i = 0; i < slotIndex; i++) {
+                if (!imageStore[boxKey][i]) targetIndices.push(i);
+            }
+
+            const filesToUse = files.slice(0, targetIndices.length);
+            if (files.length > filesToUse.length) {
+                alert(`빈 슬롯 ${targetIndices.length}개만 업로드했습니다.`);
+            }
+
+            showImageLoading("이미지 반영 중...");
+            filesToUse.forEach((file, idx) => {
+                const targetIndex = targetIndices[idx];
+                revokeIfLocalPreviewUrl(imageStore[boxKey][targetIndex]);
+                imageStore[boxKey][targetIndex] = createLocalPreviewUrl(file);
+                imagechange[boxKey][targetIndex] = true;
+            });
+            renderModalImages();
+            renderMainBox(boxKey);
+            hideImageLoading();
+
+            selectedSlotIndex = null;
+            input.value = '';
+            return;
+        }
 
         // 🔹 1️⃣ 슬롯 클릭으로 업로드한 경우 (1장만)
         if (selectedSlotIndex !== null) {
-            const reader = new FileReader();
-            reader.onload = e => {
-                imageStore[boxKey][slotIndex] = e.target.result;
-                imagechange[boxKey][slotIndex] = true;
-                renderModalImages();
-                renderMainBox(boxKey);
-            };
-            reader.readAsDataURL(file);
+            const file = files[0];
+            showImageLoading("이미지 반영 중...");
+            revokeIfLocalPreviewUrl(imageStore[boxKey][slotIndex]);
+            imageStore[boxKey][slotIndex] = createLocalPreviewUrl(file);
+            imagechange[boxKey][slotIndex] = true;
+            renderModalImages();
+            renderMainBox(boxKey);
+            hideImageLoading();
 
             // ⭐ 반드시 초기화
             selectedSlotIndex = null;
             input.value = '';
             return;
         }
+
+        const availableSlots = imageStore[boxKey].filter(v => !v).length;
+        if (availableSlots <= 0) {
+            alert("빈 슬롯이 없습니다. 기존 이미지를 삭제 후 다시 업로드하세요.");
+            input.value = '';
+            return;
+        }
+
+        const filesToUse = files.slice(0, availableSlots);
+        if (files.length > filesToUse.length) {
+            alert(`빈 슬롯 ${availableSlots}개만 업로드했습니다.`);
+        }
+
+        showImageLoading("이미지 반영 중...");
+        filesToUse.forEach((file, order) => {
+            const targetIndex = findNextEmptySlot(boxKey, order);
+            if (targetIndex < 0) {
+                return;
+            }
+            revokeIfLocalPreviewUrl(imageStore[boxKey][targetIndex]);
+            imageStore[boxKey][targetIndex] = createLocalPreviewUrl(file);
+            imagechange[boxKey][targetIndex] = true;
+        });
+        renderModalImages();
+        renderMainBox(boxKey);
+        hideImageLoading();
+        input.value = '';
 
         // 🔹 기존 "버튼으로 여러 장 업로드" 로직은 그대로 두고 싶다면
         // (여기에 기존 코드 유지)
@@ -2560,9 +2777,17 @@
                 console.log("이미지")
                 list.innerHTML += `
                 <div class="relative group bg-slate-200 border-2 border-dashed border-slate-400
-                    overflow-hidden rounded h-32">
+                    overflow-hidden rounded h-32"
+                    data-slot-index="${i}"
+                    draggable="true"
+                    ondragstart="handleModalImageDragStart(event, ${i})"
+                    ondragover="handleModalImageDragOver(event)"
+                    ondrop="handleModalImageDrop(event, ${i})"
+                    ondragend="handleModalImageDragEnd(event)">
                     <img src="${src}"
-                        onclick="openPreviewModal('${src}')"
+                        onclick="openPreviewModalByIndex(${i})"
+                        loading="lazy"
+                        decoding="async"
                         class="absolute inset-0 w-full h-full object-cover cursor-pointer">
 
                     <button
@@ -2582,7 +2807,10 @@
                     onclick="selectSlot(${i})"
                     class="bg-slate-200 border-2 border-dashed border-slate-400
                         flex items-center justify-center text-slate-400
-                        text-4xl font-bold cursor-pointer hover:bg-slate-300 h-32">
+                        text-4xl font-bold cursor-pointer hover:bg-slate-300 h-32"
+                    data-slot-index="${i}"
+                    ondragover="handleModalImageDragOver(event)"
+                    ondrop="handleModalImageDrop(event, ${i})">
                     +
                 </div>
                 `;
@@ -2593,6 +2821,53 @@
     function selectSlot(index) {
         selectedSlotIndex = index;
         document.getElementById('imageInput').click();
+    }
+
+    function handleModalImageDragStart(event, index) {
+        if (!currentBox || !imageStore[currentBox]?.[index]) {
+            event.preventDefault();
+            return;
+        }
+        draggedImageSlotIndex = index;
+        if (event.dataTransfer) {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", String(index));
+        }
+        event.currentTarget.classList.add("opacity-60");
+    }
+
+    function handleModalImageDragOver(event) {
+        if (draggedImageSlotIndex === null) return;
+        event.preventDefault();
+        if (event.dataTransfer) {
+            event.dataTransfer.dropEffect = "move";
+        }
+    }
+
+    function handleModalImageDrop(event, targetIndex) {
+        event.preventDefault();
+        if (!currentBox || draggedImageSlotIndex === null) return;
+        const fromIndex = draggedImageSlotIndex;
+        draggedImageSlotIndex = null;
+        if (fromIndex === targetIndex) return;
+
+        showImageLoading("이미지 순서 반영 중...");
+        requestAnimationFrame(() => {
+            try {
+                moveImageSlot(currentBox, fromIndex, targetIndex);
+                renderModalImages();
+                renderMainBox(currentBox);
+            } finally {
+                hideImageLoading();
+            }
+        });
+    }
+
+    function handleModalImageDragEnd(event) {
+        draggedImageSlotIndex = null;
+        if (event?.currentTarget) {
+            event.currentTarget.classList.remove("opacity-60");
+        }
     }
 
     function renderMainBox(boxKey) {
@@ -2610,6 +2885,8 @@
         const imageCount = images.filter(img => img !== null).length;
         box.innerHTML += `
             <img src="${firstImage}"
+                loading="lazy"
+                decoding="async"
                 class="absolute inset-0 w-full h-full object-cover">
             <div class="absolute bottom-1 right-1 bg-black/60
                         text-white text-xs px-2 rounded">
@@ -2619,20 +2896,97 @@
     }
 
 
-    function openPreviewModal(src) {
+    function renderPreviewImage() {
         const modal = document.getElementById('previewModal');
         const img = document.getElementById('previewImage');
+        const counter = document.getElementById('previewCounter');
+        const loadingBadge = document.getElementById('previewLoadingBadge');
+        if (!modal || !img || !counter) return;
+        if (!previewImages.length || previewCurrentIndex < 0) return;
 
-        img.src = src;
+        if (loadingBadge) loadingBadge.classList.remove('hidden');
+        img.onload = () => {
+            if (loadingBadge) loadingBadge.classList.add('hidden');
+        };
+        img.onerror = () => {
+            if (loadingBadge) loadingBadge.classList.add('hidden');
+        };
+        img.src = previewImages[previewCurrentIndex];
+        counter.innerText = `${previewCurrentIndex + 1} / ${previewImages.length}`;
         modal.classList.remove('hidden');
+    }
+
+    function openPreviewModalByIndex(slotIndex) {
+        if (!currentBox) return;
+        const allImages = imageStore[currentBox] || [];
+        const filteredImages = allImages.filter(Boolean);
+        if (!filteredImages.length) return;
+
+        const clickedSrc = allImages[slotIndex];
+        const idx = filteredImages.indexOf(clickedSrc);
+        previewImages = filteredImages;
+        previewCurrentIndex = idx >= 0 ? idx : 0;
+        renderPreviewImage();
+    }
+
+    function openPreviewModal(src) {
+        if (!src) return;
+        if (!currentBox) {
+            previewImages = [src];
+            previewCurrentIndex = 0;
+            renderPreviewImage();
+            return;
         }
-    
-    // 미리보기 닫기
+
+        const allImages = imageStore[currentBox] || [];
+        const filteredImages = allImages.filter(Boolean);
+        if (!filteredImages.length) {
+            previewImages = [src];
+            previewCurrentIndex = 0;
+            renderPreviewImage();
+            return;
+        }
+        const idx = filteredImages.indexOf(src);
+        previewImages = filteredImages;
+        previewCurrentIndex = idx >= 0 ? idx : 0;
+        renderPreviewImage();
+    }
+
+    function showPrevPreviewImage(event) {
+        if (event) event.stopPropagation();
+        if (!previewImages.length) return;
+        previewCurrentIndex = (previewCurrentIndex - 1 + previewImages.length) % previewImages.length;
+        renderPreviewImage();
+    }
+
+    function showNextPreviewImage(event) {
+        if (event) event.stopPropagation();
+        if (!previewImages.length) return;
+        previewCurrentIndex = (previewCurrentIndex + 1) % previewImages.length;
+        renderPreviewImage();
+    }
+
+    function handlePreviewBackdropClick(event) {
+        if (event.target.id === 'previewModal') {
+            closePreviewModal();
+        }
+    }
+
     function closePreviewModal() {
-        document.getElementById('previewModal').classList.add('hidden');
+        const modal = document.getElementById('previewModal');
+        const img = document.getElementById('previewImage');
+        const counter = document.getElementById('previewCounter');
+        const loadingBadge = document.getElementById('previewLoadingBadge');
+        if (modal) modal.classList.add('hidden');
+        if (img) img.src = '';
+        if (counter) counter.innerText = '';
+        if (loadingBadge) loadingBadge.classList.add('hidden');
+        previewImages = [];
+        previewCurrentIndex = -1;
     }
     // 이미지 제거 
     function removeImage(index) {
+        revokeIfLocalPreviewUrl(imageStore[currentBox][index]);
         imageStore[currentBox][index] = null;
         imagechange[currentBox][index] = true;
         renderModalImages();
