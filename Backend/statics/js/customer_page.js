@@ -307,7 +307,7 @@ function createEmptyIntroDetail(overrides = {}) {
         detail_id: generateRowId(),
         intro_id: null,
         intro_date: nowLocalDateTimeMinute(),
-        progress_status: "소개",
+        progress_status: "준비",
         intro_cost: "",
         manager_name: "",
         intro_note: "",
@@ -365,6 +365,33 @@ function getLatestIntroCostForRow(row) {
 
     if (!best) return "";
     return formatThousandsInputValue(String(best.amount));
+}
+
+function getLatestIntroDetailForRow(row) {
+    if (!row || !Array.isArray(row.details) || !row.details.length) return null;
+
+    let best = null;
+    row.details.forEach((detail, idx) => {
+        const dtLocal = normalizeDateTimeLocal(detail?.intro_date);
+        const ts = Date.parse(String(dtLocal || "").replace("T", " "));
+        const timeScore = Number.isFinite(ts) ? ts : 0;
+
+        if (!best || timeScore > best.timeScore || (timeScore === best.timeScore && idx < best.idx)) {
+            best = { detail, timeScore, idx };
+        }
+    });
+
+    return best ? best.detail : null;
+}
+
+function getLatestIntroDateDisplayForRow(row) {
+    const detail = getLatestIntroDetailForRow(row);
+    return detail ? formatDateTimeForDisplay(detail.intro_date) : "-";
+}
+
+function getLatestIntroStatusForRow(row) {
+    const detail = getLatestIntroDetailForRow(row);
+    return detail?.progress_status || "-";
 }
 
 function getDisplaySalePriceForIntroRow(row) {
@@ -442,6 +469,12 @@ function renderIntroRows() {
                     class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right"
                     placeholder="매매가">
             </td>
+            <td class="p-1 border-r">
+                <div class="text-[10px] leading-4 text-slate-600 text-left mb-1">
+                    <div>${getLatestIntroDateDisplayForRow(row)}</div>
+                    <div class="font-bold text-blue-700">${getLatestIntroStatusForRow(row)}</div>
+                </div>
+            </td>
             <td class="p-1">
                 <div class="flex items-center justify-center gap-1">
                     <button type="button" onclick="addIntroDetail('${row.row_id}')"
@@ -454,21 +487,22 @@ function renderIntroRows() {
         </tr>
         ${row.is_expanded ? `
         <tr>
-            <td colspan="6" class="p-2 bg-slate-50 border-b border-slate-200">
+            <td colspan="7" class="p-2 bg-slate-50 border-b border-slate-200">
                 ${(Array.isArray(row.details) && row.details.length)
                     ? row.details.map(detail => `
                         <div class="border border-slate-200 rounded bg-white p-2 ${detail === row.details[row.details.length - 1] ? "" : "mb-2"}">
                             <div class="grid grid-cols-[1.5fr_1fr] gap-2 items-center mb-2">
                                 <div class="flex items-center gap-2">
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">날짜</span>
-                                    <input type="text" value="${formatDateTimeForDisplay(detail.intro_date)}" readonly
-                                        class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px] bg-slate-50 text-slate-700 cursor-not-allowed">
+                                    <input type="datetime-local" value="${normalizeDateTimeLocal(detail.intro_date)}"
+                                        oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','intro_date', this.value)"
+                                        class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px] bg-white text-slate-700">
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">소개</span>
                                     <select onchange="updateIntroDetailField('${row.row_id}','${detail.detail_id}','progress_status', this.value)"
                                         class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px]">
-                                        ${renderStatusOptions(detail.progress_status || "소개")}
+                                        ${renderStatusOptions(detail.progress_status || "준비")}
                                     </select>
                                 </div>
                             </div>
@@ -572,7 +606,7 @@ function renderOwnedRows() {
 }
 
 function addIntroRow() {
-    introRows.push(createEmptyIntroRow());
+    introRows.unshift(createEmptyIntroRow());
     renderIntroRows();
 }
 
