@@ -274,16 +274,24 @@ def extract_detail_management(conn, bd_number: str) -> dict:
             FROM detail_management
             WHERE bd_number = %s AND delete_flag = FALSE
             ORDER BY
-                CASE 
-                    WHEN floor ~ '^-?[0-9]+$' THEN 0
-                    WHEN floor = '' OR floor IS NULL THEN 2
+                CASE
+                    WHEN floor IS NULL OR btrim(floor) = '' THEN 2
+                    WHEN btrim(upper(floor)) ~ '^B[0-9]+$' THEN 0
+                    WHEN btrim(floor) ~ '^-?[0-9]+$' THEN 0
+                    WHEN btrim(floor) ~ '^[0-9]+층$' THEN 0
                     ELSE 1
                 END,
-                CASE 
-                    WHEN floor ~ '^-?[0-9]+$' THEN floor::INTEGER
+                CASE
+                    WHEN btrim(upper(floor)) ~ '^B[0-9]+$'
+                        THEN -CAST(substring(btrim(upper(floor)) from 2) AS INTEGER)
+                    WHEN btrim(floor) ~ '^-?[0-9]+$'
+                        THEN CAST(btrim(floor) AS INTEGER)
+                    WHEN btrim(floor) ~ '^[0-9]+층$'
+                        THEN CAST(regexp_replace(btrim(floor), '[^0-9-]', '', 'g') AS INTEGER)
                     ELSE NULL
-                END,
-                floor
+                END ASC NULLS LAST,
+                floor ASC,
+                dm_number ASC
         """, (bd_number,))
     
         # 1. 컬럼명을 정확히 가져옵니다.

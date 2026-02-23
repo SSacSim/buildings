@@ -1118,8 +1118,13 @@
                             </tr>
                         </thead>
                         <tbody id="lease-body" class="text-center divide-y divide-slate-200">
-                            <tr class="lease-row hover:bg-blue-50">
-                                <td class="border-r py-1"><input type="text" class="col-floor w-full text-center outline-none bg-transparent"></td>
+                            <tr class="lease-row hover:bg-blue-50" draggable="true">
+                                <td class="border-r py-1">
+                                    <div class="flex items-center gap-1 px-1">
+                                        <span class="row-drag-handle text-slate-400 cursor-grab select-none" title="드래그해서 행 이동">⋮⋮</span>
+                                        <input type="text" class="col-floor w-full text-center outline-none bg-transparent">
+                                    </div>
+                                </td>
                                 <td class="border-r px-1"><input type="text" class="col-type w-full text-center outline-none bg-transparent"></td>
                                 <td class="border-r px-1"><input type="text" class="col-area-pyeong w-full text-center outline-none bg-transparent" readonly></td>
                                 <td class="border-r px-1"><input type="text" class="col-area-sqm w-full text-center outline-none bg-transparent" ></td>
@@ -1236,13 +1241,13 @@
                 </div>
 
                 <div id="history-container" class="flex-1 overflow-y-auto bg-slate-50 text-[11px]">
-                    <div id="history-list" class="divide-y divide-slate-200 px-2">
+                    <div id="history-list" class="divide-y divide-slate-200 px-2 pb-2">
 
                     </div>
                 </div>
             </div>
 
-            <div class="section-card shrink-0 flex flex-col border border-slate-400 bg-white -mt-[30px]">
+            <div class="section-card shrink-0 flex flex-col border border-slate-400 bg-white mt-2">
                 <div class="bg-indigo-700 text-white text-[12px] px-2 py-1 font-bold flex items-center justify-between gap-2">
                     <span>소개 고객 목록</span>
                     <div class="flex items-center gap-1">
@@ -1968,6 +1973,79 @@
 
 
 
+    let draggedLeaseRow = null;
+    let dragEnabledLeaseRow = null;
+
+    function setLeaseRowDraggable(row) {
+        if (!row) return;
+        row.setAttribute("draggable", "true");
+    }
+
+    function initLeaseRowDnD() {
+        const tbody = document.getElementById("lease-body");
+        if (!tbody) return;
+
+        tbody.querySelectorAll("tr.lease-row").forEach(setLeaseRowDraggable);
+
+        if (tbody.dataset.dndBound === "1") return;
+        tbody.dataset.dndBound = "1";
+
+        tbody.addEventListener("mousedown", (e) => {
+            const handle = e.target.closest(".row-drag-handle");
+            if (!handle) return;
+            dragEnabledLeaseRow = handle.closest("tr.lease-row");
+        });
+
+        tbody.addEventListener("mouseup", () => {
+            dragEnabledLeaseRow = null;
+        });
+
+        tbody.addEventListener("dragstart", (e) => {
+            const row = e.target.closest("tr.lease-row");
+            if (!row) return;
+            if (!dragEnabledLeaseRow || dragEnabledLeaseRow !== row) {
+                e.preventDefault();
+                return;
+            }
+
+            draggedLeaseRow = row;
+            row.classList.add("opacity-60");
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", "lease-row");
+            }
+        });
+
+        tbody.addEventListener("dragover", (e) => {
+            if (!draggedLeaseRow) return;
+            const targetRow = e.target.closest("tr.lease-row");
+            if (!targetRow || targetRow === draggedLeaseRow) return;
+
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+
+            const rect = targetRow.getBoundingClientRect();
+            const shouldPlaceAfter = (e.clientY - rect.top) > rect.height / 2;
+            tbody.insertBefore(
+                draggedLeaseRow,
+                shouldPlaceAfter ? targetRow.nextSibling : targetRow
+            );
+        });
+
+        tbody.addEventListener("drop", (e) => {
+            if (!draggedLeaseRow) return;
+            e.preventDefault();
+        });
+
+        tbody.addEventListener("dragend", () => {
+            if (!draggedLeaseRow) return;
+            draggedLeaseRow.classList.remove("opacity-60");
+            draggedLeaseRow = null;
+            dragEnabledLeaseRow = null;
+            updateLeaseSummary();
+        });
+    }
+
     // 행 추가 함수
     function addRow(data = {}) {
         console.log("add data")
@@ -1987,7 +2065,12 @@
         const occupancyStatus = ["-", "공실", "책임명도", "명도x", "명도협의"].includes(data.is_vacant) ? data.is_vacant : "-";
         
         newRow.innerHTML = `
-        <td class="border-r py-1"><input type="text" class="col-floor w-full text-center outline-none bg-transparent" value="${floor}"></td>
+        <td class="border-r py-1">
+            <div class="flex items-center gap-1 px-1">
+                <span class="row-drag-handle text-slate-400 cursor-grab select-none" title="드래그해서 행 이동">⋮⋮</span>
+                <input type="text" class="col-floor w-full text-center outline-none bg-transparent" value="${floor}">
+            </div>
+        </td>
         <td class="border-r px-1"><input type="text" class="col-type w-full text-center outline-none bg-transparent" value="${bType}"></td>
         <td class="border-r px-1"><input type="text" class="col-area-pyeong w-full text-center outline-none bg-transparent" readonly value="${area_pyeong}"></td>
         <td class="border-r px-1"><input type="text" class="col-area-sqm w-full text-center outline-none bg-transparent" value="${area_sqm}" oninput="formatNumberWithComma_row(this)"></td>
@@ -2006,6 +2089,7 @@
         </td>
         <td class="text-red-500 cursor-pointer font-bold" onclick="removeRow(this)">×</td>`;
         tbody.appendChild(newRow);
+        setLeaseRowDraggable(newRow);
     }
 
     // 행 삭제 함수
@@ -2619,6 +2703,8 @@
                 }
             });
         }
+
+        initLeaseRowDnD();
         
     });
 
