@@ -1584,6 +1584,52 @@
         updateViolationHidden();
     }
 
+    let currentHistoryWriterName = "";
+
+    function resolveCurrentHistoryWriter(user) {
+        const displayName = String(user?.display_name || "").trim();
+        if (displayName) return displayName;
+        const username = String(user?.username || "").trim();
+        return username;
+    }
+
+    function getDefaultHistoryWriter() {
+        return currentHistoryWriterName || "";
+    }
+
+    function escapeHistoryWriterAttr(value) {
+        return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    function applyDefaultHistoryWriterToOpenInputs() {
+        const defaultWriter = getDefaultHistoryWriter();
+        if (!defaultWriter) return;
+        document.querySelectorAll('#history-list input[placeholder="작성자"]').forEach((input) => {
+            const now = String(input?.value || "").trim();
+            if (!now || now === "작성자") {
+                input.value = defaultWriter;
+            }
+        });
+    }
+
+    async function loadCurrentHistoryWriter() {
+        try {
+            const res = await fetch("/api/auth/me", {
+                headers: { "Accept": "application/json" }
+            });
+            if (!res.ok) return;
+            const payload = await res.json();
+            currentHistoryWriterName = resolveCurrentHistoryWriter(payload?.user);
+            applyDefaultHistoryWriterToOpenInputs();
+        } catch (err) {
+            console.warn("failed to load current auth user", err);
+        }
+    }
+
     // 1. 페이지 로드 시 데이터 불러오기 (기존 로직 유지하되 value에 할당)
     async function loadBuildingDetail() {
         const pathSegments = window.location.pathname.split('/');
@@ -1740,8 +1786,11 @@
         renderNearbyStation2RowsFromHidden();
         renderViolationRowsFromHidden();
     }
-    // 페이지가 열리면 바로 빌딜 Detail 관련 정보 받아와 뿌리기 
-    window.onload = loadBuildingDetail;
+    // 페이지가 열리면 로그인 사용자 정보 + Detail 정보를 순서대로 로드
+    window.onload = async () => {
+        await loadCurrentHistoryWriter();
+        await loadBuildingDetail();
+    };
 
 
     // 2. 수정된 데이터 서버에 저장하기
@@ -1842,7 +1891,10 @@
     function getCurrentHistoryData() {
         const rows = document.querySelectorAll('#history-list > div');
         return Array.from(rows).map(row => {
-            const writer = row.querySelector('.h_writer')?.innerText?.trim() || row.querySelector('input')?.value?.trim() || "";
+            const writer = row.querySelector('.h_writer')?.innerText?.trim()
+                || row.querySelector('input')?.value?.trim()
+                || getDefaultHistoryWriter()
+                || "";
             const write_time = row.querySelector('.h_time')?.innerText?.trim() || row.querySelector('span')?.innerText?.trim() || "";
             const memo = row.querySelector('.h_memo')?.innerText?.trim() || row.querySelector('textarea')?.value?.trim() || "";
             return { writer, write_time, memo };
@@ -2182,12 +2234,15 @@
 
     // History 행 추가 공통 UI 
     function getHistoryEditHTML({ time, writer = "", content = "" }) {
+        const defaultWriter = getDefaultHistoryWriter();
+        const resolvedWriter = String(writer || "").trim() || defaultWriter;
+        const safeWriter = escapeHistoryWriterAttr(resolvedWriter);
         return `
             <div class="flex justify-between items-center font-bold text-emerald-700 mb-2">
                 <span>${time}</span>
                 <div class="flex gap-1.5 items-center">
                     <input type="text"
-                        value="${writer}"
+                        value="${safeWriter}"
                         placeholder="작성자"
                         class="w-16 h-6 bg-white border border-slate-300 px-1.5 text-[11px] font-bold outline-none rounded">
 
@@ -2233,7 +2288,7 @@
         const row = btn.closest('.py-2, .py-3');
 
         const time = row.querySelector('span')?.innerText;
-        const writer = row.querySelector('input')?.value || '작성자';
+        const writer = (row.querySelector('input')?.value || "").trim() || getDefaultHistoryWriter() || '작성자';
         const content = row.querySelector('textarea')?.value;
 
         if (!content) {

@@ -7,6 +7,7 @@ let customerMatchCurrentPage = 1;
 const CUSTOMER_MATCH_PAGE_SIZE = 20;
 const selectedMatchBuildingIds = new Set();
 let introSearchKeyword = "";
+let currentIntroManagerName = "";
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -737,6 +738,29 @@ function nowLocalDateTimeMinute() {
     return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
+function resolveCurrentIntroManager(user) {
+    const displayName = String(user?.display_name || "").trim();
+    if (displayName) return displayName;
+    return String(user?.username || "").trim();
+}
+
+function getDefaultIntroManagerName() {
+    return currentIntroManagerName || "";
+}
+
+async function loadCurrentIntroManagerName() {
+    try {
+        const res = await fetch("/api/auth/me", {
+            headers: { "Accept": "application/json" }
+        });
+        if (!res.ok) return;
+        const payload = await res.json();
+        currentIntroManagerName = resolveCurrentIntroManager(payload?.user);
+    } catch (e) {
+        console.warn("failed to load current intro manager", e);
+    }
+}
+
 function normalizeDateTimeLocal(value) {
     if (!value) return nowLocalDateTimeMinute();
     const str = String(value).trim();
@@ -777,7 +801,7 @@ function createEmptyIntroDetail(overrides = {}) {
         intro_date: nowLocalDateTimeMinute(),
         progress_status: "준비",
         intro_cost: "",
-        manager_name: "",
+        manager_name: getDefaultIntroManagerName(),
         intro_note: "",
         ...overrides
     };
@@ -1958,7 +1982,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     if (window.opener && typeof window.opener.isLocked !== "undefined") {
         sidebarLocked = Boolean(window.opener.isLocked);
     }
@@ -1969,7 +1993,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     initCustomerSidebarResize();
 
-    loadCustomerDetail();
+    await loadCurrentIntroManagerName();
+    await loadCustomerDetail();
 
     const customerForm = document.getElementById("customerForm");
     if (customerForm) {
