@@ -222,15 +222,32 @@ function initCustomerSidebarResize() {
     if (!resizer || !sidebar || !customerForm) return;
 
     const minWidth = 360;
-    if (!sidebar.style.width) sidebar.style.width = `${Math.round(sidebar.getBoundingClientRect().width)}px`;
+    const maxSidebarRatio = 0.52;
+    const minMainPanelRatio = 0.40;
+
+    const getMaxWidth = () => {
+        const formWidth = customerForm.getBoundingClientRect().width;
+        const maxBySidebarRatio = formWidth * maxSidebarRatio;
+        const maxByMainRatio = formWidth * (1 - minMainPanelRatio);
+        return Math.max(minWidth, Math.min(maxBySidebarRatio, maxByMainRatio));
+    };
+
+    const clampSidebarWidth = () => {
+        const currentWidth = Math.round(sidebar.getBoundingClientRect().width);
+        sidebar.style.width = `${Math.max(minWidth, Math.min(getMaxWidth(), currentWidth))}px`;
+    };
+
+    if (!sidebar.style.width) {
+        sidebar.style.width = `${Math.round(sidebar.getBoundingClientRect().width)}px`;
+    }
+    clampSidebarWidth();
 
     let startX = 0;
     let startWidth = 0;
 
     const onMouseMove = (e) => {
         if (!isCustomerSidebarResizing) return;
-        const formWidth = customerForm.getBoundingClientRect().width;
-        const maxWidth = Math.max(minWidth, Math.min(900, formWidth - 680));
+        const maxWidth = getMaxWidth();
         const delta = startX - e.clientX;
         const nextWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + delta));
         sidebar.style.width = `${Math.round(nextWidth)}px`;
@@ -257,6 +274,8 @@ function initCustomerSidebarResize() {
         window.addEventListener("mousemove", onMouseMove);
         window.addEventListener("mouseup", onMouseUp);
     });
+
+    window.addEventListener("resize", clampSidebarWidth);
 }
 
 function nowLocalDateTimeMinute() {
@@ -461,12 +480,14 @@ function renderIntroRows() {
             <td class="p-1 text-left">
                 <input type="text" value="${row.bd_name || ""}" readonly
                     class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]"
+                    style="max-width: 120px;"
                     placeholder="건물명">
             </td>
             <td class="p-1">
                 <input type="text" value="${getDisplaySalePriceForIntroRow(row)}" readonly
                     data-intro-sale-row="${row.row_id}"
-                    class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right"
+                    class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right ml-auto"
+                    style="max-width: 88px;"
                     placeholder="매매가">
             </td>
             <td class="p-1 border-r">
