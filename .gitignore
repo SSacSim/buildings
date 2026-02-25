@@ -1,5 +1,6 @@
 Backend/save_file/
 Backend/photo/
+Backend/backup/dumps/
 
 # Binary assets
 *.png

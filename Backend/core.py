@@ -31,6 +31,7 @@ except ModuleNotFoundError:
     StarletteSessionMiddleware = None
 
 from routers import customer
+from backup.auto_backup import start_backup_scheduler, stop_backup_scheduler
 
 app = FastAPI(title="Building Search API")
 
@@ -52,6 +53,19 @@ app.include_router(customer.router)
 
 # 템플릿 설정
 templates = Jinja2Templates(directory="./templates")
+
+
+@app.on_event("startup")
+async def startup_background_jobs():
+    start_backup_scheduler(
+        settings_loader=DB_utils._load_settings,
+        base_dir=BASE_DIR,
+    )
+
+
+@app.on_event("shutdown")
+async def shutdown_background_jobs():
+    stop_backup_scheduler()
 
 app_settings = DB_utils._load_settings().get("app", {})
 SESSION_SECRET = (
