@@ -18,6 +18,17 @@
         input, textarea, select { transition: all 0.2s; }
         .section-card { @apply bg-white border border-slate-200 shadow-sm overflow-hidden; }
         .label-blue { @apply bg-blue-900 text-white text-xs font-bold px-2 py-1 text-center min-w-[80px] flex items-center justify-center; }
+        .detail-panel-resizer {
+            width: 6px;
+            cursor: col-resize;
+            background: transparent;
+            border-left: 1px solid #cbd5e1;
+            border-right: 1px solid #cbd5e1;
+        }
+        .detail-panel-resizer:hover,
+        .detail-panel-resizer.dragging {
+            background: #dbeafe;
+        }
     </style>
 </head>
 <body class="h-screen overflow-hidden flex flex-col">
@@ -113,7 +124,7 @@
 
     <form id="buildingForm" class="flex flex-1 overflow-hidden p-1 gap-1">
         <!-- 왼쪽 사이드 -->
-        <aside class="w-[500px] flex shrink-0 border-r border-slate-400 bg-[#e2e8f0] text-[12px]">
+        <aside id="leftSidebar" class="w-[500px] flex shrink-0 border-r border-slate-400 bg-[#e2e8f0] text-[12px]">
             <div class="flex-1 flex flex-col overflow-y-auto border-l border-white">
                 <!-- 주소관련 -->
                 <div class="p-1 space-y-0.5 border-b border-slate-400">
@@ -1006,8 +1017,10 @@
             </div>
         </aside>
 
+        <div id="detailLeftResizer" class="detail-panel-resizer shrink-0" aria-label="좌측 섹션 폭 조절" title="드래그해서 좌측 영역 폭 조절"></div>
+
         <!-- 중간 사이드 -->
-        <section class="flex-1 flex flex-col gap-1 overflow-y-auto">
+        <section id="detailCenterPanel" class="flex-1 min-w-0 flex flex-col gap-1 overflow-y-auto">
             <div class="section-card h-[350px] min-h-[300px] shrink-0 flex flex-col -ml-px">
                 <div class="bg-slate-800 text-white text-[13px] px-2 py-1 font-bold text-left">
                     대표 사진 및 도면 (최대 5장)
@@ -1173,6 +1186,7 @@
             </div>
         </section>
 
+        <div id="detailRightResizer" class="detail-panel-resizer shrink-0" aria-label="우측 섹션 폭 조절" title="드래그해서 우측 영역 폭 조절"></div>
 
         <!-- 우측 사이드 정보 -->
         <aside class="w-[500px] flex flex-col gap-1 min-h-0 overflow-hidden relative" id="rightSidebar">
@@ -3067,11 +3081,144 @@
         renderMainBox(currentBox);
     }
 
+    function initDetailPanelResize() {
+        const buildingForm = document.getElementById("buildingForm");
+        const leftSidebar = document.getElementById("leftSidebar");
+        const rightSidebar = document.getElementById("rightSidebar");
+        const leftResizer = document.getElementById("detailLeftResizer");
+        const rightResizer = document.getElementById("detailRightResizer");
+        if (!buildingForm || !leftSidebar || !rightSidebar || !leftResizer || !rightResizer) return;
+        if (buildingForm.dataset.panelResizeInit === "true") return;
+        buildingForm.dataset.panelResizeInit = "true";
+
+        const MIN_LEFT_WIDTH = 320;
+        const MIN_RIGHT_WIDTH = 320;
+        const MIN_CENTER_WIDTH = 360;
+        const MIN_NARROW_WIDTH = 200;
+
+        if (!leftSidebar.style.width) {
+            leftSidebar.style.width = `${Math.round(leftSidebar.getBoundingClientRect().width)}px`;
+        }
+        if (!rightSidebar.style.width) {
+            rightSidebar.style.width = `${Math.round(rightSidebar.getBoundingClientRect().width)}px`;
+        }
+
+        const getVisibleResizerWidth = () => {
+            const leftWidth = leftResizer.getBoundingClientRect().width;
+            const rightWidth = rightResizer.classList.contains("hidden")
+                ? 0
+                : rightResizer.getBoundingClientRect().width;
+            return leftWidth + rightWidth;
+        };
+
+        const applySidebarWidths = (requestedLeft, requestedRight) => {
+            const formWidth = buildingForm.getBoundingClientRect().width;
+            const resizerWidth = getVisibleResizerWidth();
+            const availableSidebarWidth = formWidth - resizerWidth - MIN_CENTER_WIDTH;
+            if (availableSidebarWidth <= 0) return;
+
+            let minLeft = MIN_LEFT_WIDTH;
+            let minRight = MIN_RIGHT_WIDTH;
+
+            if (availableSidebarWidth < minLeft + minRight) {
+                const scaledMin = Math.max(
+                    MIN_NARROW_WIDTH,
+                    Math.floor(availableSidebarWidth * 0.35)
+                );
+                minLeft = Math.min(minLeft, scaledMin);
+                minRight = Math.min(minRight, scaledMin);
+            }
+
+            const maxLeft = Math.max(minLeft, availableSidebarWidth - minRight);
+            let nextLeft = Math.max(minLeft, Math.min(requestedLeft, maxLeft));
+
+            const maxRight = Math.max(minRight, availableSidebarWidth - nextLeft);
+            let nextRight = Math.max(minRight, Math.min(requestedRight, maxRight));
+
+            if (nextLeft + nextRight > availableSidebarWidth) {
+                const overflow = nextLeft + nextRight - availableSidebarWidth;
+                if (nextRight - minRight >= overflow) {
+                    nextRight -= overflow;
+                } else {
+                    const rightReducible = Math.max(0, nextRight - minRight);
+                    nextRight = minRight;
+                    nextLeft = Math.max(minLeft, nextLeft - (overflow - rightReducible));
+                }
+            }
+
+            leftSidebar.style.width = `${Math.round(nextLeft)}px`;
+            rightSidebar.style.width = `${Math.round(nextRight)}px`;
+        };
+
+        const clampFromCurrent = () => {
+            const currentLeft = leftSidebar.getBoundingClientRect().width;
+            const currentRight = rightSidebar.getBoundingClientRect().width;
+            applySidebarWidths(currentLeft, currentRight);
+        };
+
+        clampFromCurrent();
+        window.__detailPanelResizeClamp = clampFromCurrent;
+
+        let activeHandle = null;
+        let startX = 0;
+        let startLeftWidth = 0;
+        let startRightWidth = 0;
+
+        const onMouseMove = (e) => {
+            if (!activeHandle) return;
+            if (activeHandle === "left") {
+                const delta = e.clientX - startX;
+                const nextLeft = startLeftWidth + delta;
+                const currentRight = rightSidebar.getBoundingClientRect().width;
+                applySidebarWidths(nextLeft, currentRight);
+                return;
+            }
+
+            const delta = startX - e.clientX;
+            const nextRight = startRightWidth + delta;
+            const currentLeft = leftSidebar.getBoundingClientRect().width;
+            applySidebarWidths(currentLeft, nextRight);
+        };
+
+        const onMouseUp = () => {
+            if (!activeHandle) return;
+            activeHandle = null;
+            leftResizer.classList.remove("dragging");
+            rightResizer.classList.remove("dragging");
+            document.body.style.userSelect = "";
+            document.body.style.cursor = "";
+            window.removeEventListener("mousemove", onMouseMove);
+            window.removeEventListener("mouseup", onMouseUp);
+        };
+
+        const startResize = (handle, event) => {
+            event.preventDefault();
+            activeHandle = handle;
+            startX = event.clientX;
+            startLeftWidth = leftSidebar.getBoundingClientRect().width;
+            startRightWidth = rightSidebar.getBoundingClientRect().width;
+            if (handle === "left") {
+                leftResizer.classList.add("dragging");
+            } else {
+                rightResizer.classList.add("dragging");
+            }
+            document.body.style.userSelect = "none";
+            document.body.style.cursor = "col-resize";
+            window.addEventListener("mousemove", onMouseMove);
+            window.addEventListener("mouseup", onMouseUp);
+        };
+
+        leftResizer.addEventListener("mousedown", (e) => startResize("left", e));
+        rightResizer.addEventListener("mousedown", (e) => startResize("right", e));
+        window.addEventListener("resize", clampFromCurrent);
+    }
+
 
     // sidebar lock: hide right section
     let sidebarLocked = false;
     function applySidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
+        const rightResizer = document.getElementById("detailRightResizer");
         const lockHidePriceRow = document.getElementById("lockHidePriceRow");
         const lockHideDecideRows = document.getElementById("lockHideDecideRows");
         const lockHideLoanStatusRow = document.getElementById("lockHideLoanStatusRow");
@@ -3079,6 +3226,7 @@
         const saveBuildingBtn = document.getElementById("saveBuildingBtn");
         if (!sidebar) return;
         sidebar.classList.add("hidden");
+        if (rightResizer) rightResizer.classList.add("hidden");
         if (lockHidePriceRow) lockHidePriceRow.classList.add("hidden");
         if (lockHideDecideRows) lockHideDecideRows.classList.add("hidden");
         if (lockHideLoanStatusRow) lockHideLoanStatusRow.classList.add("hidden");
@@ -3088,6 +3236,7 @@
     // ⭐ 페이지 로딩 시 자동 실행
     function removeSidebarLock() {
         const sidebar = document.getElementById("rightSidebar");
+        const rightResizer = document.getElementById("detailRightResizer");
         const lockHidePriceRow = document.getElementById("lockHidePriceRow");
         const lockHideDecideRows = document.getElementById("lockHideDecideRows");
         const lockHideLoanStatusRow = document.getElementById("lockHideLoanStatusRow");
@@ -3095,11 +3244,15 @@
         const saveBuildingBtn = document.getElementById("saveBuildingBtn");
         if (!sidebar) return;
         sidebar.classList.remove("hidden");
+        if (rightResizer) rightResizer.classList.remove("hidden");
         if (lockHidePriceRow) lockHidePriceRow.classList.remove("hidden");
         if (lockHideDecideRows) lockHideDecideRows.classList.remove("hidden");
         if (lockHideLoanStatusRow) lockHideLoanStatusRow.classList.remove("hidden");
         if (deleteBuildingBtn) deleteBuildingBtn.classList.remove("hidden");
         if (saveBuildingBtn) saveBuildingBtn.classList.remove("hidden");
+        if (typeof window.__detailPanelResizeClamp === "function") {
+            window.__detailPanelResizeClamp();
+        }
     }
 
     function toggleSidebarLock() {
@@ -3118,6 +3271,7 @@
         if (sidebarLocked) {
             applySidebarLock();
         }
+        initDetailPanelResize();
 
         const introSearchBtn = document.getElementById('introCustomerSearchBtn');
         if (introSearchBtn) introSearchBtn.addEventListener('click', runIntroCustomerSearch);
