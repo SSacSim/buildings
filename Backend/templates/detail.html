@@ -2568,6 +2568,7 @@
         sub5: createNullArray(N),
         sub6: createNullArray(N)
     };
+    const PREVIEW_SECTION_ORDER = ['main', 'sub1', 'sub2', 'sub3', 'sub4', 'sub5', 'sub6'];
 
     // Main 페이지에서 어떤 Box를 눌렀는가?
     let currentBox = null;
@@ -2916,13 +2917,26 @@
         modal.classList.remove('hidden');
     }
 
+    function getGlobalPreviewImages() {
+        const allImages = [];
+        PREVIEW_SECTION_ORDER.forEach((boxKey) => {
+            const images = imageStore[boxKey] || [];
+            images.forEach((src) => {
+                if (src) allImages.push(src);
+            });
+        });
+        return allImages;
+    }
+
     function openPreviewModalByIndex(slotIndex) {
         if (!currentBox) return;
         const allImages = imageStore[currentBox] || [];
-        const filteredImages = allImages.filter(Boolean);
+        const clickedSrc = allImages[slotIndex];
+        if (!clickedSrc) return;
+
+        const filteredImages = getGlobalPreviewImages();
         if (!filteredImages.length) return;
 
-        const clickedSrc = allImages[slotIndex];
         const idx = filteredImages.indexOf(clickedSrc);
         previewImages = filteredImages;
         previewCurrentIndex = idx >= 0 ? idx : 0;
@@ -2938,8 +2952,7 @@
             return;
         }
 
-        const allImages = imageStore[currentBox] || [];
-        const filteredImages = allImages.filter(Boolean);
+        const filteredImages = getGlobalPreviewImages();
         if (!filteredImages.length) {
             previewImages = [src];
             previewCurrentIndex = 0;
