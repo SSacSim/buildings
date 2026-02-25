@@ -17,30 +17,290 @@ let sidebarOverlay = null;
 let isCustomerSidebarResizing = false;
 const CUSTOMER_IMAGE_SLOTS = ["profile", "card"];
 const customerImageFiles = {
-    profile: null,
-    card: null
+    profile: [],
+    card: []
 };
 const customerImageUrls = {
-    profile: null,
-    card: null
+    profile: [],
+    card: []
 };
 let currentPreviewSlot = null;
+let currentPreviewIndex = -1;
+let currentManageImageSlot = null;
+let draggedManageImageIndex = null;
 
 function isDataUrl(value) {
     return typeof value === "string" && value.startsWith("data:");
 }
 
 function clearCustomerImageSlot(slot) {
-    customerImageFiles[slot] = null;
-    setCustomerImagePreview(slot, null);
+    customerImageFiles[slot] = [];
+    customerImageUrls[slot] = [];
     const inputEl = document.getElementById(`customerImageInput_${slot}`);
     if (inputEl) inputEl.value = "";
+    renderCustomerImageBox(slot);
 }
 
 function getCustomerImageBoxId(slot) {
     if (slot === "profile") return "customerProfilePhotoBox";
     if (slot === "card") return "customerCardPhotoBox";
     return "";
+}
+
+function getCustomerImagePlaceholder(slot) {
+    return slot === "profile" ? "인물 사진" : "명함 사진";
+}
+
+function normalizeSlotImagePayload(value) {
+    if (Array.isArray(value)) {
+        return value.filter((v) => typeof v === "string" && v.trim() !== "");
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+        return [value];
+    }
+    return [];
+}
+
+function extractImageNameFromUrl(url) {
+    if (typeof url !== "string" || !url.trim()) return "";
+    try {
+        const parsed = new URL(url, window.location.origin);
+        const name = parsed.pathname.split("/").pop() || "";
+        return decodeURIComponent(name);
+    } catch {
+        const tail = url.split("/").pop() || "";
+        return decodeURIComponent(tail.split("?")[0]);
+    }
+}
+
+function rebuildCustomerImageFileQueue(slot) {
+    const entries = Array.isArray(customerImageUrls[slot]) ? customerImageUrls[slot] : [];
+    customerImageFiles[slot] = entries
+        .filter((item) => item?.isLocal && item?.file)
+        .map((item) => item.file);
+}
+
+function renderCustomerImageBox(slot) {
+    const box = document.getElementById(getCustomerImageBoxId(slot));
+    if (!box) return;
+
+    const placeholder = getCustomerImagePlaceholder(slot);
+    const entries = Array.isArray(customerImageUrls[slot]) ? customerImageUrls[slot] : [];
+    if (!entries.length) {
+        box.innerHTML = `<div class="w-full h-full flex items-center justify-center text-slate-400 text-[11px]">${placeholder}</div>`;
+        return;
+    }
+
+    const first = entries[0];
+    const visibleEntries = [first];
+    const thumbs = visibleEntries.map((item, idx) => {
+        return `
+            <button type="button"
+                onclick="openCustomerImagePreviewAt('${slot}', ${idx}); event.stopPropagation();"
+                class="relative h-full bg-slate-100 border border-slate-200 rounded overflow-hidden">
+                <img src="${item.url}" alt="${placeholder}" class="w-full h-full object-contain bg-white">
+            </button>
+        `;
+    }).join("");
+
+    box.innerHTML = `
+        <div class="w-full h-full p-1 grid grid-cols-1 gap-0">
+            ${thumbs}
+        </div>
+        <div class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px]">
+            ${entries.length}장
+        </div>
+    `;
+}
+
+function setCustomerImagesFromPayload(payload) {
+    CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
+        const urls = normalizeSlotImagePayload(payload?.[slot]);
+        customerImageUrls[slot] = urls.map((src) => ({
+            url: src,
+            imageName: extractImageNameFromUrl(src),
+            isLocal: false,
+            file: null,
+        }));
+        customerImageFiles[slot] = [];
+        renderCustomerImageBox(slot);
+    });
+    if (currentManageImageSlot) {
+        renderCustomerImageManageList();
+    }
+}
+
+// Override render to show only first image in the box and open manage modal on click.
+function renderCustomerImageBox(slot) {
+    const box = document.getElementById(getCustomerImageBoxId(slot));
+    if (!box) return;
+
+    const placeholder = getCustomerImagePlaceholder(slot);
+    const entries = Array.isArray(customerImageUrls[slot]) ? customerImageUrls[slot] : [];
+    if (!entries.length) {
+        box.innerHTML = `<div class="w-full h-full flex items-center justify-center text-slate-400 text-[11px]">${placeholder}</div>`;
+        return;
+    }
+
+    const first = entries[0];
+    box.innerHTML = `
+        <button type="button"
+            onclick="openCustomerImageManageModal('${slot}'); event.stopPropagation();"
+            class="absolute inset-1 bg-slate-100 border border-slate-200 rounded overflow-hidden">
+            <img src="${first.url}" alt="${placeholder}" class="w-full h-full object-contain bg-white">
+        </button>
+        <div class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px]">
+            ${entries.length}
+        </div>
+    `;
+}
+
+function openCustomerImageManageModal(slot) {
+    const modalEl = document.getElementById("customerImageManageModal");
+    const titleEl = document.getElementById("customerImageManageTitle");
+    if (!modalEl || !slot) return;
+    currentManageImageSlot = slot;
+    if (titleEl) titleEl.innerText = slot === "profile" ? "사진 이미지 등록" : "명함 이미지 등록";
+    modalEl.classList.remove("hidden");
+    modalEl.classList.add("flex");
+    renderCustomerImageManageList();
+}
+
+function closeCustomerImageManageModal() {
+    const modalEl = document.getElementById("customerImageManageModal");
+    if (!modalEl) return;
+    modalEl.classList.add("hidden");
+    modalEl.classList.remove("flex");
+    draggedManageImageIndex = null;
+    const inputEl = document.getElementById("customerImageManageInput");
+    if (inputEl) inputEl.value = "";
+}
+
+function openCustomerImageManageUploadDialog() {
+    if (!currentManageImageSlot) return;
+    const inputEl = document.getElementById("customerImageManageInput");
+    if (!inputEl) return;
+    inputEl.click();
+}
+
+async function handleCustomerImageManageUpload(inputEl) {
+    if (!currentManageImageSlot) return;
+    await handleCustomerImageChange(currentManageImageSlot, inputEl);
+    renderCustomerImageManageList();
+}
+
+function moveCustomerImageEntry(slot, fromIndex, toIndex) {
+    const entries = customerImageUrls[slot] || [];
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || toIndex < 0 || fromIndex >= entries.length || toIndex >= entries.length) return;
+    const [moved] = entries.splice(fromIndex, 1);
+    entries.splice(toIndex, 0, moved);
+    customerImageUrls[slot] = entries;
+    rebuildCustomerImageFileQueue(slot);
+}
+
+function handleCustomerImageDragStart(event, index) {
+    if (!currentManageImageSlot) {
+        event.preventDefault();
+        return;
+    }
+    const entries = customerImageUrls[currentManageImageSlot] || [];
+    if (!entries[index]) {
+        event.preventDefault();
+        return;
+    }
+    draggedManageImageIndex = index;
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", String(index));
+    }
+    event.currentTarget.classList.add("opacity-60");
+}
+
+function handleCustomerImageDragOver(event) {
+    if (draggedManageImageIndex === null) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+}
+
+function handleCustomerImageDrop(event, targetIndex) {
+    event.preventDefault();
+    if (!currentManageImageSlot || draggedManageImageIndex === null) return;
+    const fromIndex = draggedManageImageIndex;
+    draggedManageImageIndex = null;
+    if (fromIndex === targetIndex) return;
+    moveCustomerImageEntry(currentManageImageSlot, fromIndex, targetIndex);
+    renderCustomerImageManageList();
+    renderCustomerImageBox(currentManageImageSlot);
+}
+
+function handleCustomerImageDragEnd(event) {
+    draggedManageImageIndex = null;
+    if (event?.currentTarget) event.currentTarget.classList.remove("opacity-60");
+}
+
+async function removeCustomerImageAt(index) {
+    if (!currentManageImageSlot) return;
+    await deleteCustomerImage(currentManageImageSlot, index);
+    renderCustomerImageManageList();
+}
+
+function renderCustomerImageManageList() {
+    const listEl = document.getElementById("customerImageManageList");
+    if (!listEl || !currentManageImageSlot) return;
+    const entries = customerImageUrls[currentManageImageSlot] || [];
+
+    if (!entries.length) {
+        listEl.innerHTML = '<p class="text-slate-400 col-span-3 text-center">등록된 이미지가 없습니다</p>';
+        return;
+    }
+
+    listEl.innerHTML = entries.map((item, index) => `
+        <div class="relative group bg-slate-200 border-2 border-dashed border-slate-400 overflow-hidden rounded h-32"
+            draggable="true"
+            data-image-index="${index}"
+            ondragstart="handleCustomerImageDragStart(event, ${index})"
+            ondragover="handleCustomerImageDragOver(event)"
+            ondrop="handleCustomerImageDrop(event, ${index})"
+            ondragend="handleCustomerImageDragEnd(event)">
+            <img src="${item.url}"
+                onclick="openCustomerImagePreviewAt('${currentManageImageSlot}', ${index})"
+                loading="lazy"
+                decoding="async"
+                class="absolute inset-0 w-full h-full object-contain bg-white cursor-pointer">
+            <button
+                onclick="removeCustomerImageAt(${index}); event.stopPropagation();"
+                class="absolute top-1 right-1 bg-black/60 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100">
+                ×
+            </button>
+        </div>
+    `).join("");
+}
+
+async function syncCustomerImageOrder(customerNumber) {
+    if (!customerNumber) return;
+    const orderBySlot = {};
+    for (const slot of CUSTOMER_IMAGE_SLOTS) {
+        const entries = customerImageUrls[slot] || [];
+        if (!entries.length) continue;
+        const imageNames = entries
+            .map((item) => item?.imageName || extractImageNameFromUrl(item?.url))
+            .filter((name) => typeof name === "string" && name.trim() !== "");
+        if (!imageNames.length) continue;
+        orderBySlot[slot] = imageNames;
+    }
+
+    for (const slot of CUSTOMER_IMAGE_SLOTS) {
+        const imageNames = orderBySlot[slot];
+        if (!imageNames?.length) continue;
+        const res = await fetch(`/api/customer/${customerNumber}/images/${slot}/order`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image_names: imageNames })
+        });
+        if (!res.ok) throw new Error("customer image order sync failed");
+        await res.json();
+    }
 }
 
 function setCustomerImagePreview(slot, src) {
@@ -50,12 +310,21 @@ function setCustomerImagePreview(slot, src) {
     const placeholder = slot === "profile" ? "인물 사진" : "명함 사진";
     if (!src) {
         box.innerHTML = placeholder;
-        customerImageUrls[slot] = null;
+        customerImageUrls[slot] = [];
+        customerImageFiles[slot] = [];
+        renderCustomerImageBox(slot);
         return;
     }
 
     box.innerHTML = `<img src="${src}" class="w-full h-full object-cover" alt="${placeholder}">`;
-    customerImageUrls[slot] = src;
+    customerImageUrls[slot] = [{
+        url: src,
+        imageName: extractImageNameFromUrl(src),
+        isLocal: isDataUrl(src),
+        file: null,
+    }];
+    customerImageFiles[slot] = [];
+    renderCustomerImageBox(slot);
 }
 
 function openCustomerImagePicker(slot) {
@@ -65,57 +334,138 @@ function openCustomerImagePicker(slot) {
 }
 
 function handleCustomerImageBoxClick(slot) {
-    const currentSrc = customerImageUrls[slot];
-    if (currentSrc) {
-        openCustomerImagePreview(slot, currentSrc);
-        return;
-    }
-    openCustomerImagePicker(slot);
+    openCustomerImageManageModal(slot);
 }
 
 function openCustomerImagePreview(slot, src) {
+    const entries = Array.isArray(customerImageUrls[slot]) ? customerImageUrls[slot] : [];
+    if (!entries.length) return;
+    const idx = entries.findIndex((item) => item?.url === src);
+    openCustomerImagePreviewAt(slot, idx >= 0 ? idx : 0);
+}
+
+function openCustomerImagePreviewAt(slot, index) {
+    const entries = Array.isArray(customerImageUrls[slot]) ? customerImageUrls[slot] : [];
+    if (!entries.length || index < 0 || index >= entries.length) return;
+
     const modalEl = document.getElementById("customerImagePreviewModal");
-    const imgEl = document.getElementById("customerImagePreviewImg");
-    if (!modalEl || !imgEl || !src) return;
+    if (!modalEl) return;
     currentPreviewSlot = slot;
-    imgEl.src = src;
+    currentPreviewIndex = index;
     modalEl.classList.remove("hidden");
     modalEl.classList.add("flex");
+    renderCustomerImagePreview();
+}
+
+function renderCustomerImagePreview() {
+    const modalEl = document.getElementById("customerImagePreviewModal");
+    const imgEl = document.getElementById("customerImagePreviewImg");
+    const counterEl = document.getElementById("customerImagePreviewCounter");
+    const prevBtn = document.getElementById("customerImagePreviewPrevBtn");
+    const nextBtn = document.getElementById("customerImagePreviewNextBtn");
+    if (!modalEl || !imgEl) return;
+
+    const entries = currentPreviewSlot ? (customerImageUrls[currentPreviewSlot] || []) : [];
+    if (!entries.length || currentPreviewIndex < 0 || currentPreviewIndex >= entries.length) {
+        closeCustomerImagePreview();
+        return;
+    }
+
+    imgEl.src = entries[currentPreviewIndex].url;
+    if (counterEl) counterEl.innerText = `${currentPreviewIndex + 1} / ${entries.length}`;
+
+    const disabledMove = entries.length <= 1;
+    [prevBtn, nextBtn].forEach((btn) => {
+        if (!btn) return;
+        btn.disabled = disabledMove;
+        btn.classList.toggle("opacity-40", disabledMove);
+        btn.classList.toggle("cursor-not-allowed", disabledMove);
+    });
 }
 
 function closeCustomerImagePreview() {
     const modalEl = document.getElementById("customerImagePreviewModal");
     const imgEl = document.getElementById("customerImagePreviewImg");
+    const counterEl = document.getElementById("customerImagePreviewCounter");
     if (!modalEl || !imgEl) return;
     modalEl.classList.add("hidden");
     modalEl.classList.remove("flex");
     imgEl.src = "";
+    if (counterEl) counterEl.innerText = "";
     currentPreviewSlot = null;
+    currentPreviewIndex = -1;
 }
 
-function handleCustomerImageChange(slot, inputEl) {
-    const file = inputEl?.files?.[0];
-    if (!file) return;
-    customerImageFiles[slot] = file;
+function showPrevCustomerPreviewImage() {
+    if (!currentPreviewSlot) return;
+    const entries = customerImageUrls[currentPreviewSlot] || [];
+    if (entries.length <= 1) return;
+    currentPreviewIndex = (currentPreviewIndex - 1 + entries.length) % entries.length;
+    renderCustomerImagePreview();
+}
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        setCustomerImagePreview(slot, e.target?.result);
-    };
-    reader.readAsDataURL(file);
+function showNextCustomerPreviewImage() {
+    if (!currentPreviewSlot) return;
+    const entries = customerImageUrls[currentPreviewSlot] || [];
+    if (entries.length <= 1) return;
+    currentPreviewIndex = (currentPreviewIndex + 1) % entries.length;
+    renderCustomerImagePreview();
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result || "");
+        reader.onerror = () => reject(new Error("image read failed"));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleCustomerImageChange(slot, inputEl) {
+    const files = Array.from(inputEl?.files || []);
+    if (!files.length) return;
+
+    try {
+        const localEntries = await Promise.all(files.map(async (file) => ({
+            url: await readFileAsDataUrl(file),
+            imageName: null,
+            isLocal: true,
+            file,
+        })));
+        customerImageUrls[slot] = [...(customerImageUrls[slot] || []), ...localEntries];
+        rebuildCustomerImageFileQueue(slot);
+        renderCustomerImageBox(slot);
+    } catch (e) {
+        console.error("customer image preview failed", e);
+        alert("이미지 미리보기 실패");
+    } finally {
+        if (inputEl) inputEl.value = "";
+    }
 }
 
 async function uploadCustomerImages(customerNumber) {
     if (!customerNumber) return;
-    const hasFiles = CUSTOMER_IMAGE_SLOTS.some((slot) => customerImageFiles[slot]);
+    const desiredOrderTokensBySlot = {};
+    const hasFiles = CUSTOMER_IMAGE_SLOTS.some((slot) =>
+        (customerImageUrls[slot] || []).some((item) => item?.isLocal && item?.file)
+    );
     if (!hasFiles) return;
+
+    CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
+        desiredOrderTokensBySlot[slot] = (customerImageUrls[slot] || []).map((item) => {
+            const name = item?.imageName || extractImageNameFromUrl(item?.url);
+            if (name) return { type: "saved", name };
+            return { type: "local" };
+        });
+    });
 
     const fd = new FormData();
     CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
-        const file = customerImageFiles[slot];
-        if (file) {
-            fd.append(slot, file);
-        }
+        (customerImageUrls[slot] || []).forEach((item) => {
+            if (item?.isLocal && item?.file) {
+                fd.append(slot, item.file);
+            }
+        });
     });
 
     const res = await fetch(`/api/customer/${customerNumber}/images`, {
@@ -124,13 +474,80 @@ async function uploadCustomerImages(customerNumber) {
     });
     if (!res.ok) throw new Error("customer image upload failed");
     const payload = await res.json();
-    const images = payload?.images || {};
+    setCustomerImagesFromPayload(payload?.images || {});
+
     CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
-        setCustomerImagePreview(slot, images[slot] || null);
-        customerImageFiles[slot] = null;
+        const serverEntries = customerImageUrls[slot] || [];
+        const orderTokens = desiredOrderTokensBySlot[slot] || [];
+        if (!serverEntries.length || !orderTokens.length) return;
+
+        const nameToEntry = new Map();
+        const serverNames = [];
+        serverEntries.forEach((item) => {
+            const name = item?.imageName || extractImageNameFromUrl(item?.url);
+            if (!name) return;
+            nameToEntry.set(name, item);
+            serverNames.push(name);
+        });
+        if (!serverNames.length) return;
+
+        const existingNames = new Set(
+            orderTokens
+                .filter((token) => token?.type === "saved" && token?.name)
+                .map((token) => token.name)
+        );
+        const newNames = serverNames.filter((name) => !existingNames.has(name));
+
+        let newNameIndex = 0;
+        const orderedNames = [];
+        orderTokens.forEach((token) => {
+            if (token?.type === "saved" && token.name && nameToEntry.has(token.name)) {
+                orderedNames.push(token.name);
+                return;
+            }
+            if (token?.type === "local" && newNameIndex < newNames.length) {
+                orderedNames.push(newNames[newNameIndex]);
+                newNameIndex += 1;
+            }
+        });
+
+        const used = new Set(orderedNames);
+        serverNames.forEach((name) => {
+            if (!used.has(name)) orderedNames.push(name);
+        });
+
+        customerImageUrls[slot] = orderedNames
+            .map((name) => {
+                const entry = nameToEntry.get(name);
+                if (!entry) return null;
+                return {
+                    url: entry.url,
+                    imageName: name,
+                    isLocal: false,
+                    file: null,
+                };
+            })
+            .filter(Boolean);
+        rebuildCustomerImageFileQueue(slot);
+        renderCustomerImageBox(slot);
+    });
+
+    if (currentManageImageSlot) {
+        renderCustomerImageManageList();
+    }
+    CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
         const inputEl = document.getElementById(`customerImageInput_${slot}`);
         if (inputEl) inputEl.value = "";
     });
+
+    if (currentPreviewSlot) {
+        const entries = customerImageUrls[currentPreviewSlot] || [];
+        if (!entries.length) closeCustomerImagePreview();
+        else {
+            currentPreviewIndex = Math.min(currentPreviewIndex, entries.length - 1);
+            renderCustomerImagePreview();
+        }
+    }
 }
 
 async function loadCustomerImages(customerNumber) {
@@ -143,39 +560,71 @@ async function loadCustomerImages(customerNumber) {
         const res = await fetch(`/api/customer/${customerNumber}/images`);
         if (!res.ok) return;
         const payload = await res.json();
-        CUSTOMER_IMAGE_SLOTS.forEach((slot) => {
-            setCustomerImagePreview(slot, payload?.[slot] || null);
-        });
+        setCustomerImagesFromPayload(payload || {});
     } catch (e) {
         console.error("customer image load failed", e);
     }
 }
 
-async function deleteCustomerImage(slot) {
+async function deleteCustomerImage(slot, index = currentPreviewIndex) {
     if (!slot) return;
+    const entries = customerImageUrls[slot] || [];
+    if (!entries.length) return;
+
+    const targetIndex = Number.isInteger(index) && index >= 0 && index < entries.length
+        ? index
+        : entries.length - 1;
+    const target = entries[targetIndex];
+    if (!target) return;
 
     const customerNumber = getCustomerNumberFromPath();
-    const currentUrl = customerImageUrls[slot];
-    const hasUnsavedLocalFile = Boolean(customerImageFiles[slot]) || isDataUrl(currentUrl);
+    const hasUnsavedLocalFile = Boolean(target?.isLocal || target?.file || isDataUrl(target?.url));
 
     if (!customerNumber || hasUnsavedLocalFile) {
-        clearCustomerImageSlot(slot);
-        closeCustomerImagePreview();
+        entries.splice(targetIndex, 1);
+        rebuildCustomerImageFileQueue(slot);
+        renderCustomerImageBox(slot);
+        if (currentPreviewSlot === slot) {
+            if (!entries.length) closeCustomerImagePreview();
+            else {
+                currentPreviewIndex = Math.min(targetIndex, entries.length - 1);
+                renderCustomerImagePreview();
+            }
+        }
+        return;
+    }
+
+    const imageName = target.imageName || extractImageNameFromUrl(target.url);
+    if (!imageName) {
+        entries.splice(targetIndex, 1);
+        rebuildCustomerImageFileQueue(slot);
+        renderCustomerImageBox(slot);
+        if (currentPreviewSlot === slot) {
+            if (!entries.length) closeCustomerImagePreview();
+            else {
+                currentPreviewIndex = Math.min(targetIndex, entries.length - 1);
+                renderCustomerImagePreview();
+            }
+        }
         return;
     }
 
     try {
-        const res = await fetch(`/api/customer/${customerNumber}/images/${slot}`, {
+        const res = await fetch(`/api/customer/${customerNumber}/images/${slot}?image_name=${encodeURIComponent(imageName)}`, {
             method: "DELETE"
         });
         if (!res.ok) throw new Error("customer image delete failed");
 
         const payload = await res.json();
-        const images = payload?.images || {};
-        CUSTOMER_IMAGE_SLOTS.forEach((imageSlot) => {
-            setCustomerImagePreview(imageSlot, images[imageSlot] || null);
-        });
-        closeCustomerImagePreview();
+        setCustomerImagesFromPayload(payload?.images || {});
+        if (currentPreviewSlot === slot) {
+            const updated = customerImageUrls[slot] || [];
+            if (!updated.length) closeCustomerImagePreview();
+            else {
+                currentPreviewIndex = Math.min(targetIndex, updated.length - 1);
+                renderCustomerImagePreview();
+            }
+        }
     } catch (e) {
         console.error("customer image delete failed", e);
         alert("Failed to delete image.");
@@ -977,6 +1426,7 @@ async function saveBuildingDetail() {
         const result = await res.json();
         const savedCustomerNumber = isNew ? result.customer_number : customer_number;
         await uploadCustomerImages(savedCustomerNumber);
+        await syncCustomerImageOrder(savedCustomerNumber);
 
         alert("저장 완료");
 
@@ -1587,7 +2037,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const slotToReplace = currentPreviewSlot;
             if (!slotToReplace) return;
             closeCustomerImagePreview();
-            openCustomerImagePicker(slotToReplace);
+            openCustomerImageManageModal(slotToReplace);
         });
     }
     const previewDeleteBtn = document.getElementById("customerImageDeleteBtn");
@@ -1598,12 +2048,54 @@ document.addEventListener("DOMContentLoaded", () => {
             await deleteCustomerImage(slotToDelete);
         });
     }
+    const previewPrevBtn = document.getElementById("customerImagePreviewPrevBtn");
+    if (previewPrevBtn) {
+        previewPrevBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            showPrevCustomerPreviewImage();
+        });
+    }
+    const previewNextBtn = document.getElementById("customerImagePreviewNextBtn");
+    if (previewNextBtn) {
+        previewNextBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            showNextCustomerPreviewImage();
+        });
+    }
     const previewModal = document.getElementById("customerImagePreviewModal");
     if (previewModal) {
         previewModal.addEventListener("click", (e) => {
             if (e.target === previewModal) closeCustomerImagePreview();
         });
     }
+    const manageModal = document.getElementById("customerImageManageModal");
+    if (manageModal) {
+        manageModal.addEventListener("click", (e) => {
+            if (e.target === manageModal) closeCustomerImageManageModal();
+        });
+    }
+    document.addEventListener("keydown", (e) => {
+        const manageModalEl = document.getElementById("customerImageManageModal");
+        if (manageModalEl && !manageModalEl.classList.contains("hidden") && e.key === "Escape") {
+            closeCustomerImageManageModal();
+            return;
+        }
+        const previewModalEl = document.getElementById("customerImagePreviewModal");
+        if (!previewModalEl || previewModalEl.classList.contains("hidden")) return;
+        if (e.key === "Escape") {
+            closeCustomerImagePreview();
+            return;
+        }
+        if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            showPrevCustomerPreviewImage();
+            return;
+        }
+        if (e.key === "ArrowRight") {
+            e.preventDefault();
+            showNextCustomerPreviewImage();
+        }
+    });
 
     ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword", "matchMinPrice", "matchMaxPrice", "matchStationWalkMin", "matchStationWalkMax", "matchCashHoldManwon", "matchCashHoldPercent", "matchMinYieldInput", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchBuildingAreaMin", "matchBuildingAreaMax", "matchApprovalYearMin", "matchRoadWidthMin", "matchParkingMin"].forEach((id) => {
         const el = document.getElementById(id);

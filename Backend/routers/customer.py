@@ -54,38 +54,21 @@ def _get_customer_images_from_db(cur, customer_number: int) -> dict:
     cur.execute(
         """
         SELECT slot, img_name
-        FROM (
-            SELECT
-                slot,
-                img_name,
-                ROW_NUMBER() OVER (PARTITION BY slot ORDER BY img_number DESC) AS rn
-            FROM customer_image_info
-            WHERE customer_number = %s
-              AND delete_flag = FALSE
-        ) x
-        WHERE x.rn = 1
+        FROM customer_image_info
+        WHERE customer_number = %s
+          AND delete_flag = FALSE
+        ORDER BY slot ASC, img_number ASC
         """,
         (customer_number,)
     )
-    images = {"profile": None, "card": None}
+    images = {"profile": [], "card": []}
     for slot, img_name in cur.fetchall():
         if slot in images and img_name:
-            images[slot] = _customer_image_url(customer_number, img_name)
+            images[slot].append(_customer_image_url(customer_number, img_name))
     return images
 
 
-def _upsert_customer_image_record(cur, customer_number: int, slot: str, image_name: str):
-    cur.execute(
-        """
-        UPDATE customer_image_info
-        SET delete_flag = TRUE,
-            update_time = CURRENT_TIMESTAMP
-        WHERE customer_number = %s
-          AND slot = %s
-          AND delete_flag = FALSE
-        """,
-        (customer_number, slot)
-    )
+def _insert_customer_image_record(cur, customer_number: int, slot: str, image_name: str):
     cur.execute(
         """
         INSERT INTO customer_image_info (customer_number, slot, root_path, img_name, delete_flag)
@@ -124,19 +107,34 @@ def _delete_customer_photo_file(customer_number: int, image_name: Optional[str])
         pass
 
 
-def _soft_delete_customer_image(cur, customer_number: int, slot: str) -> Optional[str]:
-    cur.execute(
-        """
-        SELECT img_number, img_name
-        FROM customer_image_info
-        WHERE customer_number = %s
-          AND slot = %s
-          AND delete_flag = FALSE
-        ORDER BY img_number DESC
-        LIMIT 1
-        """,
-        (customer_number, slot)
-    )
+def _soft_delete_customer_image(cur, customer_number: int, slot: str, image_name: Optional[str] = None) -> Optional[str]:
+    if image_name:
+        cur.execute(
+            """
+            SELECT img_number, img_name
+            FROM customer_image_info
+            WHERE customer_number = %s
+              AND slot = %s
+              AND img_name = %s
+              AND delete_flag = FALSE
+            ORDER BY img_number DESC
+            LIMIT 1
+            """,
+            (customer_number, slot, image_name)
+        )
+    else:
+        cur.execute(
+            """
+            SELECT img_number, img_name
+            FROM customer_image_info
+            WHERE customer_number = %s
+              AND slot = %s
+              AND delete_flag = FALSE
+            ORDER BY img_number DESC
+            LIMIT 1
+            """,
+            (customer_number, slot)
+        )
     row = cur.fetchone()
     if not row:
         return None
@@ -152,6 +150,66 @@ def _soft_delete_customer_image(cur, customer_number: int, slot: str) -> Optiona
         (img_number,)
     )
     return image_name
+
+
+class CustomerImageOrderPayload(BaseModel):
+    image_names: List[str] = Field(default_factory=list)
+
+
+def _reorder_customer_images(cur, customer_number: int, slot: str, image_names: List[str]):
+    cur.execute(
+        """
+        SELECT img_name, root_path
+        FROM customer_image_info
+        WHERE customer_number = %s
+          AND slot = %s
+          AND delete_flag = FALSE
+        ORDER BY img_number ASC
+        """,
+        (customer_number, slot),
+    )
+    rows = cur.fetchall()
+    if not rows:
+        return
+
+    existing_order = [name for name, _ in rows]
+    existing_roots = {name: root_path for name, root_path in rows}
+
+    normalized_requested = []
+    seen = set()
+    for name in (image_names or []):
+        n = (name or "").strip()
+        if not n or n in seen:
+            continue
+        if n in existing_roots:
+            normalized_requested.append(n)
+            seen.add(n)
+
+    for name in existing_order:
+        if name not in seen:
+            normalized_requested.append(name)
+            seen.add(name)
+
+    cur.execute(
+        """
+        UPDATE customer_image_info
+        SET delete_flag = TRUE,
+            update_time = CURRENT_TIMESTAMP
+        WHERE customer_number = %s
+          AND slot = %s
+          AND delete_flag = FALSE
+        """,
+        (customer_number, slot),
+    )
+
+    for name in normalized_requested:
+        cur.execute(
+            """
+            INSERT INTO customer_image_info (customer_number, slot, root_path, img_name, delete_flag)
+            VALUES (%s, %s, %s, %s, FALSE)
+            """,
+            (customer_number, slot, existing_roots[name], name),
+        )
 
 
 def ensure_customer_intro_table(conn, cur):
@@ -422,8 +480,8 @@ def get_customer_images(customer_number: int):
 @router.post("/api/customer/{customer_number:int}/images")
 async def upload_customer_images(
     customer_number: int,
-    profile: Optional[UploadFile] = File(None),
-    card: Optional[UploadFile] = File(None),
+    profile: Optional[List[UploadFile]] = File(None),
+    card: Optional[List[UploadFile]] = File(None),
 ):
     conn = None
     cur = None
@@ -436,11 +494,12 @@ async def upload_customer_images(
             "profile": profile,
             "card": card,
         }
-        for slot, upload in uploads.items():
-            if upload is None:
+        for slot, upload_list in uploads.items():
+            if not upload_list:
                 continue
-            image_name = _save_customer_photo(customer_number, slot, upload)
-            _upsert_customer_image_record(cur, customer_number, slot, image_name)
+            for upload in upload_list:
+                image_name = _save_customer_photo(customer_number, slot, upload)
+                _insert_customer_image_record(cur, customer_number, slot, image_name)
 
         conn.commit()
         return {
@@ -459,7 +518,11 @@ async def upload_customer_images(
 
 
 @router.delete("/api/customer/{customer_number:int}/images/{slot}")
-def delete_customer_image(customer_number: int, slot: str):
+def delete_customer_image(
+    customer_number: int,
+    slot: str,
+    image_name: Optional[str] = Query(None),
+):
     normalized_slot = (slot or "").strip().lower()
     if normalized_slot not in CUSTOMER_IMAGE_SLOTS:
         raise HTTPException(status_code=400, detail="invalid slot")
@@ -473,7 +536,13 @@ def delete_customer_image(customer_number: int, slot: str):
         cur = conn.cursor()
         ensure_customer_intro_table(conn, cur)
 
-        deleted_image_name = _soft_delete_customer_image(cur, customer_number, normalized_slot)
+        normalized_image_name = (image_name or "").strip() or None
+        deleted_image_name = _soft_delete_customer_image(
+            cur,
+            customer_number,
+            normalized_slot,
+            normalized_image_name,
+        )
         conn.commit()
 
         images = _get_customer_images_from_db(cur, customer_number)
@@ -489,6 +558,40 @@ def delete_customer_image(customer_number: int, slot: str):
     finally:
         if deleted_image_name:
             _delete_customer_photo_file(customer_number, deleted_image_name)
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.put("/api/customer/{customer_number:int}/images/{slot}/order")
+def reorder_customer_images(
+    customer_number: int,
+    slot: str,
+    payload: CustomerImageOrderPayload,
+):
+    normalized_slot = (slot or "").strip().lower()
+    if normalized_slot not in CUSTOMER_IMAGE_SLOTS:
+        raise HTTPException(status_code=400, detail="invalid slot")
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        _reorder_customer_images(cur, customer_number, normalized_slot, payload.image_names or [])
+        conn.commit()
+        return {
+            "status": "ok",
+            "images": _get_customer_images_from_db(cur, customer_number),
+        }
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
         if cur:
             cur.close()
         if conn:
