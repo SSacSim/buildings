@@ -1,6 +1,13 @@
 import sys
 import os 
 import json
+import re
+import hmac
+import hashlib
+import secrets
+import time
+import threading
+from urllib.parse import quote, unquote
 
 sys.path.append('../DB')
 
@@ -16,6 +23,12 @@ from typing import List, Optional
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse, JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+try:
+    from starlette.middleware.sessions import SessionMiddleware as StarletteSessionMiddleware
+except ModuleNotFoundError:
+    StarletteSessionMiddleware = None
 
 from routers import customer
 
@@ -39,6 +52,394 @@ app.include_router(customer.router)
 
 # 템플릿 설정
 templates = Jinja2Templates(directory="./templates")
+
+app_settings = DB_utils._load_settings().get("app", {})
+SESSION_SECRET = (
+    os.getenv("APP_SESSION_SECRET")
+    or app_settings.get("session_secret")
+    or "change-me-session-secret"
+)
+AUTH_SESSION_KEY = "auth_user"
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{4,32}$")
+PASSWORD_MIN_LENGTH = 8
+
+PUBLIC_PATH_PREFIXES = (
+    "/statics",
+    "/photo",
+    "/save_file",
+    "/login",
+    "/signup",
+    "/logout",
+    "/api/auth/login",
+    "/api/auth/signup",
+    "/api/auth/logout",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
+PUBLIC_PATH_EXACT = {
+    "/favicon.ico",
+}
+
+SESSION_COOKIE_NAME = "app_session_id"
+SESSION_STORE_TTL_SECONDS = 60 * 60 * 24 * 7
+_fallback_session_store = {}
+_fallback_session_lock = threading.Lock()
+
+
+def _prune_fallback_sessions(now_ts: float):
+    expired_keys = [
+        key
+        for key, value in _fallback_session_store.items()
+        if value.get("expires_at", 0) <= now_ts
+    ]
+    for key in expired_keys:
+        _fallback_session_store.pop(key, None)
+
+
+class InMemorySessionMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        now_ts = time.time()
+        session_id = request.cookies.get(SESSION_COOKIE_NAME)
+        session_data = {}
+
+        with _fallback_session_lock:
+            _prune_fallback_sessions(now_ts)
+            if session_id:
+                existing = _fallback_session_store.get(session_id)
+                if existing:
+                    session_data = dict(existing.get("data") or {})
+                else:
+                    session_id = None
+
+        request.scope["session"] = session_data
+        response = await call_next(request)
+
+        current_session = request.scope.get("session") or {}
+        if current_session:
+            if not session_id:
+                session_id = secrets.token_urlsafe(32)
+            with _fallback_session_lock:
+                _fallback_session_store[session_id] = {
+                    "data": dict(current_session),
+                    "expires_at": now_ts + SESSION_STORE_TTL_SECONDS,
+                }
+            response.set_cookie(
+                SESSION_COOKIE_NAME,
+                session_id,
+                httponly=True,
+                samesite="lax",
+                secure=False,
+                path="/",
+            )
+        else:
+            if session_id:
+                with _fallback_session_lock:
+                    _fallback_session_store.pop(session_id, None)
+            response.delete_cookie(SESSION_COOKIE_NAME, path="/")
+
+        return response
+
+
+def _normalize_next_path(next_path: Optional[str]) -> str:
+    candidate = unquote((next_path or "").strip())
+    if not candidate.startswith("/"):
+        return "/"
+    if candidate.startswith("//"):
+        return "/"
+    return candidate
+
+
+def _is_public_path(path: str) -> bool:
+    if path in PUBLIC_PATH_EXACT:
+        return True
+    return any(path.startswith(prefix) for prefix in PUBLIC_PATH_PREFIXES)
+
+
+def _ensure_auth_user_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_user (
+            user_number BIGSERIAL PRIMARY KEY,
+            username VARCHAR(80) NOT NULL,
+            password_salt VARCHAR(64) NOT NULL,
+            password_hash VARCHAR(128) NOT NULL,
+            display_name VARCHAR(80),
+            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            delete_flag BOOLEAN DEFAULT FALSE
+        );
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE app_user
+        ADD COLUMN IF NOT EXISTS display_name VARCHAR(80);
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE app_user
+        ADD COLUMN IF NOT EXISTS update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+        """
+    )
+    cur.execute(
+        """
+        ALTER TABLE app_user
+        ADD COLUMN IF NOT EXISTS delete_flag BOOLEAN DEFAULT FALSE;
+        """
+    )
+    cur.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_app_user_username_ci
+        ON app_user (LOWER(username));
+        """
+    )
+
+
+def _hash_password(password: str, salt: str) -> str:
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        200_000,
+    )
+    return digest.hex()
+
+
+def _verify_password(password: str, salt: str, expected_hash: str) -> bool:
+    computed = _hash_password(password, salt)
+    return hmac.compare_digest(computed, expected_hash)
+
+
+def _normalize_username(username: str) -> str:
+    return (username or "").strip()
+
+
+@app.middleware("http")
+async def require_authentication(request: Request, call_next):
+    path = request.url.path or "/"
+    if _is_public_path(path):
+        return await call_next(request)
+
+    if request.session.get(AUTH_SESSION_KEY):
+        return await call_next(request)
+
+    accepts = (request.headers.get("accept") or "").lower()
+    wants_json = path.startswith("/api/") or "application/json" in accepts
+    if wants_json:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "authentication required"},
+        )
+
+    query_part = f"?{request.url.query}" if request.url.query else ""
+    safe_next = _normalize_next_path(f"{path}{query_part}")
+    return RedirectResponse(url=f"/login?next={quote(safe_next, safe='/:?=&')}", status_code=302)
+
+
+if StarletteSessionMiddleware is not None:
+    app.add_middleware(
+        StarletteSessionMiddleware,
+        secret_key=SESSION_SECRET,
+        max_age=None,
+        same_site="lax",
+        https_only=False,
+    )
+else:
+    app.add_middleware(InMemorySessionMiddleware)
+
+
+class AuthSignupPayload(BaseModel):
+    username: str
+    password: str
+    display_name: Optional[str] = None
+
+
+class AuthLoginPayload(BaseModel):
+    username: str
+    password: str
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = "/"):
+    if request.session.get(AUTH_SESSION_KEY):
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(
+        "login.html",
+        {"request": request, "next": _normalize_next_path(next)},
+    )
+
+
+@app.get("/signup", response_class=HTMLResponse)
+def signup_page(request: Request, next: str = "/"):
+    if request.session.get(AUTH_SESSION_KEY):
+        return RedirectResponse(url="/", status_code=302)
+    return templates.TemplateResponse(
+        "signup.html",
+        {"request": request, "next": _normalize_next_path(next)},
+    )
+
+
+@app.get("/logout")
+def logout_page(request: Request):
+    request.session.clear()
+    return RedirectResponse(url="/login", status_code=302)
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    user = request.session.get(AUTH_SESSION_KEY)
+    if not user:
+        raise HTTPException(status_code=401, detail="authentication required")
+    return {"user": user}
+
+
+@app.post("/api/auth/signup")
+def auth_signup(payload: AuthSignupPayload):
+    username = _normalize_username(payload.username)
+    password = payload.password or ""
+    display_name = (payload.display_name or "").strip() or None
+
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise HTTPException(
+            status_code=400,
+            detail="username must be 4-32 chars using letters, numbers, ., _, -",
+        )
+    if len(password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"password must be at least {PASSWORD_MIN_LENGTH} characters",
+        )
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+
+        cur.execute(
+            """
+            SELECT user_number, delete_flag
+            FROM app_user
+            WHERE LOWER(username) = LOWER(%s)
+            ORDER BY user_number DESC
+            LIMIT 1
+            """,
+            (username,),
+        )
+        existing = cur.fetchone()
+        if existing and not existing[1]:
+            raise HTTPException(status_code=409, detail="username already exists")
+
+        salt = secrets.token_hex(16)
+        password_hash = _hash_password(password, salt)
+
+        if existing:
+            user_number = existing[0]
+            cur.execute(
+                """
+                UPDATE app_user
+                SET username = %s,
+                    password_salt = %s,
+                    password_hash = %s,
+                    display_name = %s,
+                    delete_flag = FALSE,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE user_number = %s
+                """,
+                (username, salt, password_hash, display_name, user_number),
+            )
+        else:
+            cur.execute(
+                """
+                INSERT INTO app_user (
+                    username,
+                    password_salt,
+                    password_hash,
+                    display_name,
+                    delete_flag
+                )
+                VALUES (%s, %s, %s, %s, FALSE)
+                """,
+                (username, salt, password_hash, display_name),
+            )
+
+        conn.commit()
+        return {"status": "created", "username": username}
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.post("/api/auth/login")
+def auth_login(payload: AuthLoginPayload, request: Request):
+    username = _normalize_username(payload.username)
+    password = payload.password or ""
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="username and password are required")
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+
+        cur.execute(
+            """
+            SELECT user_number, username, password_salt, password_hash, display_name
+            FROM app_user
+            WHERE LOWER(username) = LOWER(%s)
+              AND delete_flag = FALSE
+            ORDER BY user_number DESC
+            LIMIT 1
+            """,
+            (username,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="invalid username or password")
+
+        user_number, resolved_username, password_salt, password_hash, display_name = row
+        if not _verify_password(password, password_salt, password_hash):
+            raise HTTPException(status_code=401, detail="invalid username or password")
+
+        request.session[AUTH_SESSION_KEY] = {
+            "user_number": user_number,
+            "username": resolved_username,
+            "display_name": display_name,
+        }
+        return {
+            "status": "ok",
+            "user": request.session[AUTH_SESSION_KEY],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    request.session.clear()
+    return {"status": "ok"}
 
 # 👉 화면 렌더링
 @app.get("/", response_class=HTMLResponse)

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>로그인</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-100 flex items-center justify-center px-4">
+    <div class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-lg p-6">
+        <h1 class="text-2xl font-bold text-slate-800">로그인</h1>
+        <p class="mt-1 text-sm text-slate-500">계정으로 접속해 주세요.</p>
+
+        <form id="loginForm" class="mt-6 space-y-4">
+            <input id="nextPath" type="hidden" value="{{ next }}">
+            <div>
+                <label for="username" class="block text-sm font-semibold text-slate-700 mb-1">아이디</label>
+                <input id="username" type="text" autocomplete="username"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+            </div>
+            <div>
+                <label for="password" class="block text-sm font-semibold text-slate-700 mb-1">비밀번호</label>
+                <input id="password" type="password" autocomplete="current-password"
+                    class="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+            </div>
+            <p id="loginError" class="hidden text-sm text-red-600"></p>
+            <button id="loginBtn" type="submit"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition">
+                로그인
+            </button>
+        </form>
+
+        <div class="mt-4 text-sm text-slate-600">
+            계정이 없으면
+            <a id="signupLink" href="/signup" class="font-semibold text-blue-600 hover:underline">회원가입</a>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById("loginForm");
+        const loginBtn = document.getElementById("loginBtn");
+        const loginError = document.getElementById("loginError");
+        const nextPathInput = document.getElementById("nextPath");
+        const signupLink = document.getElementById("signupLink");
+
+        function safeNextPath(path) {
+            const value = String(path || "").trim();
+            if (!value.startsWith("/") || value.startsWith("//")) return "/";
+            return value;
+        }
+
+        const safeNext = safeNextPath(nextPathInput?.value || "/");
+        signupLink.href = `/signup?next=${encodeURIComponent(safeNext)}`;
+
+        const qs = new URLSearchParams(window.location.search);
+        if (qs.get("signup") === "1") {
+            loginError.classList.remove("hidden");
+            loginError.classList.remove("text-red-600");
+            loginError.classList.add("text-emerald-600");
+            loginError.textContent = "회원가입이 완료되었습니다. 로그인해 주세요.";
+        }
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            loginError.classList.add("hidden");
+            loginError.classList.remove("text-emerald-600");
+            loginError.classList.add("text-red-600");
+
+            const username = document.getElementById("username").value.trim();
+            const password = document.getElementById("password").value;
+            if (!username || !password) {
+                loginError.textContent = "아이디와 비밀번호를 입력해 주세요.";
+                loginError.classList.remove("hidden");
+                return;
+            }
+
+            loginBtn.disabled = true;
+            try {
+                const res = await fetch("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ username, password }),
+                });
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => ({}));
+                    throw new Error(payload.detail || "로그인에 실패했습니다.");
+                }
+
+                window.location.href = safeNext;
+            } catch (err) {
+                loginError.textContent = err.message || "로그인 중 오류가 발생했습니다.";
+                loginError.classList.remove("hidden");
+            } finally {
+                loginBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
