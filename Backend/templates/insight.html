@@ -247,6 +247,38 @@
     </main>
 
     <script>
+        // Redirect to login page when API calls return 401 (expired session).
+        (function installAuthRedirectFetchGuard() {
+            if (typeof window === "undefined" || typeof window.fetch !== "function") return;
+            if (window.__authRedirectFetchGuardInstalled) return;
+
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = async (...args) => {
+                const response = await originalFetch(...args);
+                if (response.status !== 401) return response;
+
+                let redirectUrl = "";
+                try {
+                    const payload = await response.clone().json();
+                    if (payload && typeof payload.redirect === "string") {
+                        redirectUrl = payload.redirect.trim();
+                    }
+                } catch (e) {
+                    // Ignore JSON parse errors and use fallback redirect.
+                }
+
+                if (!redirectUrl) {
+                    const next = `${window.location.pathname}${window.location.search}`;
+                    redirectUrl = `/login?next=${encodeURIComponent(next)}`;
+                }
+
+                window.location.href = redirectUrl;
+                throw new Error("authentication required");
+            };
+
+            window.__authRedirectFetchGuardInstalled = true;
+        })();
+
         function handleCancel() {
             if (window.opener || window.history.length === 1) {
                 window.close();

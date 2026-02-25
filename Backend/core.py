@@ -60,8 +60,24 @@ SESSION_SECRET = (
     or "change-me-session-secret"
 )
 AUTH_SESSION_KEY = "auth_user"
+AUTH_SESSION_LAST_ACTIVITY_KEY = "auth_last_activity_ts"
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{4,32}$")
 PASSWORD_MIN_LENGTH = 8
+
+
+def _read_positive_int(value, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+AUTH_SESSION_IDLE_TIMEOUT_SECONDS = _read_positive_int(
+    os.getenv("AUTH_SESSION_IDLE_TIMEOUT_SECONDS")
+    or app_settings.get("auth_session_idle_timeout_seconds"),
+    60 * 60 * 2,
+)
 
 PUBLIC_PATH_PREFIXES = (
     "/statics",
@@ -219,14 +235,40 @@ def _normalize_username(username: str) -> str:
 @app.middleware("http")
 async def require_authentication(request: Request, call_next):
     path = request.url.path or "/"
-    if _is_public_path(path):
+    is_public_path = _is_public_path(path)
+
+    auth_user = request.session.get(AUTH_SESSION_KEY)
+    if auth_user:
+        now_ts = int(time.time())
+        last_activity = request.session.get(AUTH_SESSION_LAST_ACTIVITY_KEY)
+        if last_activity is None:
+            request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = now_ts
+        else:
+            try:
+                last_activity_ts = int(last_activity)
+            except (TypeError, ValueError):
+                request.session.clear()
+                auth_user = None
+            else:
+                if now_ts - last_activity_ts > AUTH_SESSION_IDLE_TIMEOUT_SECONDS:
+                    request.session.clear()
+                    auth_user = None
+                elif not is_public_path:
+                    request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = now_ts
+
+    if is_public_path:
         return await call_next(request)
 
-    if request.session.get(AUTH_SESSION_KEY):
+    if auth_user:
         return await call_next(request)
 
     accepts = (request.headers.get("accept") or "").lower()
-    wants_json = path.startswith("/api/") or "application/json" in accepts
+    content_type = (request.headers.get("content-type") or "").lower()
+    wants_json = (
+        path.startswith("/api/")
+        or "application/json" in accepts
+        or "application/json" in content_type
+    )
     if wants_json:
         return JSONResponse(
             status_code=401,
@@ -421,6 +463,7 @@ def auth_login(payload: AuthLoginPayload, request: Request):
             "username": resolved_username,
             "display_name": display_name,
         }
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
         return {
             "status": "ok",
             "user": request.session[AUTH_SESSION_KEY],
