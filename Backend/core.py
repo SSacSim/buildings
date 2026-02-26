@@ -221,10 +221,61 @@ def _ensure_auth_user_table(cur):
     )
     cur.execute(
         """
+        ALTER TABLE app_user
+        ADD COLUMN IF NOT EXISTS admin_flag BOOLEAN DEFAULT FALSE;
+        """
+    )
+    cur.execute(
+        """
         CREATE UNIQUE INDEX IF NOT EXISTS idx_app_user_username_ci
         ON app_user (LOWER(username));
         """
     )
+
+
+def _ensure_auth_config_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_auth_config (
+            config_id SMALLINT PRIMARY KEY CHECK (config_id = 1),
+            signup_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    cur.execute(
+        """
+        INSERT INTO app_auth_config (config_id, signup_enabled)
+        VALUES (1, TRUE)
+        ON CONFLICT (config_id) DO NOTHING;
+        """
+    )
+
+
+def _is_signup_enabled(cur) -> bool:
+    _ensure_auth_config_table(cur)
+    cur.execute(
+        """
+        SELECT signup_enabled
+        FROM app_auth_config
+        WHERE config_id = 1
+        """
+    )
+    row = cur.fetchone()
+    return bool(row[0]) if row else True
+
+
+def _is_admin_session_user(user: Optional[dict]) -> bool:
+    return bool(user and user.get("admin_flag"))
+
+
+def _assert_admin_session_user(request: Request) -> dict:
+    user = request.session.get(AUTH_SESSION_KEY)
+    if not user:
+        raise HTTPException(status_code=401, detail="authentication required")
+    if not _is_admin_session_user(user):
+        raise HTTPException(status_code=403, detail="admin permission required")
+    return user
 
 
 def _hash_password(password: str, salt: str) -> str:
@@ -317,6 +368,14 @@ class AuthLoginPayload(BaseModel):
     password: str
 
 
+class AuthProfileUpdatePayload(BaseModel):
+    display_name: Optional[str] = None
+
+
+class AuthSignupControlUpdatePayload(BaseModel):
+    signup_enabled: bool
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, next: str = "/"):
     if request.session.get(AUTH_SESSION_KEY):
@@ -331,9 +390,40 @@ def login_page(request: Request, next: str = "/"):
 def signup_page(request: Request, next: str = "/"):
     if request.session.get(AUTH_SESSION_KEY):
         return RedirectResponse(url="/", status_code=302)
+    safe_next = _normalize_next_path(next)
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        signup_enabled = _is_signup_enabled(cur)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+    if not signup_enabled:
+        return RedirectResponse(
+            url=f"/login?signup_closed=1&next={quote(safe_next, safe='/:?=&')}",
+            status_code=302,
+        )
+
     return templates.TemplateResponse(
         "signup.html",
-        {"request": request, "next": _normalize_next_path(next)},
+        {"request": request, "next": safe_next},
+    )
+
+
+@app.get("/account", response_class=HTMLResponse)
+def account_page(request: Request):
+    return templates.TemplateResponse(
+        "account.html",
+        {"request": request},
     )
 
 
@@ -348,7 +438,190 @@ def auth_me(request: Request):
     user = request.session.get(AUTH_SESSION_KEY)
     if not user:
         raise HTTPException(status_code=401, detail="authentication required")
+
+    # Backfill missing admin_flag for old sessions created before admin support.
+    if "admin_flag" not in user:
+        conn = None
+        cur = None
+        try:
+            conn = DB_utils.join_db()
+            cur = conn.cursor()
+            _ensure_auth_user_table(cur)
+            cur.execute(
+                """
+                SELECT user_number, username, display_name, admin_flag
+                FROM app_user
+                WHERE user_number = %s
+                  AND delete_flag = FALSE
+                LIMIT 1
+                """,
+                (user.get("user_number"),),
+            )
+            row = cur.fetchone()
+            if row:
+                user_number, username, display_name, admin_flag = row
+                resolved_admin_flag = bool(admin_flag) or (username or "").lower() == "admin"
+                if resolved_admin_flag and not bool(admin_flag):
+                    cur.execute(
+                        """
+                        UPDATE app_user
+                        SET admin_flag = TRUE,
+                            update_time = CURRENT_TIMESTAMP
+                        WHERE user_number = %s
+                        """,
+                        (user_number,),
+                    )
+                    conn.commit()
+
+                request.session[AUTH_SESSION_KEY] = {
+                    "user_number": user_number,
+                    "username": username,
+                    "display_name": display_name,
+                    "admin_flag": resolved_admin_flag,
+                }
+                request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+                user = request.session[AUTH_SESSION_KEY]
+        except Exception:
+            # Keep serving existing session payload on backfill failure.
+            pass
+        finally:
+            if cur:
+                cur.close()
+            if conn:
+                conn.close()
+
     return {"user": user}
+
+
+@app.get("/api/auth/signup-control")
+def auth_get_signup_control(request: Request):
+    _assert_admin_session_user(request)
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        signup_enabled = _is_signup_enabled(cur)
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {"signup_enabled": signup_enabled}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.patch("/api/auth/signup-control")
+def auth_update_signup_control(payload: AuthSignupControlUpdatePayload, request: Request):
+    _assert_admin_session_user(request)
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        _ensure_auth_config_table(cur)
+
+        cur.execute(
+            """
+            UPDATE app_auth_config
+            SET signup_enabled = %s,
+                update_time = CURRENT_TIMESTAMP
+            WHERE config_id = 1
+            """,
+            (payload.signup_enabled,),
+        )
+        conn.commit()
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {
+            "status": "ok",
+            "signup_enabled": payload.signup_enabled,
+        }
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.patch("/api/auth/me")
+def auth_update_me(payload: AuthProfileUpdatePayload, request: Request):
+    user = request.session.get(AUTH_SESSION_KEY)
+    if not user:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    display_name_raw = (payload.display_name or "").strip()
+    display_name = display_name_raw or None
+    if display_name_raw and len(display_name_raw) > 80:
+        raise HTTPException(
+            status_code=400,
+            detail="display_name must be 80 characters or fewer",
+        )
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+
+        cur.execute(
+            """
+            UPDATE app_user
+            SET display_name = %s,
+                update_time = CURRENT_TIMESTAMP
+            WHERE user_number = %s
+              AND delete_flag = FALSE
+            RETURNING user_number, username, display_name, admin_flag
+            """,
+            (display_name, user.get("user_number")),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="user not found")
+
+        user_number, username, updated_display_name, admin_flag = row
+        request.session[AUTH_SESSION_KEY] = {
+            "user_number": user_number,
+            "username": username,
+            "display_name": updated_display_name,
+            "admin_flag": bool(admin_flag),
+        }
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+
+        conn.commit()
+        return {
+            "status": "ok",
+            "user": request.session[AUTH_SESSION_KEY],
+        }
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.post("/api/auth/signup")
@@ -374,6 +647,7 @@ def auth_signup(payload: AuthSignupPayload):
         conn = DB_utils.join_db()
         cur = conn.cursor()
         _ensure_auth_user_table(cur)
+        signup_enabled = _is_signup_enabled(cur)
 
         cur.execute(
             """
@@ -389,6 +663,18 @@ def auth_signup(payload: AuthSignupPayload):
         if existing and not existing[1]:
             raise HTTPException(status_code=409, detail="username already exists")
 
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM app_user
+            WHERE delete_flag = FALSE
+            """
+        )
+        active_user_count = int(cur.fetchone()[0] or 0)
+        if not signup_enabled and active_user_count > 0:
+            raise HTTPException(status_code=403, detail="signup is currently disabled")
+
+        grant_admin = active_user_count == 0
         salt = secrets.token_hex(16)
         password_hash = _hash_password(password, salt)
 
@@ -401,11 +687,15 @@ def auth_signup(payload: AuthSignupPayload):
                     password_salt = %s,
                     password_hash = %s,
                     display_name = %s,
+                    admin_flag = CASE
+                        WHEN %s THEN TRUE
+                        ELSE COALESCE(admin_flag, FALSE)
+                    END,
                     delete_flag = FALSE,
                     update_time = CURRENT_TIMESTAMP
                 WHERE user_number = %s
                 """,
-                (username, salt, password_hash, display_name, user_number),
+                (username, salt, password_hash, display_name, grant_admin, user_number),
             )
         else:
             cur.execute(
@@ -415,11 +705,12 @@ def auth_signup(payload: AuthSignupPayload):
                     password_salt,
                     password_hash,
                     display_name,
+                    admin_flag,
                     delete_flag
                 )
-                VALUES (%s, %s, %s, %s, FALSE)
+                VALUES (%s, %s, %s, %s, %s, FALSE)
                 """,
-                (username, salt, password_hash, display_name),
+                (username, salt, password_hash, display_name, grant_admin),
             )
 
         conn.commit()
@@ -455,7 +746,7 @@ def auth_login(payload: AuthLoginPayload, request: Request):
 
         cur.execute(
             """
-            SELECT user_number, username, password_salt, password_hash, display_name
+            SELECT user_number, username, password_salt, password_hash, display_name, admin_flag
             FROM app_user
             WHERE LOWER(username) = LOWER(%s)
               AND delete_flag = FALSE
@@ -468,14 +759,29 @@ def auth_login(payload: AuthLoginPayload, request: Request):
         if not row:
             raise HTTPException(status_code=401, detail="invalid username or password")
 
-        user_number, resolved_username, password_salt, password_hash, display_name = row
+        user_number, resolved_username, password_salt, password_hash, display_name, admin_flag = row
         if not _verify_password(password, password_salt, password_hash):
             raise HTTPException(status_code=401, detail="invalid username or password")
+
+        resolved_admin_flag = bool(admin_flag)
+        if not resolved_admin_flag and (resolved_username or "").lower() == "admin":
+            cur.execute(
+                """
+                UPDATE app_user
+                SET admin_flag = TRUE,
+                    update_time = CURRENT_TIMESTAMP
+                WHERE user_number = %s
+                """,
+                (user_number,),
+            )
+            conn.commit()
+            resolved_admin_flag = True
 
         request.session[AUTH_SESSION_KEY] = {
             "user_number": user_number,
             "username": resolved_username,
             "display_name": display_name,
+            "admin_flag": resolved_admin_flag,
         }
         request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
         return {

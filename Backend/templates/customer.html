@@ -47,6 +47,11 @@
                 class="bg-red-500 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-red-600 shadow-sm active:scale-95 transition-all">
                 삭제
             </button>
+            <button id="openCustomerKakaoMapBtn" type="button"
+                class="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 shadow-sm active:scale-95 transition-all">
+                카카오 지도
+            </button>
+
             <button onclick="saveBuildingDetail()" class="bg-blue-600 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all">정보 저장하기</button>
         </div>
     </header>
@@ -528,6 +533,23 @@
             </div>
         </div>
     </div>
+    <div id="customerKakaoMapModal"
+        data-kakao-app-key="{{ kakao_js_app_key | default('', true) }}"
+        class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl w-[95vw] max-w-[1280px] h-[86vh] shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2">
+                <div class="text-[14px] font-bold text-slate-700">소개매물 지도</div>
+                <button id="closeCustomerKakaoMapBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">
+                    닫기
+                </button>
+            </div>
+            <div id="customerKakaoMapResult" class="px-4 py-2 text-[12px] text-slate-600 border-b border-slate-100">
+                소개매물에 등록된 주소를 지도에 표시합니다.
+            </div>
+            <div id="customerKakaoMap" class="flex-1 min-h-0"></div>
+        </div>
+    </div>
     <div id="customerImagePreviewModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
         <div class="bg-white rounded-xl w-[90vw] max-w-[900px] max-h-[90vh] p-3 flex flex-col">
             <div class="flex items-center justify-between gap-2 mb-2">
@@ -572,6 +594,7 @@
         </div>
     </div>
     <script src="/statics/js/customer_page.js"></script>
+    <script src="/statics/js/customer_kakao_map.js"></script>
 
 </body>
 </html>

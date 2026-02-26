@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        body { font-family: 'Pretendard', sans-serif; }
+    </style>
+</head>
+<body class="min-h-screen bg-slate-100 flex items-center justify-center px-4">
+    <div class="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-lg p-6">
+        <div class="flex items-center justify-between gap-3">
+            <h1 class="text-2xl font-bold text-slate-800">계정</h1>
+            <a href="/"
+               class="inline-flex items-center rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                뒤로
+            </a>
+        </div>
+        <p class="mt-1 text-sm text-slate-500">이름을 변경할 수 있습니다.</p>
+
+        <div class="mt-6 space-y-4">
+            <div>
+                <p class="block text-sm font-semibold text-slate-700 mb-1">아이디</p>
+                <p id="usernameValue"
+                   class="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-slate-700">-</p>
+            </div>
+
+            <form id="profileForm" class="space-y-4">
+                <div>
+                    <label for="displayName" class="block text-sm font-semibold text-slate-700 mb-1">표시 이름</label>
+                    <input id="displayName" type="text" maxlength="80"
+                           class="w-full border border-slate-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                           placeholder="Display name">
+                </div>
+                <p id="profileMessage" class="hidden text-sm"></p>
+                <button id="saveBtn" type="submit"
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition">
+                    저장
+                </button>
+            </form>
+        </div>
+
+        <div id="adminSignupControlSection"
+             class="hidden mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <p class="text-sm font-bold text-slate-800">관리자 세팅</p>
+                    <p class="text-xs text-slate-500">체크시 회원가입 허용</p>
+                </div>
+                <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                    <input id="signupEnabledToggle" type="checkbox" class="h-4 w-4 accent-blue-600">
+                    회의가입 허용 여부
+                </label>
+            </div>
+            <button id="signupControlSaveBtn" type="button"
+                    class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-2.5 rounded-lg transition">
+                회원가입 세팅 저장
+            </button>
+            <p id="signupControlMessage" class="hidden text-sm"></p>
+        </div>
+
+        <a href="/logout"
+           class="mt-5 inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-100">
+            로그아웃
+        </a>
+    </div>
+
+    <script>
+        const usernameValue = document.getElementById("usernameValue");
+        const displayNameInput = document.getElementById("displayName");
+        const profileForm = document.getElementById("profileForm");
+        const profileMessage = document.getElementById("profileMessage");
+        const saveBtn = document.getElementById("saveBtn");
+
+        const adminSignupControlSection = document.getElementById("adminSignupControlSection");
+        const signupEnabledToggle = document.getElementById("signupEnabledToggle");
+        const signupControlSaveBtn = document.getElementById("signupControlSaveBtn");
+        const signupControlMessage = document.getElementById("signupControlMessage");
+
+        function setMessage(text, type) {
+            profileMessage.classList.remove("hidden", "text-red-600", "text-emerald-600");
+            profileMessage.classList.add(type === "success" ? "text-emerald-600" : "text-red-600");
+            profileMessage.textContent = text;
+        }
+
+        function setSignupControlMessage(text, type) {
+            if (!signupControlMessage) return;
+            signupControlMessage.classList.remove("hidden", "text-red-600", "text-emerald-600");
+            signupControlMessage.classList.add(type === "success" ? "text-emerald-600" : "text-red-600");
+            signupControlMessage.textContent = text;
+        }
+
+        async function loadSignupControl() {
+            if (!signupEnabledToggle) return;
+
+            const res = await fetch("/api/auth/signup-control");
+            if (!res.ok) {
+                const payload = await res.json().catch(() => ({}));
+                throw new Error(payload.detail || "Failed to load signup setting.");
+            }
+
+            const payload = await res.json();
+            signupEnabledToggle.checked = Boolean(payload.signup_enabled);
+        }
+
+        async function loadProfile() {
+            const res = await fetch("/api/auth/me");
+            if (!res.ok) {
+                throw new Error("Failed to load account info.");
+            }
+
+            const payload = await res.json();
+            const user = payload?.user || {};
+            const username = String(user.username || "").trim();
+            const displayName = String(user.display_name || "").trim();
+
+            usernameValue.textContent = username || "-";
+            displayNameInput.value = displayName;
+
+            const isAdmin = Boolean(user.admin_flag);
+            if (adminSignupControlSection) {
+                adminSignupControlSection.classList.toggle("hidden", !isAdmin);
+            }
+
+            if (isAdmin) {
+                try {
+                    await loadSignupControl();
+                } catch (error) {
+                    setSignupControlMessage(
+                        error.message || "Failed to load signup setting.",
+                        "error"
+                    );
+                }
+            }
+        }
+
+        profileForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            profileMessage.classList.add("hidden");
+
+            const displayName = displayNameInput.value.trim();
+            saveBtn.disabled = true;
+            try {
+                const res = await fetch("/api/auth/me", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        display_name: displayName || null,
+                    }),
+                });
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => ({}));
+                    throw new Error(payload.detail || "Failed to save display name.");
+                }
+
+                const payload = await res.json();
+                const user = payload?.user || {};
+                const updatedDisplayName = String(user.display_name || "").trim();
+                displayNameInput.value = updatedDisplayName;
+                setMessage("Saved successfully.", "success");
+            } catch (error) {
+                setMessage(error.message || "Error while saving.", "error");
+            } finally {
+                saveBtn.disabled = false;
+            }
+        });
+
+        signupControlSaveBtn?.addEventListener("click", async () => {
+            if (!signupEnabledToggle) return;
+            if (signupControlMessage) signupControlMessage.classList.add("hidden");
+
+            signupControlSaveBtn.disabled = true;
+            try {
+                const res = await fetch("/api/auth/signup-control", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        signup_enabled: signupEnabledToggle.checked,
+                    }),
+                });
+                if (!res.ok) {
+                    const payload = await res.json().catch(() => ({}));
+                    throw new Error(payload.detail || "Failed to save signup setting.");
+                }
+
+                const payload = await res.json();
+                signupEnabledToggle.checked = Boolean(payload.signup_enabled);
+                setSignupControlMessage("Signup setting saved.", "success");
+            } catch (error) {
+                setSignupControlMessage(error.message || "Error while saving setting.", "error");
+            } finally {
+                signupControlSaveBtn.disabled = false;
+            }
+        });
+
+        loadProfile().catch((error) => {
+            setMessage(error.message || "Failed to load account info.", "error");
+        });
+    </script>
+</body>
+</html>

@@ -64,6 +64,13 @@
             loginError.textContent = "회원가입이 완료되었습니다. 로그인해 주세요.";
         }
 
+        if (qs.get("signup_closed") === "1") {
+            loginError.classList.remove("hidden");
+            loginError.classList.remove("text-emerald-600");
+            loginError.classList.add("text-red-600");
+            loginError.textContent = "현재 회원가입이 비활성화되어 있습니다.";
+        }
+
         form.addEventListener("submit", async (e) => {
             e.preventDefault();
             loginError.classList.add("hidden");

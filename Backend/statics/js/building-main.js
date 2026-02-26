@@ -39,6 +39,71 @@ let currentBuildingTotalPages = null;
 const BUILDING_PAGE_SIZE = 15;
 const pageGroupSize = 5;
 
+function resolveDisplayName(user) {
+    const displayName = String(user?.display_name || "").trim();
+    if (displayName) return displayName;
+
+    const username = String(user?.username || "").trim();
+    if (username) return username;
+
+    return "내 계정";
+}
+
+async function initializeAccountMenu() {
+    const wrapper = document.getElementById("accountMenuWrapper");
+    const button = document.getElementById("accountMenuButton");
+    const dropdown = document.getElementById("accountMenuDropdown");
+    if (!wrapper || !button || !dropdown) return;
+
+    const nameEl = document.getElementById("accountMenuName");
+    const usernameEl = document.getElementById("accountMenuUsername");
+
+    const closeMenu = () => {
+        dropdown.classList.add("hidden");
+        button.setAttribute("aria-expanded", "false");
+    };
+
+    const toggleMenu = () => {
+        const willOpen = dropdown.classList.contains("hidden");
+        dropdown.classList.toggle("hidden", !willOpen);
+        button.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    };
+
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleMenu();
+    });
+
+    document.addEventListener("click", (event) => {
+        if (!wrapper.contains(event.target)) {
+            closeMenu();
+        }
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeMenu();
+        }
+    });
+
+    try {
+        const res = await fetch("/api/auth/me");
+        if (!res.ok) return;
+
+        const payload = await res.json();
+        const user = payload?.user || {};
+        if (nameEl) {
+            nameEl.textContent = resolveDisplayName(user);
+        }
+        if (usernameEl) {
+            const username = String(user?.username || "").trim();
+            usernameEl.textContent = username ? `@${username}` : "";
+        }
+    } catch (err) {
+        // Ignore profile load failures and keep default menu labels.
+    }
+}
+
 function setStatusOptions(mode) {
     const statusSelect = document.getElementById('statusSelect');
     if (!statusSelect) return;
@@ -560,6 +625,8 @@ function toggleSidebarLock() {
 
 // DOM 로드 후 이벤트 바인딩
 document.addEventListener('DOMContentLoaded', () => {
+    initializeAccountMenu();
+
     const searchBar = document.getElementById('addressInput')?.parentElement;
     const buildingBtn = searchBar?.querySelector('button[onclick="search()"]');
     const customerBtn = searchBar?.querySelector('button[onclick="searchCustomer()"]');

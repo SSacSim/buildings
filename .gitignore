@@ -24,3 +24,6 @@ __pycache__/
 *.pyc
 # PPT local config
 Backend/ppt/module/configuration.yaml
+
+
+Backend/backup/backup_state.json

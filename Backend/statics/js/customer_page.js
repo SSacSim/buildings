@@ -892,6 +892,38 @@ function getDisplaySalePriceForIntroRow(row) {
     return row?.sale_price || "";
 }
 
+function getCustomerIntroMapItems() {
+    return (introRows || [])
+        .map((row) => {
+            const address = String(row?.address || "").trim();
+            if (!address) return null;
+
+            const bdNumber = String(row?.bd_number || "").trim();
+            const salePrice = String(getDisplaySalePriceForIntroRow(row) || row?.sale_price || "").trim();
+            const bdName = String(row?.bd_name || "").trim();
+
+            return {
+                bd_number: bdNumber || null,
+                address: address,
+                bd_name: bdName,
+                sale_price: salePrice,
+                detail_url: bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : ""
+            };
+        })
+        .filter(Boolean);
+}
+
+function notifyCustomerIntroRowsChanged() {
+    const items = getCustomerIntroMapItems();
+    window.dispatchEvent(
+        new CustomEvent("customer:introRowsUpdated", {
+            detail: { items }
+        })
+    );
+}
+
+window.getCustomerIntroMapItems = getCustomerIntroMapItems;
+
 function refreshIntroRowSalePrice(rowId) {
     const row = introRows.find(r => r.row_id === rowId);
     if (!row) return;
@@ -921,6 +953,7 @@ function renderIntroRows() {
                 <td colspan="6" class="p-3 text-slate-400">소개 매물이 없습니다. [+ 추가]로 등록하세요.</td>
             </tr>
         `;
+        notifyCustomerIntroRowsChanged();
         return;
     }
 
@@ -931,6 +964,7 @@ function renderIntroRows() {
                 <td colspan="6" class="p-3 text-slate-400">검색된 소개 매물이 없습니다.</td>
             </tr>
         `;
+        notifyCustomerIntroRowsChanged();
         return;
     }
 
@@ -1032,6 +1066,7 @@ function renderIntroRows() {
         </tr>
         ` : ""}
     `).join("");
+    notifyCustomerIntroRowsChanged();
 }
 
 function runIntroSearch() {

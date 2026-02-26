@@ -14,6 +14,36 @@
 <div class="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
     <div class="max-w-4xl mx-auto px-6 py-8">
         <div class="flex justify-end mb-3">
+            <div id="accountMenuWrapper" class="relative">
+                <button id="accountMenuButton"
+                        type="button"
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        aria-label="계정 메뉴 열기"
+                        class="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-100 transition-all">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.118a7.5 7.5 0 0115 0A17.933 17.933 0 0112 21.75a17.933 17.933 0 01-7.5-1.632z" />
+                    </svg>
+                </button>
+
+                <div id="accountMenuDropdown"
+                     class="hidden absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                    <div class="mb-1 border-b border-slate-100 px-2 pb-2">
+                        <p id="accountMenuName" class="truncate text-sm font-semibold text-slate-800">내 계정</p>
+                        <p id="accountMenuUsername" class="truncate text-xs text-slate-500">@user</p>
+                    </div>
+                    <a href="/account"
+                       class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                        설정
+                    </a>
+                    <a href="/logout"
+                       class="block rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">
+                        로그아웃
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="hidden">
             <a href="/logout"
                class="inline-flex items-center px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-300 transition-all">
                 로그아웃

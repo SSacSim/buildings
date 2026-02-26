@@ -19,6 +19,15 @@ CUSTOMER_PHOTO_BASE_DIR = Path(__file__).resolve().parent.parent / "photo"
 CUSTOMER_IMAGE_SLOTS = {"profile", "card"}
 
 
+def _get_kakao_js_app_key() -> str:
+    try:
+        settings = DB_utils._load_settings()
+    except Exception:
+        return ""
+    app_settings = settings.get("app", {}) if isinstance(settings, dict) else {}
+    return str(app_settings.get("kakao_js_app_key", "") or "").strip()
+
+
 def _ensure_customer_image_table(cur):
     cur.execute(
         """
@@ -296,7 +305,11 @@ def ensure_customer_intro_table(conn, cur):
 def new_detail(request: Request):
     return templates.TemplateResponse(
         "customer.html",
-        {"request": request, "mode": "new"}
+        {
+            "request": request,
+            "mode": "new",
+            "kakao_js_app_key": _get_kakao_js_app_key(),
+        }
     )
 
 
@@ -304,7 +317,11 @@ def new_detail(request: Request):
 def detail_page(request: Request, customer_number: int):
     return templates.TemplateResponse(
         "customer.html",
-        {"request": request, "customer_number": customer_number}
+        {
+            "request": request,
+            "customer_number": customer_number,
+            "kakao_js_app_key": _get_kakao_js_app_key(),
+        }
     )
 
 
