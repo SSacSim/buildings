@@ -671,8 +671,8 @@ function initCustomerSidebarResize() {
     const customerForm = document.getElementById("customerForm");
     if (!resizer || !sidebar || !customerForm) return;
 
-    const minWidth = 360;
-    const maxSidebarRatio = 0.52;
+    const minWidth = 420;
+    const maxSidebarRatio = 0.62;
     const minMainPanelRatio = 0.40;
 
     const getMaxWidth = () => {
@@ -982,19 +982,20 @@ function renderIntroRows() {
                 <input type="text" value="${row.address || ""}" readonly
                     onclick="openIntroBuildingFromRow('${row.row_id}')"
                     class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]"
+                    style="min-width: 180px;"
                     placeholder="주소">
             </td>
             <td class="p-1 text-left">
                 <input type="text" value="${row.bd_name || ""}" readonly
                     class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]"
-                    style="max-width: 120px;"
+                    style="max-width: 104px;"
                     placeholder="건물명">
             </td>
             <td class="p-1">
                 <input type="text" value="${getDisplaySalePriceForIntroRow(row)}" readonly
                     data-intro-sale-row="${row.row_id}"
                     class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right ml-auto"
-                    style="max-width: 88px;"
+                    style="max-width: 80px;"
                     placeholder="매매가">
             </td>
             <td class="p-1 border-r">
