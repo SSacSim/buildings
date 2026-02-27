@@ -1596,7 +1596,6 @@
         const entries = raw ? raw.split("##").filter(Boolean) : [];
 
         if (!entries.length) {
-            wrap.appendChild(createViolationRow());
             updateViolationHidden();
             return;
         }
