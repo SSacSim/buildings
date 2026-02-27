@@ -1286,7 +1286,12 @@ def get_insight_overview(
                             THEN COALESCE(
                                 NULLIF(
                                     REPLACE(
-                                        SUBSTRING(COALESCE(yield_rate::text, '') FROM '([0-9]+([.,][0-9]+)?)'),
+                                        regexp_replace(
+                                            SUBSTRING(COALESCE(yield_rate::text, '') FROM '([+-]?[[:space:]]*[0-9]+([.,][0-9]+)?)'),
+                                            '[[:space:]]+',
+                                            '',
+                                            'g'
+                                        ),
                                         ',',
                                         '.'
                                     ),

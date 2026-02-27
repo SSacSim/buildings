@@ -1,11 +1,13 @@
 (function () {
     const modalEl = document.getElementById("customerKakaoMapModal");
-    const openBtn = document.getElementById("openCustomerKakaoMapBtn");
+    const introOpenBtn = document.getElementById("openCustomerKakaoMapBtn");
+    const matchOpenBtn = document.getElementById("openCustomerMatchKakaoMapBtn");
     const closeBtn = document.getElementById("closeCustomerKakaoMapBtn");
+    const titleEl = document.getElementById("customerKakaoMapTitle");
     const resultEl = document.getElementById("customerKakaoMapResult");
     const mapContainer = document.getElementById("customerKakaoMap");
 
-    if (!modalEl || !openBtn || !closeBtn || !resultEl || !mapContainer) {
+    if (!modalEl || (!introOpenBtn && !matchOpenBtn) || !closeBtn || !resultEl || !mapContainer) {
         return;
     }
 
@@ -22,6 +24,8 @@
     let mapInitialized = false;
     let refreshSequence = 0;
     let latestIntroItems = [];
+    let latestMatchItems = [];
+    let currentMapMode = "intro";
 
     const geocodeCache = new Map();
     const introMarkers = [];
@@ -38,6 +42,23 @@
 
     function setResult(text) {
         resultEl.textContent = text;
+    }
+
+    function getMapModeTitle(mode) {
+        return mode === "match" ? "매칭 결과 지도" : "소개매물 지도";
+    }
+
+    function getMapModeDescription(mode) {
+        return mode === "match"
+            ? "매칭 결과에 포함된 주소를 지도에 표시합니다."
+            : "소개매물에 등록된 주소를 지도에 표시합니다.";
+    }
+
+    function setMapMode(mode) {
+        currentMapMode = mode === "match" ? "match" : "intro";
+        if (titleEl) {
+            titleEl.textContent = getMapModeTitle(currentMapMode);
+        }
     }
 
     function setMapLinkInteractionActive(active) {
@@ -332,6 +353,28 @@
         return normalizeIntroItems(latestIntroItems);
     }
 
+    async function getMatchItemsFromSource() {
+        if (typeof window.getCustomerMatchMapItems === "function") {
+            try {
+                const items = await Promise.resolve(window.getCustomerMatchMapItems());
+                return normalizeIntroItems(items);
+            } catch (error) {
+                console.error("failed to read match map items", error);
+            }
+        }
+        return normalizeIntroItems(latestMatchItems);
+    }
+
+    async function getMapItemsFromSource(mode, explicitItems) {
+        if (Array.isArray(explicitItems)) {
+            return normalizeIntroItems(explicitItems);
+        }
+        if (mode === "match") {
+            return getMatchItemsFromSource();
+        }
+        return getIntroItemsFromSource();
+    }
+
     function geocodeAddress(address) {
         const key = String(address || "").trim();
         if (!key) return Promise.resolve(null);
@@ -489,21 +532,27 @@
         setResult("소개 매물 주소를 좌표로 변환하지 못했습니다.");
     }
 
-    async function refreshIntroMarkers(explicitItems) {
-        const sourceItems = Array.isArray(explicitItems) ? explicitItems : getIntroItemsFromSource();
-        latestIntroItems = normalizeIntroItems(sourceItems);
+    async function refreshIntroMarkers(mode = currentMapMode, explicitItems) {
+        const sourceItems = await getMapItemsFromSource(mode, explicitItems);
+        if (mode === "match") {
+            latestMatchItems = normalizeIntroItems(sourceItems);
+        } else {
+            latestIntroItems = normalizeIntroItems(sourceItems);
+        }
         if (!mapInitialized) return;
-        await renderIntroMarkers(latestIntroItems);
+        const itemsToRender = mode === "match" ? latestMatchItems : latestIntroItems;
+        await renderIntroMarkers(itemsToRender);
     }
 
-    async function openMapModal() {
+    async function openMapModal(mode = "intro") {
+        setMapMode(mode);
         modalEl.classList.remove("hidden");
         modalEl.classList.add("flex");
         setResult("지도를 불러오는 중입니다...");
 
         try {
             await initializeMap();
-            await refreshIntroMarkers();
+            await refreshIntroMarkers(currentMapMode);
             relayoutMap();
         } catch (error) {
             console.error(error);
@@ -516,7 +565,12 @@
         modalEl.classList.remove("flex");
     }
 
-    openBtn.addEventListener("click", openMapModal);
+    if (introOpenBtn) {
+        introOpenBtn.addEventListener("click", () => openMapModal("intro"));
+    }
+    if (matchOpenBtn) {
+        matchOpenBtn.addEventListener("click", () => openMapModal("match"));
+    }
     closeBtn.addEventListener("click", closeMapModal);
 
     window.addEventListener("customer:introRowsUpdated", (event) => {
@@ -524,7 +578,8 @@
         latestIntroItems = normalizeIntroItems(items);
         if (!mapInitialized) return;
         if (modalEl.classList.contains("hidden")) return;
-        refreshIntroMarkers(latestIntroItems);
+        if (currentMapMode !== "intro") return;
+        refreshIntroMarkers("intro", latestIntroItems);
     });
 
     modalEl.addEventListener("click", (event) => {

@@ -47,11 +47,6 @@
                 class="bg-red-500 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-red-600 shadow-sm active:scale-95 transition-all">
                 삭제
             </button>
-            <button id="openCustomerKakaoMapBtn" type="button"
-                class="bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 shadow-sm active:scale-95 transition-all">
-                카카오 지도
-            </button>
-
             <button onclick="saveBuildingDetail()" class="bg-blue-600 text-white px-10 py-2.5 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-100 active:scale-95 transition-all">정보 저장하기</button>
         </div>
     </header>
@@ -430,7 +425,13 @@
             <div class="section-card flex-1 flex flex-col bg-white">
                 <div class="bg-blue-900 text-white text-[15px] px-3 py-1.5 font-bold flex justify-between">
                     <span>매칭 결과 (자동 추천) <span id="customerMatchCount" class="text-blue-200 text-[12px] font-semibold ml-1">(0건)</span></span>
-                    <button id="customerMatchDownloadBtn" type="button" class="text-[11px] text-blue-200 underline cursor-pointer">[매칭결과 자료 다운로드]</button>
+                    <div class="flex items-center gap-2">
+                        <button id="openCustomerMatchKakaoMapBtn" type="button"
+                            class="bg-yellow-400 text-slate-900 px-2.5 py-0.5 rounded text-[11px] font-bold hover:bg-yellow-300 transition-all">
+                            카카오
+                        </button>
+                        <button id="customerMatchDownloadBtn" type="button" class="text-[11px] text-blue-200 underline cursor-pointer">[매칭결과 자료 다운로드]</button>
+                    </div>
                 </div>
                 
                 <div id="customerMatchResultBody" class="flex-1 overflow-y-auto p-3 space-y-3">
@@ -445,7 +446,13 @@
         <aside class="w-[560px] flex flex-col gap-2 overflow-y-auto shrink-0 relative" id="rightSidebar">
             <div class="section-card">
                 <div class="bg-slate-700 text-white text-[13px] px-2 py-1.5 font-bold flex justify-between items-center">
-                    <span>소개 매물(히스토리 내역 정리)</span>
+                    <div class="flex items-center gap-2">
+                        <span>소개 매물(히스토리 내역 정리)</span>
+                        <button id="openCustomerKakaoMapBtn" type="button"
+                            class="bg-yellow-400 text-slate-900 px-2.5 py-0.5 rounded text-[11px] font-bold hover:bg-yellow-300 transition-all">
+                            카카오
+                        </button>
+                    </div>
                     <div class="flex gap-2">
                         <input id="introSearchInput" type="text" class="w-44 px-2 py-0.5 rounded text-[11px] text-slate-800 font-normal outline-none" placeholder="주소/건물명 검색">
                         <button id="introSearchBtn" type="button" class="hover:underline">[검색]</button>
@@ -538,7 +545,7 @@
         class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50">
         <div class="bg-white rounded-2xl w-[95vw] max-w-[1280px] h-[86vh] shadow-2xl flex flex-col overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2">
-                <div class="text-[14px] font-bold text-slate-700">소개매물 지도</div>
+                <div id="customerKakaoMapTitle" class="text-[14px] font-bold text-slate-700">소개매물 지도</div>
                 <button id="closeCustomerKakaoMapBtn" type="button"
                     class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">
                     닫기

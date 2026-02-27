@@ -8,6 +8,7 @@ const CUSTOMER_MATCH_PAGE_SIZE = 20;
 const selectedMatchBuildingIds = new Set();
 let introSearchKeyword = "";
 let currentIntroManagerName = "";
+let lastCustomerMatchQueryString = "";
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -1652,6 +1653,89 @@ function getMatchMaxPriceInput() {
     return document.getElementById("matchMaxPrice");
 }
 
+function parseCustomerMatchPayload(payload, fallbackPage = 1) {
+    const items = Array.isArray(payload)
+        ? payload
+        : (Array.isArray(payload?.items) ? payload.items : []);
+    const totalCountRaw = Array.isArray(payload)
+        ? items.length
+        : Number(payload?.total_count ?? items.length);
+    const totalPagesRaw = Array.isArray(payload)
+        ? 1
+        : Number(payload?.total_pages || 1);
+    const currentPageRaw = Array.isArray(payload)
+        ? fallbackPage
+        : Number(payload?.page || fallbackPage);
+
+    const totalCount = Number.isFinite(totalCountRaw) ? totalCountRaw : items.length;
+    const totalPages = Number.isFinite(totalPagesRaw) && totalPagesRaw > 0 ? Math.floor(totalPagesRaw) : 1;
+    const currentPage = Number.isFinite(currentPageRaw) && currentPageRaw > 0 ? Math.floor(currentPageRaw) : 1;
+
+    return { items, totalCount, totalPages, currentPage };
+}
+
+function normalizeCustomerMatchMapItems(items) {
+    return (Array.isArray(items) ? items : [])
+        .map((item) => {
+            const address = String(item?.address || "").trim();
+            if (!address) return null;
+
+            const bdNumber = String(item?.bd_number || "").trim();
+            const bdName = String(item?.bd_name || "").trim();
+            const salePrice = String(item?.sale_price || "").trim();
+
+            return {
+                bd_number: bdNumber || null,
+                address: address,
+                bd_name: bdName,
+                sale_price: salePrice,
+                detail_url: bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : ""
+            };
+        })
+        .filter(Boolean);
+}
+
+async function getCustomerMatchMapItems() {
+    if (!lastCustomerMatchQueryString) return [];
+
+    const baseParams = new URLSearchParams(lastCustomerMatchQueryString);
+    baseParams.delete("page");
+    baseParams.delete("page_size");
+
+    const mapPageSize = 100;
+    const loadPage = async (page) => {
+        const params = new URLSearchParams(baseParams);
+        params.set("page", String(page));
+        params.set("page_size", String(mapPageSize));
+        const res = await fetch(`/api/customer/match-search?${params.toString()}`);
+        if (!res.ok) throw new Error("match map search failed");
+        const payload = await res.json();
+        return parseCustomerMatchPayload(payload, page);
+    };
+
+    const firstPage = await loadPage(1);
+    const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
+    let allItems = Array.isArray(firstPage.items) ? [...firstPage.items] : [];
+
+    for (let page = 2; page <= totalPages; page += 1) {
+        const current = await loadPage(page);
+        if (Array.isArray(current.items) && current.items.length) {
+            allItems = allItems.concat(current.items);
+        }
+    }
+
+    const normalized = normalizeCustomerMatchMapItems(allItems);
+    const seen = new Set();
+    return normalized.filter((item) => {
+        const key = `${item.bd_number || ""}|${item.address}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+window.getCustomerMatchMapItems = getCustomerMatchMapItems;
+
 function setCustomerMatchCount(count) {
     const el = document.getElementById("customerMatchCount");
     if (!el) return;
@@ -1902,6 +1986,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         || checkedUsageCategories.length > 0;
 
     if (!hasAnyCondition) {
+        lastCustomerMatchQueryString = "";
         tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">최소 1개 이상 조건을 선택/입력해 주세요.</div>';
         setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
@@ -1952,6 +2037,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     }
     params.set("page", String(customerMatchCurrentPage));
     params.set("page_size", String(CUSTOMER_MATCH_PAGE_SIZE));
+    lastCustomerMatchQueryString = params.toString();
 
     tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">검색 중...</div>';
 
@@ -1959,10 +2045,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         const res = await fetch(`/api/customer/match-search?${params.toString()}`);
         if (!res.ok) throw new Error("match search failed");
         const payload = await res.json();
-        const items = Array.isArray(payload) ? payload : (Array.isArray(payload.items) ? payload.items : []);
-        const totalCount = Array.isArray(payload) ? items.length : Number(payload.total_count ?? items.length);
-        const totalPages = Array.isArray(payload) ? 1 : Number(payload.total_pages || 1);
-        const currentPage = Array.isArray(payload) ? customerMatchCurrentPage : Number(payload.page || customerMatchCurrentPage);
+        const { items, totalCount, totalPages, currentPage } = parseCustomerMatchPayload(payload, customerMatchCurrentPage);
 
         if (!Array.isArray(items) || items.length === 0) {
             tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">조건에 맞는 매물이 없습니다.</div>';
