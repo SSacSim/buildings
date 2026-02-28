@@ -1292,7 +1292,7 @@
 
         <div class="bg-white w-[700px] max-h-[80vh] rounded-xl p-5 flex flex-col">
 
-            <h2 class="text-lg font-bold mb-3">이미지 등록</h2>
+            <h2 id="imageModalTitle" class="text-lg font-bold mb-3">이미지 등록</h2>
 
             <!-- 숨긴 파일 input -->
             <input id="imageInput"
@@ -1303,7 +1303,7 @@
                 class="hidden">
 
             <!-- 커스텀 버튼 -->
-            <div class="mb-3 bg-blue-600 hover:bg-blue-700
+            <div id="imageUploadActionLabel" class="mb-3 bg-blue-600 hover:bg-blue-700
                         text-white font-semibold py-2 rounded-lg transition text-center cursor-pointer"
                 onclick="openImageUploadDialog()">
                 📷 이미지 업로드 (최대 6장)
@@ -1833,6 +1833,7 @@
         });
         renderNearbyStation2RowsFromHidden();
         renderViolationRowsFromHidden();
+        PREVIEW_SECTION_ORDER.forEach(renderMainBox);
     }
     // 페이지가 열리면 로그인 사용자 정보 + Detail 정보를 순서대로 로드
     window.onload = async () => {
@@ -2672,6 +2673,16 @@
         sub6: createNullArray(N)
     };
     const PREVIEW_SECTION_ORDER = ['main', 'sub1', 'sub2', 'sub3', 'sub4', 'sub5', 'sub6'];
+    // 오른쪽 2x3은 "오른쪽 -> 왼쪽" 순서로 라벨을 매칭
+    const IMAGE_SECTION_LABELS = {
+        main: '대표사진',
+        sub1: '지번도',
+        sub2: '지적편집도',
+        sub3: '토지대장',
+        sub4: '건축물대장',
+        sub5: '건물사진',
+        sub6: '참고자료'
+    };
 
     // Main 페이지에서 어떤 Box를 눌렀는가?
     let currentBox = null;
@@ -2725,9 +2736,26 @@
         document.getElementById('imageModal').classList.add('hidden');
     }
 
+    function getImageSectionLabel(boxKey) {
+        return IMAGE_SECTION_LABELS[boxKey] || '이미지';
+    }
+
+    function getEmptySymbol(boxKey) {
+        return boxKey === 'main' ? '-' : '+';
+    }
+
+    function syncImageModalLabel(boxKey) {
+        const label = getImageSectionLabel(boxKey);
+        const titleEl = document.getElementById('imageModalTitle');
+        const uploadEl = document.getElementById('imageUploadActionLabel');
+        if (titleEl) titleEl.innerText = `${label} 등록`;
+        if (uploadEl) uploadEl.innerText = label;
+    }
+
 
     function openImageModal(boxKey) {
         currentBox = boxKey;
+        syncImageModalLabel(boxKey);
         document.getElementById('imageModal').classList.remove('hidden');
         renderModalImages();
     }
@@ -2977,17 +3005,14 @@
     function renderMainBox(boxKey) {
         const box = document.querySelector(`[data-box="${boxKey}"]`);
         const images = imageStore[boxKey];
+        if (!box || !images) return;
 
-        box.innerHTML = `
-            <span class="text-slate-400 text-4xl font-bold ${images.length ? 'hidden' : ''}">
-                +
-            </span>
-        `;
-
-        if (!images.length) return;
         const firstImage = images.find(img => img !== null);
+        const hasImage = Boolean(firstImage);
         const imageCount = images.filter(img => img !== null).length;
-        box.innerHTML += `
+
+        box.innerHTML = hasImage
+            ? `
             <img src="${firstImage}"
                 loading="lazy"
                 decoding="async"
@@ -2996,6 +3021,9 @@
                         text-white text-xs px-2 rounded">
                 ${imageCount}장
             </div>
+        `
+            : `
+            <span class="text-slate-400 text-4xl font-bold">${getEmptySymbol(boxKey)}</span>
         `;
     }
 
