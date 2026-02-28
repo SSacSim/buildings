@@ -38,6 +38,8 @@ let customerSearchCache = [];
 let currentBuildingTotalPages = null;
 const BUILDING_PAGE_SIZE = 15;
 const pageGroupSize = 5;
+const NOTICE_HIDE_DAYS = 7;
+let currentMainNotice = null;
 
 function resolveDisplayName(user) {
     const displayName = String(user?.display_name || "").trim();
@@ -101,6 +103,154 @@ async function initializeAccountMenu() {
         }
     } catch (err) {
         // Ignore profile load failures and keep default menu labels.
+    }
+}
+
+function resolveNoticeVersion(notice) {
+    return String(notice?.update_time || notice?.notice_id || "default");
+}
+
+function getNoticeHideStorageKey(notice) {
+    return `main_notice_hide_until_${notice?.notice_id || 1}_${resolveNoticeVersion(notice)}`;
+}
+
+function shouldSuppressMainNotice(notice) {
+    const key = getNoticeHideStorageKey(notice);
+    const hiddenUntil = Number(localStorage.getItem(key) || 0);
+    return Number.isFinite(hiddenUntil) && Date.now() < hiddenUntil;
+}
+
+function hideMainNoticeModal() {
+    const modal = document.getElementById("mainNoticeModal");
+    if (!modal) return;
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+}
+
+function closeMainNoticeModal() {
+    const hideWeek = document.getElementById("mainNoticeHideWeek");
+    if (hideWeek?.checked && currentMainNotice) {
+        const key = getNoticeHideStorageKey(currentMainNotice);
+        const nextWeek = Date.now() + (NOTICE_HIDE_DAYS * 24 * 60 * 60 * 1000);
+        localStorage.setItem(key, String(nextWeek));
+    }
+    hideMainNoticeModal();
+}
+
+function normalizeMainNoticeImageUrl(rawUrl) {
+    const value = String(rawUrl || "").trim();
+    if (!value) return "";
+    if (value.startsWith("/photo/notice/")) return value;
+
+    try {
+        const parsed = new URL(value, window.location.origin);
+        if (parsed.origin !== window.location.origin) return "";
+        if (!parsed.pathname.startsWith("/photo/notice/")) return "";
+        return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    } catch (err) {
+        return "";
+    }
+}
+
+function appendMainNoticeText(container, text) {
+    const value = String(text || "");
+    if (!value) return;
+
+    const textBlock = document.createElement("div");
+    textBlock.className = "whitespace-pre-wrap break-words text-sm text-slate-700 leading-relaxed";
+    textBlock.textContent = value;
+    container.appendChild(textBlock);
+}
+
+function appendMainNoticeImage(container, rawUrl) {
+    const imageUrl = normalizeMainNoticeImageUrl(rawUrl);
+    if (!imageUrl) return false;
+
+    const imageWrap = document.createElement("div");
+    imageWrap.className = "rounded-lg border border-slate-200 bg-slate-50 p-2";
+
+    const image = document.createElement("img");
+    image.src = imageUrl;
+    image.alt = "공지 이미지";
+    image.loading = "lazy";
+    image.className = "max-h-[50vh] w-full rounded object-contain";
+
+    imageWrap.appendChild(image);
+    container.appendChild(imageWrap);
+    return true;
+}
+
+function renderMainNoticeContent(contentEl, rawContent) {
+    if (!contentEl) return;
+
+    const content = String(rawContent || "");
+    contentEl.replaceChildren();
+
+    const tokenRegex = /!\[[^\]]*]\(([^)]+)\)/g;
+    let cursor = 0;
+    let match;
+
+    while ((match = tokenRegex.exec(content)) !== null) {
+        appendMainNoticeText(contentEl, content.slice(cursor, match.index));
+        const inserted = appendMainNoticeImage(contentEl, match[1]);
+        if (!inserted) {
+            appendMainNoticeText(contentEl, match[0]);
+        }
+        cursor = tokenRegex.lastIndex;
+    }
+
+    appendMainNoticeText(contentEl, content.slice(cursor));
+}
+
+function showMainNoticeModal(notice) {
+    const modal = document.getElementById("mainNoticeModal");
+    const titleEl = document.getElementById("mainNoticeTitle");
+    const contentEl = document.getElementById("mainNoticeContent");
+    const hideWeek = document.getElementById("mainNoticeHideWeek");
+    if (!modal || !titleEl || !contentEl || !hideWeek) return;
+
+    currentMainNotice = notice;
+    titleEl.textContent = String(notice?.title || "공지사항").trim() || "공지사항";
+    renderMainNoticeContent(contentEl, notice?.content || "");
+    hideWeek.checked = false;
+
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+}
+
+function initializeMainNoticeModal() {
+    const modal = document.getElementById("mainNoticeModal");
+    const closeBtn = document.getElementById("mainNoticeCloseBtn");
+    const confirmBtn = document.getElementById("mainNoticeConfirmBtn");
+    if (!modal || !closeBtn || !confirmBtn) return;
+    if (modal.dataset.noticeInit === "true") return;
+    modal.dataset.noticeInit = "true";
+
+    closeBtn.addEventListener("click", closeMainNoticeModal);
+    confirmBtn.addEventListener("click", closeMainNoticeModal);
+    modal.addEventListener("click", (event) => {
+        if (event.target === modal) {
+            closeMainNoticeModal();
+        }
+    });
+}
+
+async function loadMainNoticePopup() {
+    initializeMainNoticeModal();
+
+    try {
+        const res = await fetch("/api/notice/current");
+        if (!res.ok) return;
+
+        const payload = await res.json();
+        const notice = payload?.notice || null;
+        const content = String(notice?.content || "").trim();
+        if (!notice || !notice.enabled || !content) return;
+        if (shouldSuppressMainNotice(notice)) return;
+
+        showMainNoticeModal(notice);
+    } catch (err) {
+        // Ignore notice loading errors to avoid blocking main screen usage.
     }
 }
 
@@ -643,6 +793,7 @@ function toggleSidebarLock() {
 // DOM 로드 후 이벤트 바인딩
 document.addEventListener('DOMContentLoaded', () => {
     initializeAccountMenu();
+    loadMainNoticePopup();
 
     const searchBar = document.getElementById('addressInput')?.parentElement;
     const buildingBtn = searchBar?.querySelector('button[onclick="search()"]');

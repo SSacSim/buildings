@@ -234,6 +234,13 @@
                     <div class="flex border border-slate-400 bg-white items-center">
                         <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">주소</div>
                         <input id="address" name="address" type="text" class="flex-1 px-2 py-1 outline-none text-center font-bold text-slate-700">
+                        <button
+                            type="button"
+                            id="structInfoSearchBtn"
+                            onclick="handleStructInfoSearchClick()"
+                            class="px-3 py-1.5 bg-blue-600 text-white text-[12px] font-bold border-l border-blue-700 hover:bg-blue-700">
+                            검색
+                        </button>
                     </div>
                     <div class="flex border border-slate-400 bg-white items-center">
                         <div class="w-20 bg-slate-100 px-2 py-1 border-r border-slate-300 font-bold text-slate-600 text-[15px] text-center">상세주소</div>
@@ -1286,6 +1293,33 @@
         </aside>
     </form>
 
+    <div id="structInfoApplyModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+        <div class="bg-white w-[360px] rounded-xl border border-slate-200 shadow-xl p-4">
+            <h3 class="text-[16px] font-bold text-slate-800 mb-2">구조 정보 적용 방식</h3>
+            <p class="text-[12px] text-slate-600 mb-4">가져온 건축물대장 정보를 어떻게 반영할지 선택하세요.</p>
+            <div class="space-y-2">
+                <button
+                    type="button"
+                    onclick="applyStructInfoFromModal('empty_only')"
+                    class="w-full px-3 py-2 rounded-lg bg-blue-600 text-white text-[12px] font-bold hover:bg-blue-700">
+                    빈칸만 채우기
+                </button>
+                <button
+                    type="button"
+                    onclick="applyStructInfoFromModal('overwrite_all')"
+                    class="w-full px-3 py-2 rounded-lg bg-emerald-600 text-white text-[12px] font-bold hover:bg-emerald-700">
+                    전체 다시 채우기
+                </button>
+                <button
+                    type="button"
+                    onclick="closeStructInfoApplyModal()"
+                    class="w-full px-3 py-2 rounded-lg bg-slate-200 text-slate-700 text-[12px] font-bold hover:bg-slate-300">
+                    취소
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Model Page -->
     <div id="imageModal"
         class="fixed inset-0 bg-black/50 hidden flex items-center justify-center z-50">
@@ -1676,6 +1710,222 @@
         } catch (err) {
             console.warn("failed to load current auth user", err);
         }
+    }
+
+    let structInfoCallInFlight = null;
+    let structInfoPendingData = null;
+
+    function getCurrentBdNumber() {
+        const pathSegments = window.location.pathname.split("/");
+        return pathSegments[pathSegments.length - 1];
+    }
+
+    function isAutofillTargetEmpty(value) {
+        const normalized = String(value ?? "").trim();
+        return normalized === "" || normalized === "0" || normalized === "0.0" || normalized === "-" || normalized === "NaN";
+    }
+
+    function setFieldValueByMode(fieldId, value, mode = "empty_only") {
+        const el = document.getElementById(fieldId);
+        if (!el || el.type === "checkbox") return;
+        if (mode === "empty_only" && !isAutofillTargetEmpty(el.value)) return;
+
+        const normalized = normalizeTextValue(String(value ?? "").trim());
+        if (isAutofillTargetEmpty(normalized)) return;
+
+        el.value = normalized;
+        el.style.border = "1px solid #3b82f6";
+        el.style.borderRadius = "8px";
+        el.style.paddingLeft = "8px";
+        el.style.paddingRight = "8px";
+        el.style.fontWeight = "800";
+        el.style.color = "#1e40af";
+        el.classList.add("bg-yellow-50");
+    }
+
+    function applyMultiSelectAutofill(groupId, hiddenInputId, rawValue, defaultText, mode = "empty_only") {
+        const group = document.getElementById(groupId);
+        const hiddenInput = document.getElementById(hiddenInputId);
+        if (!group || !hiddenInput) return;
+        if (mode === "empty_only" && !isAutofillTargetEmpty(hiddenInput.value)) return;
+
+        const normalized = normalizeTextValue(String(rawValue ?? "").trim());
+        if (isAutofillTargetEmpty(normalized)) return;
+
+        const selectedValues = normalized.split("/").map(v => v.trim()).filter(Boolean);
+        const selectedKeySet = new Set(selectedValues.map(v => v.replace(/\s+/g, "")));
+        const checkboxes = group.querySelectorAll(".usage-check");
+        const matchedValues = [];
+        checkboxes.forEach(cb => {
+            const optionKey = String(cb.value || "").replace(/\s+/g, "");
+            const matched = selectedKeySet.has(optionKey);
+            cb.checked = matched;
+            if (matched) matchedValues.push(cb.value);
+        });
+
+        hiddenInput.value = matchedValues.length > 0 ? matchedValues.join("/") : normalized;
+        const label = group.querySelector(".selectedLabel");
+        if (label && matchedValues.length > 0) {
+            label.innerText = matchedValues.length >= 2
+                ? `${matchedValues[0]} 외 ${matchedValues.length - 1}건`
+                : matchedValues.join(", ");
+            label.classList.add("text-blue-700", "font-extrabold");
+        } else if (label) {
+            if (selectedValues.length > 0) {
+                label.innerText = selectedValues.length >= 2
+                    ? `${selectedValues[0]} 외 ${selectedValues.length - 1}건`
+                    : selectedValues.join(", ");
+                label.classList.add("text-blue-700", "font-extrabold");
+            } else {
+                label.innerText = defaultText;
+                label.classList.remove("text-blue-700", "font-extrabold");
+            }
+        }
+    }
+
+    function applyStructInfoAutofillToForm(data, mode = "empty_only") {
+        if (!data || typeof data !== "object") return;
+
+        setFieldValueByMode("bd_name", data.bd_name ?? data.building_name, mode);
+        setFieldValueByMode("address", data.address, "overwrite_all");
+
+        [
+            "approval_date",
+            "land_area_sqm",
+            "gross_area_sqm",
+            "building_area_sqm",
+            "aboveground_floors",
+            "underground_floors",
+            "elevator",
+            "emergency_elevator",
+            "building_coverage_ratio",
+            "floor_area_ratio",
+            "parking_outdoor_mechanical",
+            "parking_outdoor_self",
+            "parking_indoor_mechanical",
+            "parking_indoor_self",
+            "parking_capacity",
+        ].forEach((fieldId) => {
+            setFieldValueByMode(fieldId, data[fieldId], mode);
+        });
+
+        applyMultiSelectAutofill("group-usage", "building_usage", data.building_usage, "건축물용도 (선택)", mode);
+        applyMultiSelectAutofill("group-structure", "building_structure", data.building_structure, "건물구조 (선택)", mode);
+
+        ["land_area_sqm", "gross_area_sqm", "building_area_sqm"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) convertMappedSqm(el);
+        });
+
+        calcParkingTotal();
+        if (mode === "overwrite_all") {
+            calculatePricePerPyeong();
+            calculateLandPricePerPyeong();
+            calculateOfficialTotalPrice();
+            calculatetotalPrice();
+            return;
+        }
+
+        [
+            { fieldId: "price_per_total_floor_area", run: calculatePricePerPyeong },
+            { fieldId: "price_per_pyeong", run: calculateLandPricePerPyeong },
+            { fieldId: "official_price_per_pyeong_million", run: calculateOfficialTotalPrice },
+            { fieldId: "official_price_total_million", run: calculatetotalPrice },
+        ].forEach(({ fieldId, run }) => {
+            const el = document.getElementById(fieldId);
+            if (!el) return;
+            if (isAutofillTargetEmpty(el.value)) run();
+        });
+    }
+
+    function openStructInfoApplyModal(data) {
+        structInfoPendingData = data;
+        const modal = document.getElementById("structInfoApplyModal");
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+    }
+
+    function closeStructInfoApplyModal() {
+        const modal = document.getElementById("structInfoApplyModal");
+        if (!modal) return;
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+    }
+
+    function applyStructInfoFromModal(mode) {
+        if (!structInfoPendingData) {
+            closeStructInfoApplyModal();
+            return;
+        }
+
+        const applyMode = mode === "overwrite_all" ? "overwrite_all" : "empty_only";
+        applyStructInfoAutofillToForm(structInfoPendingData, applyMode);
+        closeStructInfoApplyModal();
+    }
+
+    async function fetchStructInfoByAddress() {
+        const address = String(document.getElementById("address")?.value || "").trim();
+        const addressDetail = String(document.getElementById("address_detail")?.value || "").trim();
+        const keyword = `${address} ${addressDetail}`.trim();
+
+        if (!keyword) {
+            alert("주소를 먼저 입력해 주세요.");
+            return null;
+        }
+        if (structInfoCallInFlight) return structInfoCallInFlight;
+
+        const searchBtn = document.getElementById("structInfoSearchBtn");
+        const originalBtnText = searchBtn ? searchBtn.innerText : "";
+
+        structInfoCallInFlight = (async () => {
+            try {
+                if (searchBtn) {
+                    searchBtn.disabled = true;
+                    searchBtn.innerText = "조회중...";
+                    searchBtn.classList.add("opacity-60", "cursor-not-allowed");
+                }
+
+                const res = await fetch("/api/building/struct-info-call", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        address,
+                        address_detail: addressDetail,
+                    }),
+                });
+                if (!res.ok) return null;
+
+                const payload = await res.json();
+                const autofillData = payload?.data;
+                if (!autofillData || typeof autofillData !== "object" || Object.keys(autofillData).length === 0) {
+                    return null;
+                }
+
+                return autofillData;
+            } catch (err) {
+                console.warn("struct_info_call failed", err);
+                return null;
+            } finally {
+                if (searchBtn) {
+                    searchBtn.disabled = false;
+                    searchBtn.innerText = originalBtnText || "검색";
+                    searchBtn.classList.remove("opacity-60", "cursor-not-allowed");
+                }
+                structInfoCallInFlight = null;
+            }
+        })();
+
+        return structInfoCallInFlight;
+    }
+
+    async function handleStructInfoSearchClick() {
+        const data = await fetchStructInfoByAddress();
+        if (!data) {
+            alert("가져올 건축물 정보가 없습니다. 주소를 확인해 주세요.");
+            return;
+        }
+        openStructInfoApplyModal(data);
     }
 
     // 1. 페이지 로드 시 데이터 불러오기 (기존 로직 유지하되 value에 할당)

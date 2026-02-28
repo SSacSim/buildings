@@ -1,6 +1,7 @@
 Backend/save_file/
 Backend/photo/
 Backend/backup/dumps/
+API_test
 
 # Binary assets
 *.png

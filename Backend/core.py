@@ -7,7 +7,10 @@ import hashlib
 import secrets
 import time
 import threading
+import requests
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from urllib.parse import quote, unquote
+from xml.etree import ElementTree as ET
 
 sys.path.append('../DB')
 
@@ -17,9 +20,9 @@ from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.responses import FileResponse
@@ -38,9 +41,12 @@ app = FastAPI(title="Building Search API")
 BASE_DIR = Path(__file__).resolve().parent
 mount_BASE_UPLOAD_DIR = BASE_DIR / "save_file"
 mount_BASE_PHOTO_DIR = BASE_DIR / "photo"
+NOTICE_IMAGE_UPLOAD_DIR = mount_BASE_PHOTO_DIR / "notice"
+NOTICE_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 # 📁 폴더 없으면 자동 생성
 mount_BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 mount_BASE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+NOTICE_IMAGE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # 정적 파일 등록
 app.mount("/statics", StaticFiles(directory="statics"), name="statics")
@@ -68,6 +74,18 @@ async def shutdown_background_jobs():
     stop_backup_scheduler()
 
 app_settings = DB_utils._load_settings().get("app", {})
+JUSO_ADDRLINK_URL = app_settings.get("juso_addrlink_url") or ""
+BLDRGST_TITLE_URL = app_settings.get("bldrgst_title_url") or ""
+JUSO_CONFM_KEY = (
+    os.getenv("JUSO_CONFM_KEY")
+    or app_settings.get("juso_confm_key")
+    or ""
+)
+BLDRGST_SERVICE_KEY = (
+    os.getenv("BLDRGST_SERVICE_KEY")
+    or app_settings.get("bldrgst_service_key")
+    or ""
+)
 SESSION_SECRET = (
     os.getenv("APP_SESSION_SECRET")
     or app_settings.get("session_secret")
@@ -252,6 +270,58 @@ def _ensure_auth_config_table(cur):
     )
 
 
+def _ensure_notice_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_notice (
+            notice_id SMALLINT PRIMARY KEY CHECK (notice_id = 1),
+            title VARCHAR(120) NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            enabled BOOLEAN NOT NULL DEFAULT FALSE,
+            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_by BIGINT
+        );
+        """
+    )
+    cur.execute(
+        """
+        INSERT INTO app_notice (notice_id, title, content, enabled)
+        VALUES (1, '', '', FALSE)
+        ON CONFLICT (notice_id) DO NOTHING;
+        """
+    )
+
+
+def _get_notice_payload(cur) -> dict:
+    _ensure_notice_table(cur)
+    cur.execute(
+        """
+        SELECT notice_id, title, content, enabled, update_time, updated_by
+        FROM app_notice
+        WHERE notice_id = 1
+        """
+    )
+    row = cur.fetchone()
+    if not row:
+        return {
+            "notice_id": 1,
+            "title": "",
+            "content": "",
+            "enabled": False,
+            "update_time": None,
+            "updated_by": None,
+        }
+    notice_id, title, content, enabled, update_time, updated_by = row
+    return {
+        "notice_id": notice_id,
+        "title": title or "",
+        "content": content or "",
+        "enabled": bool(enabled),
+        "update_time": update_time.isoformat() if update_time else None,
+        "updated_by": updated_by,
+    }
+
+
 def _is_signup_enabled(cur) -> bool:
     _ensure_auth_config_table(cur)
     cur.execute(
@@ -295,6 +365,266 @@ def _verify_password(password: str, salt: str, expected_hash: str) -> bool:
 
 def _normalize_username(username: str) -> str:
     return (username or "").strip()
+
+
+def _to_clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _resolve_notice_image_extension(file_name: str, content_type: str) -> str:
+    suffix = Path(_to_clean_text(file_name)).suffix.lower()
+    if suffix in {".png", ".jpg", ".jpeg", ".gif", ".webp"}:
+        return suffix
+
+    content_type = _to_clean_text(content_type).lower()
+    content_type_to_ext = {
+        "image/png": ".png",
+        "image/jpeg": ".jpg",
+        "image/jpg": ".jpg",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+    }
+    return content_type_to_ext.get(content_type, "")
+
+
+def _compact_text(value: Any) -> str:
+    return re.sub(r"\s+", "", _to_clean_text(value))
+
+
+def _format_yyyymmdd(value: Any) -> str:
+    digits = re.sub(r"[^0-9]", "", _to_clean_text(value))
+    if len(digits) == 8:
+        return f"{digits[:4]}.{digits[4:6]}.{digits[6:8]}"
+    return _to_clean_text(value)
+
+
+def _to_4digit_code(value: Any) -> str:
+    digits = re.sub(r"[^0-9]", "", _to_clean_text(value))
+    if not digits:
+        return "0000"
+    return digits.zfill(4)
+
+
+def _pick_first_non_empty(*values: Any) -> str:
+    for value in values:
+        cleaned = _to_clean_text(value)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _truncate_decimal_text(value: Any, keep_decimal_places: int = 1) -> str:
+    raw = _to_clean_text(value)
+    if not raw:
+        return ""
+
+    cleaned = re.sub(r"[^0-9.\-]", "", raw)
+    if cleaned in ("", "-", ".", "-."):
+        return raw
+
+    try:
+        decimal_value = Decimal(cleaned)
+    except InvalidOperation:
+        return raw
+
+    quant = Decimal("1").scaleb(-keep_decimal_places)
+    truncated = decimal_value.quantize(quant, rounding=ROUND_DOWN)
+
+    if "." in cleaned:
+        return f"{truncated:.{keep_decimal_places}f}"
+    return f"{truncated:.0f}"
+
+
+def _normalize_building_usage_text(value: Any) -> str:
+    text = _to_clean_text(value)
+    if not text:
+        return ""
+
+    # e.g. "\uC81C1\uC885\uADFC\uB9B0\uC0DD\uD65C\uC2DC\uC124" -> "\uC81C1\uC885 \uADFC\uB9B0\uC0DD\uD65C\uC2DC\uC124"
+    text = re.sub(
+        r"(\uC81C\s*\d+\s*\uC885)\s*(?=[\uAC00-\uD7A3A-Za-z])",
+        lambda m: re.sub(r"\s+", "", m.group(1)) + " ",
+        text,
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _select_best_juso_item(keyword: str, juso_items: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not juso_items:
+        return None
+
+    compact_keyword = _compact_text(keyword)
+    if compact_keyword:
+        for item in juso_items:
+            road_addr = _compact_text(item.get("roadAddrPart1") or item.get("roadAddr"))
+            jibun_addr = _compact_text(item.get("jibunAddr"))
+            if compact_keyword in road_addr or compact_keyword in jibun_addr:
+                return item
+
+    return juso_items[0]
+
+
+def _parse_bldrgst_xml_response(xml_text: str) -> Optional[Dict[str, Any]]:
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+
+    result_code = _to_clean_text(root.findtext(".//resultCode"))
+    if result_code not in ("00", "0"):
+        return None
+
+    item_node = root.find(".//item")
+    if item_node is None:
+        return None
+
+    return {child.tag: _to_clean_text(child.text) for child in list(item_node)}
+
+
+def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict[str, str]:
+    if not JUSO_ADDRLINK_URL or not BLDRGST_TITLE_URL or not JUSO_CONFM_KEY or not BLDRGST_SERVICE_KEY:
+        return {}
+
+    keyword = " ".join([_to_clean_text(address), _to_clean_text(address_detail)]).strip()
+    if not keyword:
+        return {}
+
+    try:
+        juso_response = requests.get(
+            JUSO_ADDRLINK_URL,
+            params={
+                "currentPage": "1",
+                "countPerPage": "10",
+                "keyword": keyword,
+                "confmKey": JUSO_CONFM_KEY,
+                "hstryYn": "Y",
+                "resultType": "json",
+            },
+            timeout=8,
+        )
+        juso_response.raise_for_status()
+        juso_payload = juso_response.json()
+    except Exception as exc:
+        print(f"[struct_info_call] juso request failed: {exc}")
+        return {}
+
+    juso_results = juso_payload.get("results", {})
+    juso_common = juso_results.get("common", {})
+    if _to_clean_text(juso_common.get("errorCode")) != "0":
+        return {}
+
+    raw_juso_items = juso_results.get("juso") or []
+    juso_items = raw_juso_items if isinstance(raw_juso_items, list) else []
+    juso_item = _select_best_juso_item(keyword, juso_items)
+    if not juso_item:
+        return {}
+
+    adm_cd = _to_clean_text(juso_item.get("admCd"))
+    if len(adm_cd) < 10:
+        return {}
+
+    try:
+        bld_response = requests.get(
+            BLDRGST_TITLE_URL,
+            params={
+                "serviceKey": BLDRGST_SERVICE_KEY,
+                "sigunguCd": adm_cd[:5],
+                "bjdongCd": adm_cd[5:10],
+                "platGbCd": _to_clean_text(juso_item.get("mtYn")) or "0",
+                "bun": _to_4digit_code(juso_item.get("lnbrMnnm")),
+                "ji": _to_4digit_code(juso_item.get("lnbrSlno")),
+                "numOfRows": "10",
+                "pageNo": "1",
+                "_type": "json",
+            },
+            timeout=8,
+        )
+        bld_response.raise_for_status()
+    except Exception as exc:
+        print(f"[struct_info_call] bld request failed: {exc}")
+        return {}
+
+    item_data: Dict[str, Any] = {}
+    try:
+        bld_payload = bld_response.json()
+        header = bld_payload.get("response", {}).get("header", {})
+        result_code = _to_clean_text(header.get("resultCode"))
+        if result_code not in ("00", "0"):
+            return {}
+
+        body = bld_payload.get("response", {}).get("body", {})
+        raw_items = body.get("items", {}).get("item", [])
+        if isinstance(raw_items, dict):
+            item_data = raw_items
+        elif isinstance(raw_items, list) and raw_items:
+            item_data = raw_items[0]
+    except ValueError:
+        item_data = _parse_bldrgst_xml_response(bld_response.text) or {}
+
+    if not item_data:
+        return {}
+
+    bd_name = _pick_first_non_empty(
+        item_data.get("bldNm"),
+        juso_item.get("bdNm"),
+        juso_item.get("detBdNmList"),
+    )
+    jibun_address = _pick_first_non_empty(
+        juso_item.get("jibunAddr"),
+        juso_item.get("roadAddrPart1"),
+        juso_item.get("roadAddr"),
+    )
+
+    autofill_data = {
+        "address": jibun_address,
+        "bd_name": bd_name,
+        "building_name": bd_name,
+        "approval_date": _format_yyyymmdd(item_data.get("useAprDay")),
+        "building_usage": _normalize_building_usage_text(item_data.get("mainPurpsCdNm")),
+        "building_structure": _to_clean_text(item_data.get("strctCdNm")),
+        "gross_area_sqm": _to_clean_text(item_data.get("totArea")),
+        "building_area_sqm": _to_clean_text(item_data.get("archArea")),
+        "aboveground_floors": _to_clean_text(item_data.get("grndFlrCnt")),
+        "underground_floors": _to_clean_text(item_data.get("ugrndFlrCnt")),
+        "elevator": _to_clean_text(item_data.get("rideUseElvtCnt")),
+        "emergency_elevator": _to_clean_text(item_data.get("emgenUseElvtCnt")),
+        "building_coverage_ratio": _truncate_decimal_text(item_data.get("bcRat"), keep_decimal_places=1),
+        "floor_area_ratio": _truncate_decimal_text(item_data.get("vlRat"), keep_decimal_places=1),
+        "parking_outdoor_mechanical": _to_clean_text(item_data.get("oudrMechUtcnt")),
+        "parking_outdoor_self": _to_clean_text(item_data.get("oudrAutoUtcnt")),
+        "parking_indoor_mechanical": _to_clean_text(item_data.get("indrMechUtcnt")),
+        "parking_indoor_self": _to_clean_text(item_data.get("indrAutoUtcnt")),
+        "land_area_sqm": _to_clean_text(item_data.get("platArea")),
+    }
+
+    parking_total = 0
+    has_parking_value = False
+    for key in (
+        "parking_outdoor_mechanical",
+        "parking_outdoor_self",
+        "parking_indoor_mechanical",
+        "parking_indoor_self",
+    ):
+        raw = _to_clean_text(autofill_data.get(key))
+        if not raw:
+            continue
+        try:
+            parking_total += int(float(raw))
+            has_parking_value = True
+        except (TypeError, ValueError):
+            continue
+
+    if has_parking_value:
+        autofill_data["parking_capacity"] = str(parking_total)
+
+    return {
+        key: value
+        for key, value in autofill_data.items()
+        if _to_clean_text(value) != ""
+    }
 
 
 @app.middleware("http")
@@ -374,6 +704,12 @@ class AuthProfileUpdatePayload(BaseModel):
 
 class AuthSignupControlUpdatePayload(BaseModel):
     signup_enabled: bool
+
+
+class AdminNoticeUpdatePayload(BaseModel):
+    title: Optional[str] = ""
+    content: str
+    enabled: bool = True
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -551,6 +887,155 @@ def auth_update_signup_control(payload: AuthSignupControlUpdatePayload, request:
     except Exception as e:
         if conn:
             conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.get("/api/admin/notice")
+def admin_get_notice(request: Request):
+    _assert_admin_session_user(request)
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        notice = _get_notice_payload(cur)
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {"notice": notice}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.post("/api/admin/notice/image")
+async def admin_upload_notice_image(request: Request, file: UploadFile = File(...)):
+    _assert_admin_session_user(request)
+
+    if file is None:
+        raise HTTPException(status_code=400, detail="image file is required")
+
+    content_type = _to_clean_text(file.content_type).lower()
+    if content_type and not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="only image files are allowed")
+
+    extension = _resolve_notice_image_extension(file.filename or "", content_type)
+    if not extension:
+        raise HTTPException(status_code=400, detail="unsupported image format")
+
+    try:
+        raw_bytes = await file.read()
+    finally:
+        await file.close()
+
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="empty image file")
+    if len(raw_bytes) > NOTICE_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"image size must be {NOTICE_IMAGE_MAX_BYTES // (1024 * 1024)}MB or less",
+        )
+
+    saved_name = f"notice_{int(time.time())}_{secrets.token_hex(8)}{extension}"
+    saved_path = NOTICE_IMAGE_UPLOAD_DIR / saved_name
+    try:
+        with open(saved_path, "wb") as writer:
+            writer.write(raw_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"failed to save image: {exc}")
+
+    request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+    return {
+        "status": "ok",
+        "url": f"/photo/notice/{saved_name}",
+    }
+
+
+@app.patch("/api/admin/notice")
+def admin_update_notice(payload: AdminNoticeUpdatePayload, request: Request):
+    user = _assert_admin_session_user(request)
+
+    title = (payload.title or "").strip()
+    content = (payload.content or "").strip()
+    if len(title) > 120:
+        raise HTTPException(status_code=400, detail="title must be 120 characters or fewer")
+    if len(content) > 10000:
+        raise HTTPException(status_code=400, detail="content must be 10000 characters or fewer")
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        _ensure_notice_table(cur)
+
+        cur.execute(
+            """
+            UPDATE app_notice
+            SET title = %s,
+                content = %s,
+                enabled = %s,
+                updated_by = %s,
+                update_time = CURRENT_TIMESTAMP
+            WHERE notice_id = 1
+            """,
+            (
+                title,
+                content,
+                payload.enabled,
+                user.get("user_number"),
+            ),
+        )
+        conn.commit()
+
+        notice = _get_notice_payload(cur)
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {"status": "ok", "notice": notice}
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.get("/api/notice/current")
+def get_current_notice(request: Request):
+    user = request.session.get(AUTH_SESSION_KEY)
+    if not user:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        notice = _get_notice_payload(cur)
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {"notice": notice}
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur:
@@ -1643,6 +2128,18 @@ class historyDetail(BaseModel):
 
 class HistoryUpdate(BaseModel):
     history_data: List[historyDetail]
+
+
+class StructInfoCallRequest(BaseModel):
+    address: str
+    address_detail: Optional[str] = ""
+
+
+@app.post("/api/building/struct-info-call")
+def struct_info_call(req: StructInfoCallRequest):
+    data = _fetch_struct_info_call_data(req.address, req.address_detail or "")
+    return {"status": "ok", "data": data}
+
 
 class BuildingCreate(BaseModel):
     bd_number : str
