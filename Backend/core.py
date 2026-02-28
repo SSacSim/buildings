@@ -1717,6 +1717,7 @@ class BuildingCreate(BaseModel):
     is_investment :bool
     is_development :bool
     is_stable_holding :bool
+    is_violation_checked :bool = False
 
     memo :str 
     etc_memo :str 
@@ -1809,7 +1810,8 @@ async def create_building(data: BuildingCreate):
         'is_office_building' :data.is_office_building,
         'is_investment' :data.is_investment,
         'is_development' :data.is_development,
-        'is_stable_holding' :data.is_stable_holding
+        'is_stable_holding' :data.is_stable_holding,
+        'is_violation_checked' :data.is_violation_checked
     }
 
     insert_data_memo = {
@@ -2035,7 +2037,8 @@ async def update_building(bd_id: int, data: BuildingCreate):
         'is_office_building' :data.is_office_building,
         'is_investment' :data.is_investment,
         'is_development' :data.is_development,
-        'is_stable_holding' :data.is_stable_holding
+        'is_stable_holding' :data.is_stable_holding,
+        'is_violation_checked' :data.is_violation_checked
     }
 
     update_data_memo = {

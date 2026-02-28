@@ -1003,7 +1003,10 @@
                         
                         <div class="flex border-b border-slate-200 bg-white items-stretch">
                             <div class="w-16 bg-slate-50 px-2 py-1 border-r border-slate-300 text-center flex flex-col items-center justify-center gap-1">
-                                <div class="font-bold text-slate-600 text-[11px] leading-tight">위반</div>
+                                <div class="flex items-center justify-center gap-1">
+                                    <div class="font-bold text-slate-600 text-[11px] leading-tight">위반</div>
+                                    <input type="checkbox" id="is_violation_checked" name="is_violation_checked" class="w-3 h-3 accent-blue-600" title="위반 체크">
+                                </div>
                                 <button type="button" onclick="addViolationRow()" class="px-2 py-0.5 rounded bg-blue-600 text-white text-[10px] font-semibold hover:bg-blue-700">+추가</button>
                             </div>
                             <div class="flex-1 p-1">
@@ -1854,9 +1857,10 @@
             'is_office_building', 
             'is_investment', 
             'is_development', 
-            'is_stable_holding'
+            'is_stable_holding',
+            'is_violation_checked'
         ];
-        // 체크박스는 header 영역(폼 바깥)에 있으므로 FormData.has()가 아니라 DOM checked 값을 사용
+        // 체크박스는 저장 시 true/false를 명시적으로 보내기 위해 DOM checked 값을 사용
         checkboxKeys.forEach(key => {
             const checkbox = document.getElementById(key);
             updatedData[key] = Boolean(checkbox && checkbox.checked);
