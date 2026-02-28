@@ -588,7 +588,8 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
     if not JUSO_ADDRLINK_URL or not BLDRGST_TITLE_URL or not JUSO_CONFM_KEY or not BLDRGST_SERVICE_KEY:
         return {}
 
-    keyword = " ".join([_to_clean_text(address), _to_clean_text(address_detail)]).strip()
+    # 상세주소는 JUSO 검색 정확도를 떨어뜨릴 수 있어 검색 키워드에서 제외한다.
+    keyword = _to_clean_text(address)
     if not keyword:
         return {}
 
