@@ -1363,6 +1363,7 @@ function collectMatchConditions() {
         elevator_option: document.getElementById("matchElevatorOption")?.value || "",
         parking_min: document.getElementById("matchParkingMin")?.value || "",
         building_status: document.getElementById("matchBuildingStatus")?.value || "전체",
+        violation_option: document.getElementById("matchViolationOption")?.value || "전체",
         location_decide: document.getElementById("matchLocationDecide")?.value || "",
         price_decide: document.getElementById("matchPriceDecide")?.value || "",
         yield_decide: document.getElementById("matchYieldDecide")?.value || "",
@@ -1411,6 +1412,7 @@ function applyMatchConditions(saved) {
     setInputValue("matchElevatorOption", saved.elevator_option);
     setInputValue("matchParkingMin", saved.parking_min);
     setInputValue("matchBuildingStatus", saved.building_status || "전체");
+    setInputValue("matchViolationOption", saved.violation_option || "전체");
     setInputValue("matchLocationDecide", saved.location_decide);
     setInputValue("matchPriceDecide", saved.price_decide);
     setInputValue("matchYieldDecide", saved.yield_decide);
@@ -1878,6 +1880,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     const elevatorOptionInput = document.getElementById("matchElevatorOption");
     const parkingMinInput = document.getElementById("matchParkingMin");
     const buildingStatusInput = document.getElementById("matchBuildingStatus");
+    const violationOptionInput = document.getElementById("matchViolationOption");
     const locationDecideInput = document.getElementById("matchLocationDecide");
     const priceDecideInput = document.getElementById("matchPriceDecide");
     const yieldDecideInput = document.getElementById("matchYieldDecide");
@@ -1941,6 +1944,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     const roadWidthMin = roadWidthMinRaw ? Number(roadWidthMinRaw) : null;
     const parkingMin = parkingMinRaw ? Number(parkingMinRaw) : null;
     const buildingStatus = (buildingStatusInput?.value || "전체").trim();
+    const violationOption = (violationOptionInput?.value || "전체").trim().toUpperCase();
     const locationDecide = (locationDecideInput?.value || "").trim();
     const priceDecide = (priceDecideInput?.value || "").trim();
     const yieldDecide = (yieldDecideInput?.value || "").trim();
@@ -1976,6 +1980,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         || Boolean(elevatorOption)
         || (parkingMin !== null && !Number.isNaN(parkingMin))
         || (buildingStatus && buildingStatus !== "전체")
+        || (violationOption && violationOption !== "전체")
         || Boolean(locationDecide)
         || Boolean(priceDecide)
         || Boolean(yieldDecide)
@@ -2021,6 +2026,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     if (elevatorOption) params.set("elevator_option", elevatorOption);
     if (parkingMin !== null && !Number.isNaN(parkingMin)) params.set("parking_min", String(parkingMin));
     if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
+    if (violationOption && violationOption !== "전체") params.set("violation_flag", violationOption);
     if (locationDecide) params.set("location_decide", locationDecide);
     if (priceDecide) params.set("price_decide", priceDecide);
     if (yieldDecide) params.set("yield_decide", yieldDecide);

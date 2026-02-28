@@ -277,15 +277,23 @@
                             </div>
                         </div>
 
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <span class="font-bold min-w-[70px]">건축용도:</span>
-                            <div class="flex gap-3">
+                            <div class="flex flex-wrap gap-3">
                                 <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="근린"> 근린</label>
                                 <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="업무"> 업무</label>
                                 <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="숙박"> 숙박</label>
                                 <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="위락"> 위락</label>
                                 <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="주택"> 주택</label>
                                 <label class="flex items-center gap-1"><input type="checkbox" name="matchUsageCategory" value="기타"> 기타</label>
+                            </div>
+                            <div class="flex items-center gap-1 ml-1">
+                                <span class="font-bold min-w-[58px]">위반여부:</span>
+                                <select id="matchViolationOption" class="border-b w-20 text-center outline-none bg-transparent">
+                                    <option value="전체">전체</option>
+                                    <option value="O">위반 O</option>
+                                    <option value="X">위반 X</option>
+                                </select>
                             </div>
                         </div>
 

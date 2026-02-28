@@ -697,6 +697,7 @@ def customer_match_search(
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
     building_status: str = Query(""),
+    violation_flag: str = Query(""),
     location_decide: str = Query(""),
     price_decide: str = Query(""),
     yield_decide: str = Query(""),
@@ -725,7 +726,8 @@ def customer_match_search(
                 bm.status,
                 bi.location_decide, bi.price_decide, bi.yield_decide, bi.vacancy_decide, bi.limit_decide, bi.loan_decide,
                 bi.land_area_pyeong, bi.gross_area_pyeong, bi.zoning_type, bi.approval_date, bi.elevator, bi.parking_capacity,
-                bi.is_new_site, bi.is_remodeling, bi.is_office_building, bi.is_investment, bi.is_development, bi.is_stable_holding
+                bi.is_new_site, bi.is_remodeling, bi.is_office_building, bi.is_investment, bi.is_development, bi.is_stable_holding,
+                bi.is_violation_checked
             FROM building_info bi
             LEFT JOIN building_memo bm
               ON bi.bd_number = bm.bd_number
@@ -1001,6 +1003,12 @@ def customer_match_search(
             sql += " AND COALESCE(bm.status, '') = %s"
             params.append(normalized_building_status)
 
+        normalized_violation_flag = (violation_flag or "").strip().upper()
+        if normalized_violation_flag == "O":
+            sql += " AND COALESCE(bi.is_violation_checked, FALSE) = TRUE"
+        elif normalized_violation_flag == "X":
+            sql += " AND COALESCE(bi.is_violation_checked, FALSE) = FALSE"
+
         normalized_location_decide = (location_decide or "").strip().lower()
         if normalized_location_decide:
             sql += " AND LOWER(COALESCE(bi.location_decide, '')) = %s"
@@ -1112,6 +1120,7 @@ def customer_match_search(
         has_zoning_categories = len(selected_zoning_categories) > 0
         has_usage_categories = len(selected_usage_categories) > 0
         has_types = len(selected_types) > 0
+        has_violation_flag = normalized_violation_flag in ("O", "X")
 
         # 조건이 하나도 없으면 검색하지 않음
         if not (
@@ -1143,6 +1152,7 @@ def customer_match_search(
             or has_zoning_categories
             or has_usage_categories
             or has_types
+            or has_violation_flag
         ):
             return {"items": [], "total_count": 0, "page": 1, "page_size": page_size, "total_pages": 0}
 

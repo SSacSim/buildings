@@ -145,6 +145,14 @@ function toggleAdvancedFilterPanel() {
     toggle.textContent = isClosed ? '>' : '<';
 }
 
+function closeAdvancedFilterPanel() {
+    const panel = document.getElementById('advancedFilterPanel');
+    const toggle = document.getElementById('advancedFilterToggle');
+    if (!panel || !toggle) return;
+    panel.classList.add('-translate-x-full');
+    toggle.textContent = '<';
+}
+
 function resetAdvancedFilters() {
     const panel = document.getElementById('advancedFilterPanel');
     if (!panel) return;
@@ -153,7 +161,7 @@ function resetAdvancedFilters() {
         else el.value = '';
     });
     panel.querySelectorAll('select').forEach((el) => {
-        if (el.id === 'matchBuildingStatus') el.value = '전체';
+        if (el.id === 'matchBuildingStatus' || el.id === 'matchViolationOption') el.value = '전체';
         else el.value = '';
     });
 }
@@ -189,6 +197,7 @@ function collectAdvancedFilters() {
         parking_min: numeric('matchParkingMin'),
         elevator_option: get('matchElevatorOption'),
         building_status: get('matchBuildingStatus'),
+        violation_option: get('matchViolationOption'),
         location_decide: get('matchLocationDecide'),
         price_decide: get('matchPriceDecide'),
         yield_decide: get('matchYieldDecide'),
@@ -204,7 +213,12 @@ function collectAdvancedFilters() {
 function hasAdvancedFilters() {
     const f = collectAdvancedFilters();
     if (f.building_status && f.building_status !== '전체') return true;
-    return Object.entries(f).some(([k, v]) => k !== 'building_status' && String(v || '').trim() !== '');
+    if (f.violation_option && f.violation_option !== '전체') return true;
+    return Object.entries(f).some(([k, v]) => (
+        k !== 'building_status'
+        && k !== 'violation_option'
+        && String(v || '').trim() !== ''
+    ));
 }
 
 function applyAdvancedFilters() {
@@ -389,6 +403,9 @@ async function fetchBuildingsAdvanced(page, category) {
         ? advanced.building_status
         : (category || '');
     params.set('building_status', mergedBuildingStatus);
+    if (advanced.violation_option && advanced.violation_option !== '전체') {
+        params.set('violation_flag', String(advanced.violation_option).toUpperCase());
+    }
     if (advanced.location_decide) params.set('location_decide', advanced.location_decide);
     if (advanced.price_decide) params.set('price_decide', advanced.price_decide);
     if (advanced.yield_decide) params.set('yield_decide', advanced.yield_decide);
@@ -671,4 +688,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const advResetBtn = document.getElementById('advancedFilterResetBtn');
     if (advResetBtn) advResetBtn.addEventListener('click', resetAdvancedFilters);
+
+    document.addEventListener('click', (event) => {
+        const panel = document.getElementById('advancedFilterPanel');
+        const toggle = document.getElementById('advancedFilterToggle');
+        if (!panel || !toggle) return;
+        if (panel.classList.contains('-translate-x-full')) return;
+        if (panel.contains(event.target) || toggle.contains(event.target)) return;
+        closeAdvancedFilterPanel();
+    });
 });

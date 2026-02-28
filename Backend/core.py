@@ -850,6 +850,7 @@ def get_insight_overview(
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
     building_status: str = Query(""),
+    violation_flag: str = Query(""),
     customer_status: str = Query(""),
     location_decide: str = Query(""),
     price_decide: str = Query(""),
@@ -1376,6 +1377,12 @@ def get_insight_overview(
         if normalized_building_status not in ("", "전체"):
             building_sql += " AND COALESCE(bm.status, '') = %s"
             building_params.append(normalized_building_status)
+
+        normalized_violation_flag = (violation_flag or "").strip().upper()
+        if normalized_violation_flag == "O":
+            building_sql += " AND COALESCE(bi.is_violation_checked, FALSE) = TRUE"
+        elif normalized_violation_flag == "X":
+            building_sql += " AND COALESCE(bi.is_violation_checked, FALSE) = FALSE"
 
         normalized_location_decide = (location_decide or "").strip().lower()
         if normalized_location_decide:
