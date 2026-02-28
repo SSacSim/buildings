@@ -1817,6 +1817,7 @@
             if (el) convertMappedSqm(el);
         });
 
+        applyLeaseDetailsAutofill(data.lease_details, mode);
         calcParkingTotal();
         if (mode === "overwrite_all") {
             calculatePricePerPyeong();
@@ -1836,6 +1837,94 @@
             if (!el) return;
             if (isAutofillTargetEmpty(el.value)) run();
         });
+    }
+
+    function normalizeLeaseAreaPyeong(areaSqmText) {
+        const raw = String(areaSqmText ?? "").replace(/,/g, "").trim();
+        const areaSqm = Number(raw);
+        if (!Number.isFinite(areaSqm) || areaSqm <= 0) return "";
+
+        const areaPyeong = areaSqm / 3.305785;
+        const rounded = Math.round(areaPyeong * 10) / 10;
+        return Number.isInteger(rounded) ? String(Math.trunc(rounded)) : rounded.toFixed(1);
+    }
+
+    function normalizeLeaseAutofillRows(rawRows) {
+        if (!Array.isArray(rawRows)) return [];
+
+        const allowedVacancy = new Set(["-", "공실", "책임명도", "명도x", "명도협의"]);
+        return rawRows.map((row) => {
+            const floorType = String(row?.flrGbCdNm ?? "").trim();
+            const floorNo = String(row?.flrNo ?? "").trim();
+            const floorNoClean = floorNo.replace(/^[+-]/, "").trim();
+            const fallbackFloor = floorType.startsWith("지하")
+                ? (floorNoClean ? `-${floorNoClean}` : "-")
+                : floorNoClean;
+
+            const floor = normalizeTextValue(String(row?.floor ?? fallbackFloor).trim());
+            const businessType = normalizeTextValue(String(row?.business_type ?? row?.etcPurps ?? "").trim());
+            const areaSqm = normalizeTextValue(String(row?.area_sqm ?? row?.area ?? "").trim());
+            const areaPyeong = normalizeTextValue(
+                String(row?.area_pyeong ?? "").trim() || normalizeLeaseAreaPyeong(areaSqm)
+            );
+            const deposit = normalizeTextValue(String(row?.deposit ?? "").trim());
+            const monthlyRent = normalizeTextValue(String(row?.monthly_rent_fee ?? "").trim());
+            const maintenance = normalizeTextValue(String(row?.maintenance_fee ?? "").trim());
+            const remark = normalizeTextValue(String(row?.remark ?? "").trim());
+            const vacantRaw = normalizeTextValue(String(row?.is_vacant ?? "-").trim()) || "-";
+            const isVacant = allowedVacancy.has(vacantRaw) ? vacantRaw : "-";
+
+            if (!(floor || businessType || areaSqm || areaPyeong || deposit || monthlyRent || maintenance || remark)) {
+                return null;
+            }
+
+            return {
+                floor,
+                business_type: businessType,
+                area_sqm: areaSqm,
+                area_pyeong: areaPyeong,
+                deposit,
+                monthly_rent_fee: monthlyRent,
+                maintenance_fee: maintenance,
+                remark,
+                is_vacant: isVacant,
+            };
+        }).filter(Boolean);
+    }
+
+    function isLeaseRowEmptyForAutofill(rowEl) {
+        if (!rowEl) return true;
+        const floor = String(rowEl.querySelector(".col-floor")?.value || "").trim();
+        const business = String(rowEl.querySelector(".col-type")?.value || "").trim();
+        const areaSqm = String(rowEl.querySelector(".col-area-sqm")?.value || "").trim();
+        const areaPyeong = String(rowEl.querySelector(".col-area-pyeong")?.value || "").trim();
+        const deposit = String(rowEl.querySelector(".col-deposit")?.value || "").trim();
+        const monthlyRent = String(rowEl.querySelector(".col-monthly-rent-fee")?.value || "").trim();
+        const maintenance = String(rowEl.querySelector(".col-maintenance-fee")?.value || "").trim();
+        const remark = String(rowEl.querySelector(".col-remark")?.value || "").trim();
+        const vacant = String(rowEl.querySelector(".col-is-vacant")?.value || "-").trim();
+
+        return !(floor || business || areaSqm || areaPyeong || deposit || monthlyRent || maintenance || remark || vacant !== "-");
+    }
+
+    function shouldApplyLeaseAutofill(mode = "empty_only") {
+        if (mode === "overwrite_all") return true;
+        const rows = Array.from(document.querySelectorAll("#lease-body .lease-row"));
+        if (!rows.length) return true;
+        return rows.every(isLeaseRowEmptyForAutofill);
+    }
+
+    function applyLeaseDetailsAutofill(rawRows, mode = "empty_only") {
+        const normalizedRows = normalizeLeaseAutofillRows(rawRows);
+        if (!normalizedRows.length) return;
+
+        const tbody = document.getElementById("lease-body");
+        if (!tbody) return;
+        if (!shouldApplyLeaseAutofill(mode)) return;
+
+        tbody.innerHTML = "";
+        normalizedRows.forEach((row) => addRow(row));
+        updateLeaseSummary();
     }
 
     function openStructInfoApplyModal(data) {

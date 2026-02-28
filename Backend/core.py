@@ -76,6 +76,7 @@ async def shutdown_background_jobs():
 app_settings = DB_utils._load_settings().get("app", {})
 JUSO_ADDRLINK_URL = app_settings.get("juso_addrlink_url") or ""
 BLDRGST_TITLE_URL = app_settings.get("bldrgst_title_url") or ""
+BLDRGST_FLR_OULN_URL = app_settings.get("bldrgst_flr_ouln_url") or ""
 JUSO_CONFM_KEY = (
     os.getenv("JUSO_CONFM_KEY")
     or app_settings.get("juso_confm_key")
@@ -484,7 +485,106 @@ def _parse_bldrgst_xml_response(xml_text: str) -> Optional[Dict[str, Any]]:
     return {child.tag: _to_clean_text(child.text) for child in list(item_node)}
 
 
-def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict[str, str]:
+def _extract_bldrgst_items_from_json_payload(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+
+    header = payload.get("response", {}).get("header", {})
+    result_code = _to_clean_text(header.get("resultCode"))
+    if result_code not in ("00", "0"):
+        return []
+
+    body = payload.get("response", {}).get("body", {})
+    raw_items = body.get("items", {}).get("item", [])
+    if isinstance(raw_items, dict):
+        return [raw_items]
+    if isinstance(raw_items, list):
+        return [row for row in raw_items if isinstance(row, dict)]
+    return []
+
+
+def _parse_bldrgst_xml_items(xml_text: str) -> List[Dict[str, str]]:
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+
+    result_code = _to_clean_text(root.findtext(".//resultCode"))
+    if result_code not in ("00", "0"):
+        return []
+
+    item_nodes = root.findall(".//item")
+    rows: List[Dict[str, str]] = []
+    for node in item_nodes:
+        row = {child.tag: _to_clean_text(child.text) for child in list(node)}
+        if row:
+            rows.append(row)
+    return rows
+
+
+def _build_floor_label(floor_kind_name: Any, floor_no: Any) -> str:
+    floor_kind = _to_clean_text(floor_kind_name)
+    floor_text = _to_clean_text(floor_no)
+    floor_number = floor_text.lstrip("+-").strip()
+
+    if floor_kind.startswith("지하"):
+        return f"-{floor_number}" if floor_number else "-"
+    return floor_number or floor_text
+
+
+def _to_pyeong_text_from_sqm(value: Any) -> str:
+    raw = _to_clean_text(value)
+    if not raw:
+        return ""
+
+    cleaned = re.sub(r"[^0-9.\-]", "", raw)
+    if cleaned in ("", "-", ".", "-."):
+        return ""
+
+    try:
+        sqm = Decimal(cleaned)
+    except InvalidOperation:
+        return ""
+
+    if sqm <= 0:
+        return ""
+
+    pyeong = sqm / Decimal("3.305785")
+    rounded = pyeong.quantize(Decimal("0.1"))
+    if rounded == rounded.to_integral():
+        return f"{rounded:.0f}"
+    return f"{rounded:.1f}"
+
+
+def _build_lease_details_from_floor_items(floor_items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    lease_details: List[Dict[str, str]] = []
+    for row in floor_items:
+        floor = _build_floor_label(row.get("flrGbCdNm"), row.get("flrNo"))
+        business_type = _to_clean_text(row.get("etcPurps"))
+        area_sqm = _to_clean_text(row.get("area"))
+        area_pyeong = _to_pyeong_text_from_sqm(area_sqm)
+
+        if not (floor or business_type or area_sqm):
+            continue
+
+        lease_details.append(
+            {
+                "floor": floor,
+                "business_type": business_type,
+                "area_sqm": area_sqm,
+                "area_pyeong": area_pyeong,
+                "deposit": "",
+                "monthly_rent_fee": "",
+                "maintenance_fee": "",
+                "remark": "",
+                "is_vacant": "-",
+            }
+        )
+
+    return lease_details
+
+
+def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict[str, Any]:
     if not JUSO_ADDRLINK_URL or not BLDRGST_TITLE_URL or not JUSO_CONFM_KEY or not BLDRGST_SERVICE_KEY:
         return {}
 
@@ -526,19 +626,23 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
     if len(adm_cd) < 10:
         return {}
 
+    bld_common_params = {
+        "serviceKey": BLDRGST_SERVICE_KEY,
+        "sigunguCd": adm_cd[:5],
+        "bjdongCd": adm_cd[5:10],
+        "platGbCd": _to_clean_text(juso_item.get("mtYn")) or "0",
+        "bun": _to_4digit_code(juso_item.get("lnbrMnnm")),
+        "ji": _to_4digit_code(juso_item.get("lnbrSlno")),
+        "pageNo": "1",
+        "_type": "json",
+    }
+
     try:
         bld_response = requests.get(
             BLDRGST_TITLE_URL,
             params={
-                "serviceKey": BLDRGST_SERVICE_KEY,
-                "sigunguCd": adm_cd[:5],
-                "bjdongCd": adm_cd[5:10],
-                "platGbCd": _to_clean_text(juso_item.get("mtYn")) or "0",
-                "bun": _to_4digit_code(juso_item.get("lnbrMnnm")),
-                "ji": _to_4digit_code(juso_item.get("lnbrSlno")),
+                **bld_common_params,
                 "numOfRows": "10",
-                "pageNo": "1",
-                "_type": "json",
             },
             timeout=8,
         )
@@ -550,33 +654,55 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
     item_data: Dict[str, Any] = {}
     try:
         bld_payload = bld_response.json()
-        header = bld_payload.get("response", {}).get("header", {})
-        result_code = _to_clean_text(header.get("resultCode"))
-        if result_code not in ("00", "0"):
-            return {}
-
-        body = bld_payload.get("response", {}).get("body", {})
-        raw_items = body.get("items", {}).get("item", [])
-        if isinstance(raw_items, dict):
-            item_data = raw_items
-        elif isinstance(raw_items, list) and raw_items:
-            item_data = raw_items[0]
+        title_items = _extract_bldrgst_items_from_json_payload(bld_payload)
+        if title_items:
+            item_data = title_items[0]
     except ValueError:
-        item_data = _parse_bldrgst_xml_response(bld_response.text) or {}
+        parsed_items = _parse_bldrgst_xml_items(bld_response.text)
+        if parsed_items:
+            item_data = parsed_items[0]
 
     if not item_data:
         return {}
+
+    lease_details: List[Dict[str, str]] = []
+    if BLDRGST_FLR_OULN_URL:
+        try:
+            floor_response = requests.get(
+                BLDRGST_FLR_OULN_URL,
+                params={
+                    **bld_common_params,
+                    "numOfRows": "200",
+                },
+                timeout=8,
+            )
+            floor_response.raise_for_status()
+
+            floor_items: List[Dict[str, Any]] = []
+            try:
+                floor_payload = floor_response.json()
+                floor_items = _extract_bldrgst_items_from_json_payload(floor_payload)
+            except ValueError:
+                floor_items = _parse_bldrgst_xml_items(floor_response.text)
+
+            lease_details = _build_lease_details_from_floor_items(floor_items)
+        except Exception as exc:
+            print(f"[struct_info_call] floor request failed: {exc}")
 
     bd_name = _pick_first_non_empty(
         item_data.get("bldNm"),
         juso_item.get("bdNm"),
         juso_item.get("detBdNmList"),
     )
-    jibun_address = _pick_first_non_empty(
-        juso_item.get("jibunAddr"),
-        juso_item.get("roadAddrPart1"),
-        juso_item.get("roadAddr"),
-    )
+    jibun_address = _to_clean_text(item_data.get("platPlc"))
+    if not jibun_address:
+        jibun_address = _to_clean_text(juso_item.get("jibunAddr"))
+    if not jibun_address:
+        jibun_address = _to_clean_text(juso_item.get("roadAddrPart1"))
+    if not jibun_address:
+        # roadAddr may include trailing reference text in parentheses.
+        road_addr = _to_clean_text(juso_item.get("roadAddr"))
+        jibun_address = re.sub(r"\s*\([^)]*\)\s*$", "", road_addr).strip()
 
     autofill_data = {
         "address": jibun_address,
@@ -619,6 +745,9 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
 
     if has_parking_value:
         autofill_data["parking_capacity"] = str(parking_total)
+
+    if lease_details:
+        autofill_data["lease_details"] = lease_details
 
     return {
         key: value
