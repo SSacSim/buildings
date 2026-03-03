@@ -34,9 +34,10 @@ let currentPage = 1;
 let currentAddress = '';
 let currentcategory = '';
 let currentSearchMode = 'building';
-let customerSearchCache = [];
 let currentBuildingTotalPages = null;
+let currentCustomerTotalPages = null;
 const BUILDING_PAGE_SIZE = 15;
+const CUSTOMER_PAGE_SIZE = 20;
 const pageGroupSize = 5;
 const NOTICE_HIDE_DAYS = 7;
 let currentMainNotice = null;
@@ -280,7 +281,8 @@ function setStatusOptions(mode) {
 
 function filterByStatus() {
     if (currentSearchMode === 'customer') {
-        renderCustomerCards(customerSearchCache);
+        currentPage = 1;
+        searchCustomer(currentPage);
         return;
     }
     search();
@@ -391,7 +393,8 @@ function unifiedSearch() {
     currentSearchMode = mode;
     setStatusOptions(mode);
     if (mode === 'customer') {
-        searchCustomer();
+        currentPage = 1;
+        searchCustomer(currentPage);
         return;
     }
     search();
@@ -399,20 +402,17 @@ function unifiedSearch() {
 
 function renderCustomerCards(data) {
     const list = document.getElementById('addressList');
-    const selectedStatus = document.getElementById('statusSelect')?.value || '';
-    const filtered = Array.isArray(data)
-        ? data.filter((item) => !selectedStatus || (item.status || '') === selectedStatus)
-        : [];
+    const items = Array.isArray(data) ? data : [];
 
-    if (!filtered.length) {
+    if (!items.length) {
         document.getElementById("totalCount").innerText = "전체: 0건";
         list.innerHTML = '<div class="text-center text-slate-400 py-20">고객 검색 결과가 없습니다.</div>';
         return;
     }
 
-    document.getElementById("totalCount").innerText = `전체: ${formatNumberWithComma(filtered.length)}건`;
+    document.getElementById("totalCount").innerText = `전체: ${formatNumberWithComma(items.length)}건`;
 
-    const customerCards = filtered.map((item) => {
+    const customerCards = items.map((item) => {
         const desiredPrice = item.desired_price_manwon
             ? `${formatNumberWithComma(String(item.desired_price_manwon))}만원`
             : '-';
@@ -588,48 +588,40 @@ async function fetchBuildingsAdvanced(page, category) {
     }
 }
 
-async function searchCustomer() {
+async function searchCustomer(page = 1) {
     const keyword = document.getElementById('addressInput').value.trim();
+    const status = document.getElementById('statusSelect')?.value || '';
     const list = document.getElementById('addressList');
     const loading = document.getElementById('loading');
     const pagination = document.getElementById('pagination');
+    const safePage = Math.max(1, Number(page) || 1);
+
+    currentAddress = keyword;
+    currentcategory = status;
 
     list.innerHTML = '';
     pagination.innerHTML = '';
     loading.classList.remove('hidden');
 
     try {
-        const res = await fetch(`/api/customer/search?q=${encodeURIComponent(keyword)}`);
-        const data = await res.json();
-        customerSearchCache = Array.isArray(data) ? data : [];
-        loading.classList.add('hidden');
-        renderCustomerCards(customerSearchCache);
-        return;
+        const params = new URLSearchParams();
+        params.set('q', keyword);
+        params.set('page', String(safePage));
+        params.set('page_size', String(CUSTOMER_PAGE_SIZE));
+        if (status) {
+            params.set('status', status);
+        }
 
-        data.forEach(item => {
-            const card = `
-                <div onclick="goToCustomer(${item.customer_number})"
-                     class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-emerald-400 hover:shadow-md transition-all cursor-pointer group">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
-                            CUSTOMER: ${item.customer_number}
-                        </span>
-                        <span class="text-slate-300 group-hover:text-emerald-600 text-sm">
-                            고객 상세로 이동
-                        </span>
-                    </div>
-                    <p class="text-lg font-semibold text-slate-700 mb-2">
-                        회사명: ${item.buyer_name || '-'}
-                    </p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <p class="text-sm text-slate-500">전화번호: ${item.phone || '-'}</p>
-                        <p class="text-sm text-slate-500">상태: ${item.status || '-'}</p>
-                        <p class="text-sm text-slate-500 col-span-2">회사주소: ${item.company_address || '-'}</p>
-                    </div>
-                </div>
-            `;
-            list.innerHTML += card;
-        });
+        const res = await fetch(`/api/customer/search?${params.toString()}`);
+        const data = await res.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const totalCount = Number(data?.total_count || 0);
+        currentCustomerTotalPages = Number(data?.total_pages || 0);
+        currentPage = Number(data?.page || safePage);
+
+        loading.classList.add('hidden');
+        renderCustomerCards(items);
+        renderPagination(currentPage, totalCount, currentCustomerTotalPages);
     } catch (err) {
         loading.classList.add('hidden');
         console.error(err);
@@ -731,11 +723,18 @@ function renderPagination(page , item_count, total_pages = null) {
 }
 
 function goPage(p) {
-    const safePage = currentBuildingTotalPages && currentBuildingTotalPages > 0
-        ? Math.min(Math.max(1, p), currentBuildingTotalPages)
+    const totalPages = currentSearchMode === 'customer'
+        ? currentCustomerTotalPages
+        : currentBuildingTotalPages;
+    const safePage = totalPages && totalPages > 0
+        ? Math.min(Math.max(1, p), totalPages)
         : Math.max(1, p);
     currentPage = safePage;
-    fetchBuildings(safePage,currentcategory);
+    if (currentSearchMode === 'customer') {
+        searchCustomer(safePage);
+    } else {
+        fetchBuildings(safePage,currentcategory);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 

@@ -383,7 +383,9 @@ def get_customer_detail(customer_number: int):
 @router.get("/api/customer/search")
 def search_customer(
     q: str = Query(""),
-    limit: int = Query(20, ge=1, le=100)
+    status: str = Query(""),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100)
 ):
     conn = None
     cur = None
@@ -392,79 +394,86 @@ def search_customer(
         cur = conn.cursor()
 
         keyword = (q or "").strip()
+        normalized_status = (status or "").strip()
+        where_clauses = ["delete_flag = FALSE"]
+        params: List[object] = []
 
         if keyword:
-            cur.execute(
+            like_keyword = f"%{keyword}%"
+            where_clauses.append(
                 """
-                SELECT
-                    customer_number,
-                    status,
-                    buyer_name,
-                    ceo_name,
-                    phone,
-                    email,
-                    customer_state,
-                    first_contact,
-                    desired_price_manwon,
-                    business_area,
-                    building_preference,
-                    main_interest_region
-                FROM customer_info
-                WHERE delete_flag = FALSE
-                  AND (
-                        CAST(customer_number AS TEXT) ILIKE %s
-                     OR buyer_name ILIKE %s
-                     OR ceo_name ILIKE %s
-                     OR phone ILIKE %s
-                     OR email ILIKE %s
-                     OR first_contact ILIKE %s
-                     OR business_area ILIKE %s
-                     OR building_preference ILIKE %s
-                     OR main_interest_region ILIKE %s
-                   )
-                ORDER BY update_time DESC, customer_number DESC
-                LIMIT %s
-                """,
                 (
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    f"%{keyword}%",
-                    limit,
+                    CAST(customer_number AS TEXT) ILIKE %s
+                    OR buyer_name ILIKE %s
+                    OR ceo_name ILIKE %s
+                    OR phone ILIKE %s
+                    OR email ILIKE %s
+                    OR first_contact ILIKE %s
+                    OR business_area ILIKE %s
+                    OR building_preference ILIKE %s
+                    OR main_interest_region ILIKE %s
                 )
-            )
-        else:
-            cur.execute(
                 """
-                SELECT
-                    customer_number,
-                    status,
-                    buyer_name,
-                    ceo_name,
-                    phone,
-                    email,
-                    customer_state,
-                    first_contact,
-                    desired_price_manwon,
-                    business_area,
-                    building_preference,
-                    main_interest_region
-                FROM customer_info
-                WHERE delete_flag = FALSE
-                ORDER BY update_time DESC, customer_number DESC
-                LIMIT %s
-                """,
-                (limit,)
             )
+            params.extend([like_keyword] * 9)
+
+        if normalized_status:
+            where_clauses.append("status = %s")
+            params.append(normalized_status)
+
+        where_sql = " AND ".join(where_clauses)
+        count_sql = f"""
+            SELECT COUNT(*)
+            FROM customer_info
+            WHERE {where_sql}
+        """
+        cur.execute(count_sql, tuple(params))
+        total_count = int(cur.fetchone()[0] or 0)
+        total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+        safe_page = min(page, total_pages) if total_pages > 0 else 1
+
+        if total_count == 0:
+            return {
+                "items": [],
+                "total_count": 0,
+                "page": 1,
+                "page_size": page_size,
+                "total_pages": 0,
+            }
+
+        offset = (safe_page - 1) * page_size
+        cur.execute(
+            f"""
+            SELECT
+                customer_number,
+                status,
+                buyer_name,
+                ceo_name,
+                phone,
+                email,
+                customer_state,
+                first_contact,
+                desired_price_manwon,
+                business_area,
+                building_preference,
+                main_interest_region
+            FROM customer_info
+            WHERE {where_sql}
+            ORDER BY update_time DESC, customer_number DESC
+            LIMIT %s OFFSET %s
+            """,
+            tuple(params + [page_size, offset])
+        )
 
         rows = cur.fetchall()
         columns = [desc[0] for desc in cur.description]
-        return [dict(zip(columns, row)) for row in rows]
+        return {
+            "items": [dict(zip(columns, row)) for row in rows],
+            "total_count": total_count,
+            "page": safe_page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
