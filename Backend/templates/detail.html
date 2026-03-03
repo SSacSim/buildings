@@ -1474,6 +1474,16 @@
         }
     }
 
+    function normalizeAutofillAddress(value) {
+        const normalized = normalizeTextValue(String(value ?? "").trim());
+        if (!normalized) return normalized;
+
+        let result = normalized.replace(/서울특별시/g, "서울");
+        result = result.replace(/\s*번지\s*$/, "").trim();
+        result = result.replace(/\s{2,}/g, " ");
+        return result;
+    }
+
     function sanitizeNearbyPart(value) {
         return String(value || "").replace(/\|\|/g, "|").replace(/\|/g, " ").replace(/##/g, " ").trim();
     }
@@ -1787,7 +1797,7 @@
         if (!data || typeof data !== "object") return;
 
         setFieldValueByMode("bd_name", data.bd_name ?? data.building_name, mode);
-        setFieldValueByMode("address", data.address, "overwrite_all");
+        setFieldValueByMode("address", normalizeAutofillAddress(data.address), "overwrite_all");
 
         [
             "approval_date",
