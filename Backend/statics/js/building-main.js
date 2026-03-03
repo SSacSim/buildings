@@ -41,6 +41,11 @@ const CUSTOMER_PAGE_SIZE = 20;
 const pageGroupSize = 5;
 const NOTICE_HIDE_DAYS = 7;
 let currentMainNotice = null;
+let latestBuildingMapItems = [];
+let latestBuildingMapQueryKey = "";
+let latestBuildingMapCacheReady = false;
+let latestBuildingMapFetchPromise = null;
+let hasExecutedBuildingSearch = false;
 
 function resolveDisplayName(user) {
     const displayName = String(user?.display_name || "").trim();
@@ -400,9 +405,230 @@ function unifiedSearch() {
     search();
 }
 
+function buildMainSearchMapItems(items) {
+    if (!Array.isArray(items)) return [];
+
+    const seen = new Set();
+    return items
+        .map((item) => {
+            const address = String(item?.address || "").trim();
+            if (!address) return null;
+
+            const bdNumber = String(item?.bd_number || "").trim();
+            const bdName = String(item?.bd_name || "").trim();
+            const salePrice = String(item?.sale_price || "").trim();
+            const detailUrl = bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : "";
+            const key = `${bdNumber}|${address}`;
+            if (seen.has(key)) return null;
+            seen.add(key);
+
+            return {
+                bd_number: bdNumber || null,
+                address: address,
+                bd_name: bdName,
+                sale_price: salePrice,
+                detail_url: detailUrl
+            };
+        })
+        .filter(Boolean);
+}
+
+function updateMainSearchMapItems(items, options = {}) {
+    const { isFullSet = false, queryKey = "" } = options;
+    latestBuildingMapItems = buildMainSearchMapItems(items);
+    if (queryKey) {
+        latestBuildingMapQueryKey = queryKey;
+    }
+    latestBuildingMapCacheReady = Boolean(isFullSet);
+    window.dispatchEvent(
+        new CustomEvent("main:searchResultsUpdated", {
+            detail: { items: latestBuildingMapItems }
+        })
+    );
+}
+
+function getMainBuildingMapQueryKey() {
+    if (currentSearchMode !== "building") {
+        return "mode:customer";
+    }
+    if (hasAdvancedFilters()) {
+        const advanced = collectAdvancedFilters();
+        return `advanced:${JSON.stringify(advanced)}|status:${String(currentcategory || "")}`;
+    }
+    return `simple:${String(currentAddress || "")}|status:${String(currentcategory || "")}`;
+}
+
+function buildAdvancedOverviewParams(advanced, category, page = 1, pageSize = 100) {
+    const params = new URLSearchParams();
+    params.set("building_page", String(page));
+    params.set("page_size", String(pageSize));
+    params.set("address", advanced.address || currentAddress || "");
+    if (advanced.site_location) params.set("site_location", advanced.site_location);
+    if (advanced.station_keyword) params.set("station_keyword", advanced.station_keyword);
+    if (advanced.station_walk_min) params.set("station_walk_min", advanced.station_walk_min);
+    if (advanced.station_walk_max) params.set("station_walk_max", advanced.station_walk_max);
+    if (advanced.cash_hold_manwon) params.set("cash_hold_manwon", advanced.cash_hold_manwon);
+    if (advanced.cash_hold_percent) params.set("cash_hold_percent", advanced.cash_hold_percent);
+    if (advanced.min_price) params.set("min_price", advanced.min_price);
+    if (advanced.max_price) params.set("max_price", advanced.max_price);
+    if (advanced.min_yield) params.set("min_yield", advanced.min_yield);
+    if (advanced.land_pp_min) params.set("land_pp_min", advanced.land_pp_min);
+    if (advanced.land_pp_max) params.set("land_pp_max", advanced.land_pp_max);
+    if (advanced.gross_pp_min) params.set("gross_pp_min", advanced.gross_pp_min);
+    if (advanced.gross_pp_max) params.set("gross_pp_max", advanced.gross_pp_max);
+    if (advanced.land_area_min) params.set("land_area_min", advanced.land_area_min);
+    if (advanced.land_area_max) params.set("land_area_max", advanced.land_area_max);
+    if (advanced.gross_area_min) params.set("gross_area_min", advanced.gross_area_min);
+    if (advanced.gross_area_max) params.set("gross_area_max", advanced.gross_area_max);
+    if (advanced.usable_area_min) params.set("usable_area_min", advanced.usable_area_min);
+    if (advanced.usable_area_max) params.set("usable_area_max", advanced.usable_area_max);
+    if (advanced.building_area_min) params.set("building_area_min", advanced.building_area_min);
+    if (advanced.building_area_max) params.set("building_area_max", advanced.building_area_max);
+    if (advanced.approval_year_min) params.set("approval_year_min", advanced.approval_year_min);
+    if (advanced.road_width_min) params.set("road_width_min", advanced.road_width_min);
+    if (advanced.parking_min) params.set("parking_min", advanced.parking_min);
+    if (advanced.elevator_option) params.set("elevator_option", advanced.elevator_option);
+
+    const mergedBuildingStatus = (advanced.building_status && advanced.building_status !== "?勳泊")
+        ? advanced.building_status
+        : (category || "");
+    params.set("building_status", mergedBuildingStatus);
+
+    if (advanced.violation_option && advanced.violation_option !== "?勳泊") {
+        params.set("violation_flag", String(advanced.violation_option).toUpperCase());
+    }
+    if (advanced.location_decide) params.set("location_decide", advanced.location_decide);
+    if (advanced.price_decide) params.set("price_decide", advanced.price_decide);
+    if (advanced.yield_decide) params.set("yield_decide", advanced.yield_decide);
+    if (advanced.vacancy_decide) params.set("vacancy_decide", advanced.vacancy_decide);
+    if (advanced.limit_decide) params.set("limit_decide", advanced.limit_decide);
+    if (advanced.loan_decide) params.set("loan_decide", advanced.loan_decide);
+    if (advanced.types) params.set("types", advanced.types);
+    if (advanced.zoning_categories) params.set("zoning_categories", advanced.zoning_categories);
+    if (advanced.usage_categories) params.set("usage_categories", advanced.usage_categories);
+
+    return params;
+}
+
+async function fetchAllSimpleSearchRows(address, category) {
+    const res = await fetch("/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            address: String(address || ""),
+            page: 1,
+            category: String(category || "")
+        })
+    });
+    const firstPayload = await res.json();
+    if (!Array.isArray(firstPayload) || firstPayload.length === 0) {
+        return [];
+    }
+
+    const rows = Array.isArray(firstPayload.slice(1)) ? firstPayload.slice(1) : [];
+    const totalCount = Number(firstPayload?.[0]?.total_count || 0);
+    const totalPages = totalCount > 0 ? Math.ceil(totalCount / BUILDING_PAGE_SIZE) : 0;
+    if (totalPages <= 1) {
+        return rows;
+    }
+
+    for (let page = 2; page <= totalPages; page += 1) {
+        const pageRes = await fetch("/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                address: String(address || ""),
+                page: page,
+                category: String(category || "")
+            })
+        });
+        const pagePayload = await pageRes.json();
+        if (!Array.isArray(pagePayload) || pagePayload.length <= 1) {
+            continue;
+        }
+        rows.push(...pagePayload.slice(1));
+    }
+
+    return rows;
+}
+
+async function fetchAllAdvancedSearchRows(advanced, category) {
+    const firstParams = buildAdvancedOverviewParams(advanced, category, 1, 100);
+    const firstRes = await fetch(`/api/insight/overview?${firstParams.toString()}`);
+    const firstPayload = await firstRes.json();
+    const rows = Array.isArray(firstPayload?.buildings) ? [...firstPayload.buildings] : [];
+    const totalPages = Number(firstPayload?.buildings_total_pages || 0);
+    if (totalPages <= 1) {
+        return rows;
+    }
+
+    for (let page = 2; page <= totalPages; page += 1) {
+        const params = buildAdvancedOverviewParams(advanced, category, page, 100);
+        const res = await fetch(`/api/insight/overview?${params.toString()}`);
+        const payload = await res.json();
+        const pageRows = Array.isArray(payload?.buildings) ? payload.buildings : [];
+        rows.push(...pageRows);
+    }
+
+    return rows;
+}
+
+async function loadMainSearchMapItems(force = false) {
+    if (currentSearchMode !== "building") {
+        latestBuildingMapItems = [];
+        latestBuildingMapQueryKey = getMainBuildingMapQueryKey();
+        latestBuildingMapCacheReady = true;
+        return [];
+    }
+    if (!hasExecutedBuildingSearch) {
+        latestBuildingMapItems = [];
+        latestBuildingMapQueryKey = getMainBuildingMapQueryKey();
+        latestBuildingMapCacheReady = true;
+        return [];
+    }
+
+    const queryKey = getMainBuildingMapQueryKey();
+    if (!force && latestBuildingMapCacheReady && latestBuildingMapQueryKey === queryKey) {
+        return [...latestBuildingMapItems];
+    }
+    if (!force && latestBuildingMapFetchPromise && latestBuildingMapQueryKey === queryKey) {
+        return latestBuildingMapFetchPromise;
+    }
+
+    latestBuildingMapQueryKey = queryKey;
+    latestBuildingMapCacheReady = false;
+
+    const fetchPromise = (async () => {
+        const rows = hasAdvancedFilters()
+            ? await fetchAllAdvancedSearchRows(collectAdvancedFilters(), currentcategory)
+            : await fetchAllSimpleSearchRows(currentAddress, currentcategory);
+
+        updateMainSearchMapItems(rows, { isFullSet: true, queryKey });
+        return [...latestBuildingMapItems];
+    })()
+        .catch((error) => {
+            console.error("failed to fetch all map items", error);
+            updateMainSearchMapItems([], { isFullSet: true, queryKey });
+            return [];
+        })
+        .finally(() => {
+            if (latestBuildingMapFetchPromise === fetchPromise) {
+                latestBuildingMapFetchPromise = null;
+            }
+        });
+
+    latestBuildingMapFetchPromise = fetchPromise;
+    return fetchPromise;
+}
+
+window.getMainSearchMapItems = function getMainSearchMapItems() {
+    return loadMainSearchMapItems(false);
+};
+
 function renderCustomerCards(data) {
     const list = document.getElementById('addressList');
     const items = Array.isArray(data) ? data : [];
+    updateMainSearchMapItems([]);
 
     if (!items.length) {
         document.getElementById("totalCount").innerText = "전체: 0건";
@@ -463,6 +689,7 @@ function renderCustomerCards(data) {
 
 function renderBuildingCards(items) {
     const list = document.getElementById('addressList');
+    updateMainSearchMapItems(items);
     list.innerHTML = '';
 
     items.forEach(item => {
@@ -519,6 +746,7 @@ async function fetchBuildingsAdvanced(page, category) {
     list.innerHTML = '';
     pagination.innerHTML = '';
     loading.classList.remove('hidden');
+    hasExecutedBuildingSearch = true;
 
     const params = new URLSearchParams();
     params.set('building_page', String(page));
@@ -573,6 +801,7 @@ async function fetchBuildingsAdvanced(page, category) {
 
         const items = Array.isArray(data?.buildings) ? data.buildings : [];
         if (!items.length) {
+            updateMainSearchMapItems([]);
             document.getElementById("totalCount").innerText = "전체: 0건";
             list.innerHTML = '<div class="text-center text-slate-400 py-20">검색 결과가 없습니다.</div>';
             return;
@@ -582,6 +811,7 @@ async function fetchBuildingsAdvanced(page, category) {
         renderBuildingCards(items);
         renderPagination(page, Number(data?.buildings_total_count || items.length), currentBuildingTotalPages);
     } catch (err) {
+        updateMainSearchMapItems([]);
         loading.classList.add('hidden');
         console.error(err);
         list.innerHTML = '<div class="text-center text-red-400 py-20">데이터를 가져오는데 실패했습니다.</div>';
@@ -602,6 +832,8 @@ async function searchCustomer(page = 1) {
     list.innerHTML = '';
     pagination.innerHTML = '';
     loading.classList.remove('hidden');
+    updateMainSearchMapItems([]);
+    hasExecutedBuildingSearch = false;
 
     try {
         const params = new URLSearchParams();
@@ -631,6 +863,7 @@ async function searchCustomer(page = 1) {
 
 // 
 async function fetchBuildings(page , category) {
+    hasExecutedBuildingSearch = true;
     if (hasAdvancedFilters()) {
         await fetchBuildingsAdvanced(page, category);
         return;
@@ -643,6 +876,7 @@ async function fetchBuildings(page , category) {
     list.innerHTML = '';
     pagination.innerHTML = '';
     loading.classList.remove('hidden');
+    updateMainSearchMapItems([]);
 
 
     try {
@@ -656,6 +890,7 @@ async function fetchBuildings(page , category) {
         loading.classList.add('hidden');
 
         if (!data || data.length === 0) {
+            updateMainSearchMapItems([]);
             list.innerHTML = '<div class="text-center text-slate-400 py-20">검색 결과가 없습니다.</div>';
             return;
         }
@@ -667,6 +902,7 @@ async function fetchBuildings(page , category) {
         renderPagination(page, totalCount, currentBuildingTotalPages);
 
     } catch (err) {
+        updateMainSearchMapItems([]);
         loading.classList.add('hidden');
         console.error(err);
         list.innerHTML = '<div class="text-center text-red-400 py-20">데이터를 가져오는데 실패했습니다.</div>';

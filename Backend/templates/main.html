@@ -15,32 +15,41 @@
     <div class="max-w-4xl mx-auto px-6 py-8">
         <div class="flex items-center justify-between mb-6 gap-4">
             <h1 class="text-2xl font-bold text-slate-800">🏢 건물 정보 대시보드</h1>
-            <div id="accountMenuWrapper" class="relative shrink-0">
-                <button id="accountMenuButton"
+            <div class="flex items-center gap-2 shrink-0">
+                <button id="openMainKakaoMapBtn"
                         type="button"
-                        aria-haspopup="true"
-                        aria-expanded="false"
-                        aria-label="계정 메뉴 열기"
-                        class="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-100 transition-all">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.118a7.5 7.5 0 0115 0A17.933 17.933 0 0112 21.75a17.933 17.933 0 01-7.5-1.632z" />
-                    </svg>
+                        aria-label="검색 결과 카카오 지도 보기"
+                        title="검색 결과 카카오 지도 보기"
+                        class="bg-yellow-400 text-slate-900 px-2.5 py-0.5 rounded text-[11px] font-bold hover:bg-yellow-300 transition-all">
+                    카카오
                 </button>
+                <div id="accountMenuWrapper" class="relative shrink-0">
+                    <button id="accountMenuButton"
+                            type="button"
+                            aria-haspopup="true"
+                            aria-expanded="false"
+                            aria-label="계정 메뉴 열기"
+                            class="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-100 transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.118a7.5 7.5 0 0115 0A17.933 17.933 0 0112 21.75a17.933 17.933 0 01-7.5-1.632z" />
+                        </svg>
+                    </button>
 
-                <div id="accountMenuDropdown"
-                     class="hidden absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
-                    <div class="mb-1 border-b border-slate-100 px-2 pb-2">
-                        <p id="accountMenuName" class="truncate text-sm font-semibold text-slate-800">내 계정</p>
-                        <p id="accountMenuUsername" class="truncate text-xs text-slate-500">@user</p>
+                    <div id="accountMenuDropdown"
+                         class="hidden absolute right-0 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                        <div class="mb-1 border-b border-slate-100 px-2 pb-2">
+                            <p id="accountMenuName" class="truncate text-sm font-semibold text-slate-800">내 계정</p>
+                            <p id="accountMenuUsername" class="truncate text-xs text-slate-500">@user</p>
+                        </div>
+                        <a href="/account"
+                           class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
+                            설정
+                        </a>
+                        <a href="/logout"
+                           class="block rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">
+                            로그아웃
+                        </a>
                     </div>
-                    <a href="/account"
-                       class="block rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-                        설정
-                    </a>
-                    <a href="/logout"
-                       class="block rounded-lg px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">
-                        로그아웃
-                    </a>
                 </div>
             </div>
         </div>
@@ -235,6 +244,25 @@
     </div>
 </div>
 
+<div id="mainKakaoMapModal"
+     data-kakao-app-key="{{ kakao_js_app_key | default('', true) }}"
+     class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-2xl w-[95vw] max-w-[1280px] h-[86vh] shadow-2xl flex flex-col overflow-hidden">
+        <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2">
+            <div id="mainKakaoMapTitle" class="text-[14px] font-bold text-slate-700">검색 결과 지도</div>
+            <button id="closeMainKakaoMapBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">
+                닫기
+            </button>
+        </div>
+        <div id="mainKakaoMapResult" class="px-4 py-2 text-[12px] text-slate-600 border-b border-slate-100">
+            검색된 건물 주소를 지도에 표시합니다.
+        </div>
+        <div id="mainKakaoMap" class="flex-1 min-h-0"></div>
+    </div>
+</div>
+
 <script src="/statics/js/building-main.js"></script>
+<script src="/statics/js/main_kakao_map.js"></script>
 </body>
 </html>

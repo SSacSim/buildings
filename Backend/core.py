@@ -1424,7 +1424,10 @@ def auth_logout(request: Request):
 def index(request: Request):
     return templates.TemplateResponse(
         "main.html",
-        {"request": request}
+        {
+            "request": request,
+            "kakao_js_app_key": customer._get_kakao_js_app_key(),
+        }
     )
 
 
