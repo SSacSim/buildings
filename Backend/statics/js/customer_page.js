@@ -1,4 +1,4 @@
-const INTRO_STATUS_OPTIONS = ["준비", "소개", "미팅", "계약협의", "완료", "보류"];
+const INTRO_STATUS_OPTIONS = ["준비", "소개", "답사", "계약협의", "계약완료", "보류"];
 
 let introRows = [];
 let ownedRows = [];
@@ -1057,8 +1057,9 @@ function renderIntroRows() {
                             <div class="flex items-start gap-2">
                                 <span class="text-[11px] font-bold text-slate-600 shrink-0 pt-1">내용</span>
                                 <textarea
-                                    oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','intro_note', this.value)"
-                                    class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px] bg-white resize-y min-h-[56px] leading-4 whitespace-pre-wrap"
+                                    oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','intro_note', this.value); autoResizeIntroNoteTextarea(this)"
+                                    data-intro-note="1"
+                                    class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px] bg-white resize-none min-h-[84px] leading-4 whitespace-pre-wrap overflow-hidden"
                                     placeholder="소개매물 관련 메모를 입력하세요">${detail.intro_note || ""}</textarea>
                             </div>
                         </div>
@@ -1068,7 +1069,20 @@ function renderIntroRows() {
         </tr>
         ` : ""}
     `).join("");
+    autoResizeIntroNoteTextareas();
     notifyCustomerIntroRowsChanged();
+}
+
+function autoResizeIntroNoteTextarea(textarea) {
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function autoResizeIntroNoteTextareas() {
+    document
+        .querySelectorAll('#introPropertyBody textarea[data-intro-note="1"]')
+        .forEach(autoResizeIntroNoteTextarea);
 }
 
 function runIntroSearch() {
