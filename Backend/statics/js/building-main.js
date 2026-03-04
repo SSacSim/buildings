@@ -382,7 +382,10 @@ function applyAdvancedFilters() {
     currentPage = 1;
     currentAddress = document.getElementById('addressInput').value;
     currentcategory = document.getElementById('statusSelect').value;
-    fetchBuildings(currentPage, currentcategory);
+    closeAdvancedFilterPanel();
+    requestAnimationFrame(() => {
+        fetchBuildings(currentPage, currentcategory);
+    });
 }
 
 function search() {
