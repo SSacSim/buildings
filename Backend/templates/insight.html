@@ -24,6 +24,28 @@
     </header>
 
     <main class="max-w-[1500px] mx-auto px-6 py-6">
+        <section class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-4">
+            <div class="bg-slate-700 text-white text-[13px] px-3 py-2 font-bold flex items-center justify-between gap-3">
+                <span>소개 매물 기준 선택</span>
+                <span class="text-[11px] text-slate-200 font-medium">파란 검색 버튼으로 건물을 선택하면 아래 매수조건이 자동 입력됩니다.</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-[11px] border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100 border-b border-slate-300 text-slate-600">
+                            <th class="p-1 border-r font-normal whitespace-nowrap w-[56px]">검색</th>
+                            <th class="p-1 border-r font-normal whitespace-nowrap w-[56px]">열기</th>
+                            <th class="p-1 border-r font-normal">주소</th>
+                            <th class="p-1 border-r font-normal whitespace-nowrap w-[140px]">건물명</th>
+                            <th class="p-1 border-r font-normal whitespace-nowrap w-[100px]">매매가</th>
+                            <th class="p-1 font-normal whitespace-nowrap w-[140px]">자동 입력</th>
+                        </tr>
+                    </thead>
+                    <tbody id="insightIntroPropertyBody" class="text-center divide-y divide-slate-200"></tbody>
+                </table>
+            </div>
+        </section>
+
         <section class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <div class="flex items-center justify-between mb-2">
                 <h2 class="font-bold text-slate-700">매수 조건 - 실제 매칭 필터</h2>
@@ -252,6 +274,34 @@
         </section>
     </main>
 
+    <div id="insightBuildingSearchModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl w-[760px] max-h-[80vh] p-4 shadow-xl flex flex-col">
+            <div class="flex items-center gap-2 mb-3">
+                <input id="insightBuildingSearchInput" type="text" placeholder="주소 또는 건물명 검색"
+                    class="flex-1 border border-slate-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-400">
+                <button id="insightBuildingSearchBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">검색</button>
+                <button id="insightBuildingSearchCloseBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">닫기</button>
+            </div>
+            <div class="overflow-y-auto border border-slate-200 rounded-lg">
+                <table class="w-full text-[12px]">
+                    <thead class="bg-slate-50 text-slate-600">
+                        <tr>
+                            <th class="p-2 border-b">번호</th>
+                            <th class="p-2 border-b">주소</th>
+                            <th class="p-2 border-b">건물명</th>
+                            <th class="p-2 border-b">매매가</th>
+                            <th class="p-2 border-b">평단가</th>
+                            <th class="p-2 border-b">선택</th>
+                        </tr>
+                    </thead>
+                    <tbody id="insightBuildingSearchResultBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Redirect to login page when API calls return 401 (expired session).
         (function installAuthRedirectFetchGuard() {
@@ -330,6 +380,410 @@
         const INSIGHT_PAGE_SIZE = 20;
         let insightCustomerPage = 1;
         let insightBuildingPage = 1;
+        let selectedInsightBuilding = null;
+
+        function normalizeNumber(value, allowDecimal = true) {
+            const cleaned = String(value ?? "").replace(allowDecimal ? /[^0-9.]/g : /[^0-9]/g, "");
+            if (!cleaned) return null;
+            const numeric = Number(cleaned);
+            return Number.isFinite(numeric) ? numeric : null;
+        }
+
+        function toIntegerInputText(value) {
+            const numeric = normalizeNumber(value, true);
+            if (numeric === null) return "";
+            return formatThousandsInputValue(String(Math.round(numeric)));
+        }
+
+        function toDecimalInputText(value) {
+            const numeric = normalizeNumber(value, true);
+            if (numeric === null) return "";
+            return String(numeric).replace(/\.0+$/, "");
+        }
+
+        function toBoolean(value) {
+            if (typeof value === "boolean") return value;
+            const normalized = String(value ?? "").trim().toLowerCase();
+            return normalized === "true" || normalized === "1" || normalized === "y" || normalized === "yes" || normalized === "o";
+        }
+
+        function setInputValueById(id, value) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.value = value ?? "";
+        }
+
+        function setSelectValueById(id, value, fallbackToFirst = true) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const target = String(value ?? "").trim();
+            if (!target) {
+                if (fallbackToFirst) el.selectedIndex = 0;
+                return;
+            }
+            const option = Array.from(el.options).find((opt) => String(opt.value).trim().toLowerCase() === target.toLowerCase());
+            if (option) {
+                el.value = option.value;
+                return;
+            }
+            if (fallbackToFirst) el.selectedIndex = 0;
+        }
+
+        function setCheckboxByValue(name, value, checked) {
+            const el = document.querySelector(`input[name="${name}"][value="${value}"]`);
+            if (!el) return;
+            el.checked = Boolean(checked);
+        }
+
+        function extractYear(value) {
+            const match = String(value ?? "").match(/(19|20)\d{2}/);
+            return match ? match[0] : "";
+        }
+
+        function extractStationInfo(nearbyStation, nearbyStation2) {
+            let keyword = "";
+            let walkMinutes = "";
+            const stationText = String(nearbyStation ?? "").trim();
+
+            if (stationText) {
+                const stationMatch = stationText.match(/([A-Za-z0-9가-힣]+역)/);
+                if (stationMatch) keyword = stationMatch[1];
+                const walkMatch = stationText.match(/([0-9]+(?:\.[0-9]+)?)\s*분/);
+                if (walkMatch) walkMinutes = walkMatch[1];
+            }
+
+            if ((!keyword || !walkMinutes) && nearbyStation2) {
+                const firstRow = String(nearbyStation2)
+                    .split("##")
+                    .map((row) => row.trim())
+                    .find(Boolean);
+                if (firstRow) {
+                    const parts = firstRow.split("|").map((v) => v.trim());
+                    if (!keyword) keyword = parts[1] || parts[0] || "";
+                    if (!walkMinutes) {
+                        const walkMatch = String(parts[3] || "").match(/([0-9]+(?:\.[0-9]+)?)/);
+                        if (walkMatch) walkMinutes = walkMatch[1];
+                    }
+                }
+            }
+
+            return { keyword, walkMinutes };
+        }
+
+        function extractRoadWidth(roadAccess2, roadAccess) {
+            const sources = [roadAccess2, roadAccess];
+            for (const raw of sources) {
+                if (!raw) continue;
+                const rows = String(raw).split("##").map((row) => row.trim()).filter(Boolean);
+                for (const row of rows) {
+                    const leftPart = row.split("|")[0] || row;
+                    const numeric = normalizeNumber(leftPart, true);
+                    if (numeric !== null) return String(numeric).replace(/\.0+$/, "");
+                }
+                const fallback = normalizeNumber(raw, true);
+                if (fallback !== null) return String(fallback).replace(/\.0+$/, "");
+            }
+            return "";
+        }
+
+        function getSafeBuildingValue(raw) {
+            if (raw === null || raw === undefined) return "-";
+            const value = String(raw).trim();
+            return value || "-";
+        }
+
+        function renderInsightIntroRow() {
+            const tbody = document.getElementById("insightIntroPropertyBody");
+            if (!tbody) return;
+
+            const hasSelection = Boolean(selectedInsightBuilding?.bd_number);
+            const row = selectedInsightBuilding || {
+                bd_number: "",
+                address: "",
+                bd_name: "",
+                sale_price: "",
+                auto_fill_status: "PENDING",
+            };
+
+            const fillStatus = row.auto_fill_status || "PENDING";
+            const badgeClass = fillStatus === "DONE"
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-slate-100 text-slate-600";
+
+            tbody.innerHTML = `
+                <tr class="border-b border-slate-200">
+                    <td class="p-1">
+                        <button type="button" onclick="openInsightBuildingSearchModal()"
+                            class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
+                    </td>
+                    <td class="p-1">
+                        <button type="button" onclick="openInsightSelectedBuilding()"
+                            ${hasSelection ? "" : "disabled"}
+                            class="px-2 py-1 text-[10px] whitespace-nowrap rounded ${hasSelection ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">열기</button>
+                    </td>
+                    <td class="p-1 text-left">
+                        <div class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]" style="min-width: 220px;">
+                            ${esc(getSafeBuildingValue(row.address))}
+                        </div>
+                    </td>
+                    <td class="p-1 text-left">
+                        <div class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]" style="min-width: 120px;">
+                            ${esc(getSafeBuildingValue(row.bd_name))}
+                        </div>
+                    </td>
+                    <td class="p-1">
+                        <div class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right" style="min-width: 90px;">
+                            ${esc(getSafeBuildingValue(row.sale_price))}
+                        </div>
+                    </td>
+                    <td class="p-1">
+                        <div class="inline-flex items-center gap-1">
+                            <span class="inline-flex items-center px-2 py-1 rounded text-[10px] font-bold ${badgeClass}">
+                                ${esc(fillStatus === "DONE" ? "AUTO APPLIED" : "WAITING")}
+                            </span>
+                            <button type="button"
+                                onclick="searchInsightWithSelectedBuilding()"
+                                ${hasSelection ? "" : "disabled"}
+                                class="px-2 py-1 rounded text-[10px] font-bold ${hasSelection ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">
+                                SEARCH
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function openInsightSelectedBuilding() {
+            const bdNumber = selectedInsightBuilding?.bd_number;
+            if (!bdNumber) return;
+            window.open(`/detail/${encodeURIComponent(String(bdNumber))}`, "_blank");
+        }
+
+        async function searchInsightWithSelectedBuilding() {
+            const hasSelection = Boolean(selectedInsightBuilding?.bd_number || selectedInsightBuilding?.address);
+            if (!hasSelection) return;
+
+            await applyInsightFiltersFromBuilding(
+                selectedInsightBuilding?.bd_number || "",
+                selectedInsightBuilding || {}
+            );
+
+            loadInsightData(1, 1);
+        }
+
+        function openInsightBuildingSearchModal() {
+            const modalEl = document.getElementById("insightBuildingSearchModal");
+            if (!modalEl) return;
+            modalEl.classList.remove("hidden");
+            modalEl.classList.add("flex");
+
+            const inputEl = document.getElementById("insightBuildingSearchInput");
+            if (inputEl) {
+                inputEl.value = "";
+                inputEl.focus();
+            }
+
+            const resultBody = document.getElementById("insightBuildingSearchResultBody");
+            if (resultBody) resultBody.innerHTML = "";
+        }
+
+        function closeInsightBuildingSearchModal() {
+            const modalEl = document.getElementById("insightBuildingSearchModal");
+            if (!modalEl) return;
+            modalEl.classList.add("hidden");
+            modalEl.classList.remove("flex");
+        }
+
+        async function searchBuildingsForInsight() {
+            const q = (document.getElementById("insightBuildingSearchInput")?.value || "").trim();
+            const resultBody = document.getElementById("insightBuildingSearchResultBody");
+            if (!resultBody) return;
+
+            resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-slate-400">검색 중...</td></tr>`;
+
+            try {
+                const res = await fetch(`/api/building/quick-search?q=${encodeURIComponent(q)}`);
+                if (!res.ok) throw new Error("building search failed");
+                const items = await res.json();
+
+                if (!Array.isArray(items) || items.length === 0) {
+                    resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-slate-400">검색 결과가 없습니다.</td></tr>`;
+                    return;
+                }
+
+                resultBody.innerHTML = items.map((item) => {
+                    const payload = encodeURIComponent(JSON.stringify({
+                        bd_number: item?.bd_number ?? "",
+                        address: item?.address ?? "",
+                        bd_name: item?.bd_name ?? "",
+                        sale_price: item?.sale_price ?? "",
+                        price_per_pyeong: item?.price_per_pyeong ?? "",
+                    }));
+
+                    return `
+                        <tr class="border-t border-slate-100 hover:bg-slate-50">
+                            <td class="p-2 text-center">
+                                <button type="button"
+                                    onclick="window.open('/detail/${encodeURIComponent(String(item?.bd_number ?? ""))}', '_blank')"
+                                    class="text-blue-600 hover:text-blue-800 hover:underline font-semibold">
+                                    ${esc(item?.bd_number ?? "-")}
+                                </button>
+                            </td>
+                            <td class="p-2">${esc(item?.address ?? "-")}</td>
+                            <td class="p-2">${esc(item?.bd_name ?? "-")}</td>
+                            <td class="p-2 text-right">${esc(item?.sale_price ?? "-")}</td>
+                            <td class="p-2 text-right">${esc(item?.price_per_pyeong ?? "-")}</td>
+                            <td class="p-2 text-center">
+                                <button type="button"
+                                    onclick="selectInsightBuildingFromSearch('${payload}')"
+                                    class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] hover:bg-emerald-700">선택</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join("");
+            } catch (error) {
+                console.error(error);
+                resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-red-400">검색 중 오류가 발생했습니다.</td></tr>`;
+            }
+        }
+
+        function applyTypeFromBuildingInfo(info) {
+            const mapping = {
+                NEW_SITE: "is_new_site",
+                REMODELING: "is_remodeling",
+                OFFICE: "is_office_building",
+                INVESTMENT: "is_investment",
+                DEVELOPMENT: "is_development",
+                STABLE: "is_stable_holding",
+            };
+
+            Object.entries(mapping).forEach(([code, key]) => {
+                setCheckboxByValue("matchType", code, toBoolean(info?.[key]));
+            });
+        }
+
+        function applyZoningFromBuildingInfo(info) {
+            const text = String(info?.zoning_type ?? "");
+            const hasCommercial = text.includes("상업");
+            const hasIndustrial = text.includes("공업");
+            const hasResidential = text.includes("주거");
+            const hasKnown = hasCommercial || hasIndustrial || hasResidential;
+
+            setCheckboxByValue("matchZoningCategory", "COMMERCIAL", hasCommercial);
+            setCheckboxByValue("matchZoningCategory", "INDUSTRIAL", hasIndustrial);
+            setCheckboxByValue("matchZoningCategory", "RESIDENTIAL", hasResidential);
+            setCheckboxByValue("matchZoningCategory", "OTHER", Boolean(text) && !hasKnown);
+        }
+
+        function applyUsageFromBuildingInfo(info) {
+            const text = String(info?.building_usage ?? "");
+            const hasNeighborhood = text.includes("근린");
+            const hasOffice = text.includes("업무");
+            const hasLodging = text.includes("숙박");
+            const hasEntertainment = text.includes("위락");
+            const hasHousing = text.includes("주택");
+            const hasKnown = hasNeighborhood || hasOffice || hasLodging || hasEntertainment || hasHousing;
+
+            setCheckboxByValue("matchUsageCategory", "NEIGHBORHOOD", hasNeighborhood);
+            setCheckboxByValue("matchUsageCategory", "OFFICE_USE", hasOffice);
+            setCheckboxByValue("matchUsageCategory", "LODGING", hasLodging);
+            setCheckboxByValue("matchUsageCategory", "ENTERTAINMENT", hasEntertainment);
+            setCheckboxByValue("matchUsageCategory", "HOUSING", hasHousing);
+            setCheckboxByValue("matchUsageCategory", "OTHER", Boolean(text) && !hasKnown);
+        }
+
+        async function applyInsightFiltersFromBuilding(bdNumber, quickItem = {}) {
+            setInputValueById("matchAddressInput", quickItem.address || "");
+            setInputValueById("matchMinPrice", "");
+            setInputValueById("matchMaxPrice", toIntegerInputText(quickItem.sale_price));
+            setInputValueById("matchLandPyeongMin", "");
+            setInputValueById("matchLandPyeongMax", toIntegerInputText(quickItem.price_per_pyeong));
+
+            if (!bdNumber) return;
+
+            try {
+                const res = await fetch(`/api/building/${encodeURIComponent(String(bdNumber))}`);
+                if (!res.ok) throw new Error("building detail load failed");
+                const payload = await res.json();
+                const info = payload?.info_data || {};
+
+                const stationInfo = extractStationInfo(info.nearby_station, info.nearby_station2);
+                const roadWidth = extractRoadWidth(info.road_access2, info.road_access);
+                const elevatorTotal = (normalizeNumber(info.elevator, false) || 0) + (normalizeNumber(info.emergency_elevator, false) || 0);
+
+                setInputValueById("matchAddressInput", info.address || quickItem.address || "");
+                setInputValueById("matchBusinessAreaInput", info.site_location || "");
+                setInputValueById("matchStationKeyword", stationInfo.keyword || "");
+                setInputValueById("matchStationWalkMin", "");
+                setInputValueById("matchStationWalkMax", stationInfo.walkMinutes || "");
+
+                setInputValueById("matchMinPrice", "");
+                setInputValueById("matchMaxPrice", toIntegerInputText(info.sale_price || quickItem.sale_price));
+                setInputValueById("matchMinYieldInput", toDecimalInputText(info.yield_rate));
+
+                setInputValueById("matchLandPyeongMin", "");
+                setInputValueById("matchLandPyeongMax", toIntegerInputText(info.price_per_pyeong || quickItem.price_per_pyeong));
+                setInputValueById("matchGrossPyeongMin", "");
+                setInputValueById("matchGrossPyeongMax", toIntegerInputText(info.price_per_total_floor_area));
+
+                setInputValueById("matchLandAreaMin", "");
+                setInputValueById("matchLandAreaMax", toIntegerInputText(info.land_area_pyeong));
+                setInputValueById("matchGrossAreaMin", "");
+                setInputValueById("matchGrossAreaMax", toIntegerInputText(info.gross_area_pyeong));
+                setInputValueById("matchUsableAreaMin", "");
+                setInputValueById("matchUsableAreaMax", toIntegerInputText(info.usable_area_pyeong));
+                setInputValueById("matchBuildingAreaMin", "");
+                setInputValueById("matchBuildingAreaMax", toIntegerInputText(info.building_area_pyeong));
+
+                setInputValueById("matchApprovalYearMin", extractYear(info.approval_date));
+                setInputValueById("matchRoadWidthMin", roadWidth);
+                setInputValueById("matchParkingMin", toIntegerInputText(info.parking_capacity));
+
+                setSelectValueById("matchElevatorOption", elevatorTotal > 0 ? "HAS" : "NONE");
+                setSelectValueById("matchBuildingStatus", info.status || "");
+                setSelectValueById("matchViolationOption", (info.is_violation_checked === null || info.is_violation_checked === undefined || info.is_violation_checked === "")
+                    ? ""
+                    : (toBoolean(info.is_violation_checked) ? "O" : "X"));
+                setSelectValueById("matchLocationDecide", String(info.location_decide || "").toUpperCase());
+                setSelectValueById("matchPriceDecide", String(info.price_decide || "").toUpperCase());
+                setSelectValueById("matchYieldDecide", String(info.yield_decide || "").toUpperCase());
+                setSelectValueById("matchVacancyDecide", String(info.vacancy_decide || "").toUpperCase());
+                setSelectValueById("matchLimitDecide", String(info.limit_decide || "").toUpperCase());
+                setSelectValueById("matchLoanDecide", String(info.loan_decide || "").toUpperCase());
+
+                applyTypeFromBuildingInfo(info);
+                applyZoningFromBuildingInfo(info);
+                applyUsageFromBuildingInfo(info);
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        async function selectInsightBuildingFromSearch(encodedPayload) {
+            let parsed = null;
+            try {
+                parsed = JSON.parse(decodeURIComponent(encodedPayload));
+            } catch (error) {
+                console.error("failed to parse selected building", error);
+                return;
+            }
+
+            selectedInsightBuilding = {
+                bd_number: String(parsed?.bd_number ?? "").trim(),
+                address: String(parsed?.address ?? "").trim(),
+                bd_name: String(parsed?.bd_name ?? "").trim(),
+                sale_price: String(parsed?.sale_price ?? "").trim(),
+                price_per_pyeong: String(parsed?.price_per_pyeong ?? "").trim(),
+                auto_fill_status: "APPLYING",
+            };
+            renderInsightIntroRow();
+
+            await applyInsightFiltersFromBuilding(selectedInsightBuilding.bd_number, selectedInsightBuilding);
+
+            selectedInsightBuilding.auto_fill_status = "DONE";
+            renderInsightIntroRow();
+            closeInsightBuildingSearchModal();
+        }
 
         function renderInsightPagination(containerId, totalPages, currentPage, onClickFnName) {
             const container = document.getElementById(containerId);
@@ -611,6 +1065,25 @@
             });
         });
 
+        const insightBuildingSearchBtn = document.getElementById("insightBuildingSearchBtn");
+        if (insightBuildingSearchBtn) {
+            insightBuildingSearchBtn.addEventListener("click", searchBuildingsForInsight);
+        }
+
+        const insightBuildingSearchCloseBtn = document.getElementById("insightBuildingSearchCloseBtn");
+        if (insightBuildingSearchCloseBtn) {
+            insightBuildingSearchCloseBtn.addEventListener("click", closeInsightBuildingSearchModal);
+        }
+
+        const insightBuildingSearchInput = document.getElementById("insightBuildingSearchInput");
+        if (insightBuildingSearchInput) {
+            insightBuildingSearchInput.addEventListener("keydown", (e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                searchBuildingsForInsight();
+            });
+        }
+
         ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword"].forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
@@ -626,6 +1099,7 @@
         setEmptyRow(document.getElementById("buildingBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");
         renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
         renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
+        renderInsightIntroRow();
     </script>
 </body>
 </html>
