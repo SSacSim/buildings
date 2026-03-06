@@ -1015,6 +1015,25 @@ function formatNumberWithComma(value) {
 
 // 블러 여부 
 window.isLocked = false;
+function syncMainSearchLockState() {
+    const searchTypeSelect = document.getElementById('searchTypeSelect');
+    const insightBtn = document.getElementById('insightBtn');
+
+    if (searchTypeSelect) {
+        searchTypeSelect.classList.toggle('hidden', window.isLocked);
+    }
+
+    if (insightBtn) {
+        insightBtn.classList.toggle('hidden', window.isLocked);
+    }
+
+    if (window.isLocked) {
+        currentSearchMode = 'building';
+        if (searchTypeSelect) searchTypeSelect.value = 'building';
+        setStatusOptions('building');
+    }
+}
+
 function toggleSidebarLock() {
     window.isLocked = !window.isLocked;
     const btn = document.getElementById("lockBtn");
@@ -1024,6 +1043,7 @@ function toggleSidebarLock() {
     else{
         btn.innerText = "🔓 해제";
     }
+    syncMainSearchLockState();
 }
 
 
@@ -1066,6 +1086,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setStatusOptions('building');
     currentSearchMode = 'building';
+    syncMainSearchLockState();
 
     document.getElementById('addressInput')
         .addEventListener('keydown', e => {
