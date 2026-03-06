@@ -15,6 +15,8 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 from datetime import datetime
 
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")  # Tk 백엔드 비활성화(서버/스레드 환경 안전)
 import matplotlib.pyplot as plt
 import uuid
 from copy import deepcopy
