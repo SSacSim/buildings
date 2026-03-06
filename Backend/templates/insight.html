@@ -392,7 +392,7 @@
         function toIntegerInputText(value) {
             const numeric = normalizeNumber(value, true);
             if (numeric === null) return "";
-            return formatThousandsInputValue(String(Math.round(numeric)));
+            return formatThousandsInputValue(String(Math.floor(numeric)));
         }
 
         function toDecimalInputText(value) {
@@ -472,6 +472,34 @@
 
         function extractRoadWidth(roadAccess2, roadAccess) {
             const sources = [roadAccess2, roadAccess];
+            const candidates = [];
+
+            const collectWidthWithUnit = (text) => {
+                const raw = String(text ?? "");
+                const regex = /([0-9]+(?:\.[0-9]+)?)\s*[mM]/g;
+                let match;
+                while ((match = regex.exec(raw)) !== null) {
+                    const numeric = Number(match[1]);
+                    if (Number.isFinite(numeric)) candidates.push(numeric);
+                }
+            };
+
+            for (const raw of sources) {
+                if (!raw) continue;
+                const rows = String(raw).split("##").map((row) => row.trim()).filter(Boolean);
+                for (const row of rows) {
+                    const leftPart = row.split("|")[0] || row;
+                    collectWidthWithUnit(leftPart);
+                }
+                collectWidthWithUnit(raw);
+            }
+
+            if (candidates.length > 0) {
+                const minWidth = Math.min(...candidates);
+                return String(minWidth).replace(/\.0+$/, "");
+            }
+
+            // Fallback for legacy data without m/M unit marker
             for (const raw of sources) {
                 if (!raw) continue;
                 const rows = String(raw).split("##").map((row) => row.trim()).filter(Boolean);
@@ -726,17 +754,17 @@
                 setInputValueById("matchGrossPyeongMin", "");
                 setInputValueById("matchGrossPyeongMax", toIntegerInputText(info.price_per_total_floor_area));
 
-                setInputValueById("matchLandAreaMin", "");
-                setInputValueById("matchLandAreaMax", toIntegerInputText(info.land_area_pyeong));
-                setInputValueById("matchGrossAreaMin", "");
-                setInputValueById("matchGrossAreaMax", toIntegerInputText(info.gross_area_pyeong));
-                setInputValueById("matchUsableAreaMin", "");
-                setInputValueById("matchUsableAreaMax", toIntegerInputText(info.usable_area_pyeong));
-                setInputValueById("matchBuildingAreaMin", "");
-                setInputValueById("matchBuildingAreaMax", toIntegerInputText(info.building_area_pyeong));
+                setInputValueById("matchLandAreaMin", toIntegerInputText(info.land_area_pyeong));
+                setInputValueById("matchLandAreaMax", "");
+                setInputValueById("matchGrossAreaMin", toIntegerInputText(info.gross_area_pyeong));
+                setInputValueById("matchGrossAreaMax", "");
+                setInputValueById("matchUsableAreaMin", toIntegerInputText(info.usable_area_pyeong));
+                setInputValueById("matchUsableAreaMax", "");
+                setInputValueById("matchBuildingAreaMin", toIntegerInputText(info.building_area_pyeong));
+                setInputValueById("matchBuildingAreaMax", "");
 
                 setInputValueById("matchApprovalYearMin", extractYear(info.approval_date));
-                setInputValueById("matchRoadWidthMin", roadWidth);
+                setInputValueById("matchRoadWidthMin", toIntegerInputText(roadWidth));
                 setInputValueById("matchParkingMin", toIntegerInputText(info.parking_capacity));
 
                 setSelectValueById("matchElevatorOption", elevatorTotal > 0 ? "HAS" : "NONE");

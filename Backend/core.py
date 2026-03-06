@@ -1968,19 +1968,29 @@ def get_insight_overview(
 
         if road_width_min is not None:
             building_sql += """
-                AND EXISTS (
-                    SELECT 1
-                    FROM regexp_split_to_table(COALESCE(road_access2, ''), '##') AS road_row
-                    WHERE COALESCE(
-                        NULLIF(
-                            regexp_replace(split_part(road_row, '|', 1), '[^0-9.]', '', 'g'),
-                            ''
-                        )::numeric,
-                        0
-                    ) >= %s
+                AND (
+                    COALESCE((
+                        SELECT MIN((width_match[1])::numeric)
+                        FROM regexp_matches(
+                            CONCAT(COALESCE(road_access2, ''), ' ', COALESCE(road_access, '')),
+                            '([0-9]+(?:\\.[0-9]+)?)\\s*[mM]',
+                            'g'
+                        ) AS width_match
+                    ), 0) >= %s
+                    OR EXISTS (
+                        SELECT 1
+                        FROM regexp_split_to_table(COALESCE(road_access2, ''), '##') AS road_row
+                        WHERE COALESCE(
+                            NULLIF(
+                                regexp_replace(split_part(road_row, '|', 1), '[^0-9.]', '', 'g'),
+                                ''
+                            )::numeric,
+                            0
+                        ) >= %s
+                    )
                 )
             """
-            building_params.append(road_width_min)
+            building_params.extend([road_width_min, road_width_min])
 
         normalized_elevator_option = (elevator_option or "").strip()
         if normalized_elevator_option == "HAS":
