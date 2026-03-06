@@ -1396,24 +1396,6 @@ def customer_match_search(
         if type_columns:
             sql += " AND (" + " OR ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        if exclude_intro and customer_number is not None:
-            sql += """
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM customer_intro_property cip
-                    WHERE cip.delete_flag = FALSE
-                      AND cip.customer_number = %s
-                      AND (
-                          (cip.bd_number IS NOT NULL AND cip.bd_number = bi.bd_number)
-                          OR (
-                              COALESCE(NULLIF(TRIM(cip.address), ''), '__NO_ADDR__') =
-                              COALESCE(NULLIF(TRIM(bi.address), ''), '__NO_ADDR__')
-                          )
-                      )
-                )
-            """
-            params.append(customer_number)
-
         count_sql = f"SELECT COUNT(*) FROM ({sql}) AS matched_buildings"
         cur.execute(count_sql, tuple(params))
         total_count = cur.fetchone()[0] or 0
@@ -1428,6 +1410,48 @@ def customer_match_search(
         cur.execute(sql, tuple(page_params))
         rows = cur.fetchall()
         columns = [desc[0] for desc in cur.description]
+
+        def _to_int_price(value: Any) -> Optional[int]:
+            text = str(value or "")
+            digits = "".join(ch for ch in text if ch.isdigit())
+            if not digits:
+                return None
+            try:
+                return int(digits)
+            except (TypeError, ValueError):
+                return None
+
+        intro_rows: List[Dict[str, Any]] = []
+        if customer_number is not None:
+            cur.execute(
+                """
+                SELECT bd_number, TRIM(address) AS address, TRIM(bd_name) AS bd_name, sale_price
+                FROM customer_intro_property
+                WHERE delete_flag = FALSE
+                  AND customer_number = %s
+                ORDER BY intro_date DESC NULLS LAST, intro_id DESC
+                """,
+                (customer_number,),
+            )
+            for intro_bd_number, intro_address, intro_bd_name, intro_sale_price in cur.fetchall():
+                parsed_intro_price = _to_int_price(intro_sale_price)
+                intro_bd_key = None
+                if intro_bd_number is not None:
+                    try:
+                        intro_bd_key = int(intro_bd_number)
+                    except (TypeError, ValueError):
+                        intro_bd_key = None
+                normalized_intro_address = (intro_address or "").strip()
+                normalized_intro_bd_name = (intro_bd_name or "").strip()
+                intro_rows.append(
+                    {
+                        "bd_number": intro_bd_key,
+                        "address": normalized_intro_address,
+                        "bd_name": normalized_intro_bd_name,
+                        "sale_price": parsed_intro_price,
+                    }
+                )
+
         items = []
         for row in rows:
             item = dict(zip(columns, row))
@@ -1438,6 +1462,80 @@ def customer_match_search(
                 1 for c in type_columns if item.get(c) is True
             )
             item["match_score"] = min(score, 100)
+            bd_key = None
+            bd_raw = item.get("bd_number")
+            try:
+                if bd_raw is not None and str(bd_raw).strip() != "":
+                    bd_key = int(bd_raw)
+            except (TypeError, ValueError):
+                bd_key = None
+            normalized_address = str(item.get("address") or "").strip()
+            normalized_bd_name = str(item.get("bd_name") or "").strip()
+
+            # duplicate flag: 번호 또는 주소 기준으로 소개이력 존재 여부 표시
+            has_intro_by_bd = False
+            has_intro_by_address = False
+            if intro_rows:
+                if bd_key is not None:
+                    has_intro_by_bd = any(
+                        intro_row.get("bd_number") is not None and bd_key == intro_row.get("bd_number")
+                        for intro_row in intro_rows
+                    )
+                if normalized_address:
+                    has_intro_by_address = any(
+                        intro_row.get("address") and normalized_address == intro_row.get("address")
+                        for intro_row in intro_rows
+                    )
+
+            is_intro_duplicate = has_intro_by_bd or has_intro_by_address
+            item["is_intro_duplicate"] = is_intro_duplicate
+
+            intro_price_ref = None
+            if intro_rows:
+                # 1) 주소+건물명 일치 (화면 우측 소개행과 가장 직관적으로 대응)
+                if normalized_address and normalized_bd_name:
+                    for intro_row in intro_rows:
+                        if intro_row.get("sale_price") is None:
+                            continue
+                        if (
+                            intro_row.get("address")
+                            and intro_row.get("bd_name")
+                            and normalized_address == intro_row.get("address")
+                            and normalized_bd_name == intro_row.get("bd_name")
+                        ):
+                            intro_price_ref = intro_row.get("sale_price")
+                            break
+
+                # 2) 주소 일치
+                if intro_price_ref is None and normalized_address:
+                    for intro_row in intro_rows:
+                        if intro_row.get("sale_price") is None:
+                            continue
+                        if intro_row.get("address") and normalized_address == intro_row.get("address"):
+                            intro_price_ref = intro_row.get("sale_price")
+                            break
+
+                # 3) 번호 일치
+                if intro_price_ref is None and bd_key is not None:
+                    for intro_row in intro_rows:
+                        if intro_row.get("sale_price") is None:
+                            continue
+                        if intro_row.get("bd_number") is not None and bd_key == intro_row.get("bd_number"):
+                            intro_price_ref = intro_row.get("sale_price")
+                            break
+
+            match_sale_price = _to_int_price(item.get("sale_price"))
+            is_match_price_lower = bool(
+                intro_price_ref is not None
+                and match_sale_price is not None
+                and match_sale_price < intro_price_ref
+            )
+            item["intro_price_reference"] = intro_price_ref
+            item["match_sale_price_numeric"] = match_sale_price
+            item["is_intro_price_drop"] = bool(
+                is_intro_duplicate
+                and is_match_price_lower
+            )
             items.append(item)
 
         return {

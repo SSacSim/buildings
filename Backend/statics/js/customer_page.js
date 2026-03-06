@@ -896,6 +896,100 @@ function getDisplaySalePriceForIntroRow(row) {
     return row?.sale_price || "";
 }
 
+function parseMoneyToNumber(value) {
+    const digits = String(value ?? "").replace(/[^0-9]/g, "");
+    if (!digits) return null;
+    const parsed = Number(digits);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseBdNumber(value) {
+    const text = String(value ?? "").trim();
+    if (!text) return null;
+    const parsed = Number(text);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function resolveIntroComparisonForMatchItem(item) {
+    const rows = Array.isArray(introRows) ? introRows : [];
+    if (!rows.length) {
+        const backendMatchPrice = parseMoneyToNumber(item?.match_sale_price_numeric ?? item?.sale_price);
+        const backendIntroPrice = parseMoneyToNumber(item?.intro_price_reference);
+        const backendDuplicate = Boolean(item?.is_intro_duplicate);
+        return {
+            isIntroDuplicate: backendDuplicate,
+            isPriceDrop: backendDuplicate
+                && backendMatchPrice !== null
+                && backendIntroPrice !== null
+                && backendMatchPrice < backendIntroPrice,
+        };
+    }
+
+    const matchAddress = String(item?.address || "").trim();
+    const matchBdName = String(item?.bd_name || "").trim();
+    const matchBdNumber = parseBdNumber(item?.bd_number);
+    const matchSalePrice = parseMoneyToNumber(item?.sale_price);
+
+    let hasBdMatch = false;
+    let hasAddressMatch = false;
+    let introPriceRef = null;
+
+    for (const row of rows) {
+        const rowBdNumber = parseBdNumber(row?.bd_number);
+        const rowAddress = String(row?.address || "").trim();
+        if (matchBdNumber !== null && rowBdNumber !== null && matchBdNumber === rowBdNumber) {
+            hasBdMatch = true;
+        }
+        if (matchAddress && rowAddress && matchAddress === rowAddress) {
+            hasAddressMatch = true;
+        }
+    }
+
+    if (matchAddress && matchBdName) {
+        for (const row of rows) {
+            const rowAddress = String(row?.address || "").trim();
+            const rowBdName = String(row?.bd_name || "").trim();
+            if (rowAddress && rowBdName && rowAddress === matchAddress && rowBdName === matchBdName) {
+                introPriceRef = parseMoneyToNumber(getDisplaySalePriceForIntroRow(row) || row?.sale_price);
+                break;
+            }
+        }
+    }
+
+    if (introPriceRef === null && matchAddress) {
+        for (const row of rows) {
+            const rowAddress = String(row?.address || "").trim();
+            if (rowAddress && rowAddress === matchAddress) {
+                introPriceRef = parseMoneyToNumber(getDisplaySalePriceForIntroRow(row) || row?.sale_price);
+                break;
+            }
+        }
+    }
+
+    if (introPriceRef === null && matchBdNumber !== null) {
+        for (const row of rows) {
+            const rowBdNumber = parseBdNumber(row?.bd_number);
+            if (rowBdNumber !== null && rowBdNumber === matchBdNumber) {
+                introPriceRef = parseMoneyToNumber(getDisplaySalePriceForIntroRow(row) || row?.sale_price);
+                break;
+            }
+        }
+    }
+
+    const isIntroDuplicate = hasBdMatch || hasAddressMatch;
+    const isPriceDrop = Boolean(
+        isIntroDuplicate
+        && matchSalePrice !== null
+        && introPriceRef !== null
+        && matchSalePrice < introPriceRef
+    );
+
+    return {
+        isIntroDuplicate,
+        isPriceDrop,
+    };
+}
+
 function getCustomerIntroMapItems() {
     return (introRows || [])
         .map((row) => {
@@ -2419,7 +2513,6 @@ async function searchCustomerMatchBuildings(page = 1) {
     const customerNumber = getCustomerNumberFromPath();
     if (customerNumber) {
         params.set("customer_number", String(customerNumber));
-        params.set("exclude_intro", "true");
     }
     params.set("page", String(customerMatchCurrentPage));
     params.set("page_size", String(CUSTOMER_MATCH_PAGE_SIZE));
@@ -2428,37 +2521,93 @@ async function searchCustomerMatchBuildings(page = 1) {
     tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">검색 중...</div>';
 
     try {
-        const res = await fetch(`/api/customer/match-search?${params.toString()}`);
-        if (!res.ok) throw new Error("match search failed");
-        const payload = await res.json();
-        const { items, totalCount, totalPages, currentPage } = parseCustomerMatchPayload(payload, customerMatchCurrentPage);
+        const baseParams = new URLSearchParams(params);
+        baseParams.delete("page");
+        baseParams.delete("page_size");
+        const loadPage = async (pageNo) => {
+            const pageParams = new URLSearchParams(baseParams);
+            pageParams.set("page", String(pageNo));
+            pageParams.set("page_size", "100");
+            const res = await fetch(`/api/customer/match-search?${pageParams.toString()}`);
+            if (!res.ok) throw new Error("match search failed");
+            const payload = await res.json();
+            return parseCustomerMatchPayload(payload, pageNo);
+        };
 
-        if (!Array.isArray(items) || items.length === 0) {
+        const firstPage = await loadPage(1);
+        const apiTotalPages = Math.max(1, Number(firstPage.totalPages) || 1);
+        let allItems = Array.isArray(firstPage.items) ? [...firstPage.items] : [];
+
+        for (let pageNo = 2; pageNo <= apiTotalPages; pageNo += 1) {
+            const pageData = await loadPage(pageNo);
+            if (Array.isArray(pageData.items) && pageData.items.length) {
+                allItems = allItems.concat(pageData.items);
+            }
+        }
+
+        const rankedItems = allItems
+            .map((item, index) => {
+                const introCompare = resolveIntroComparisonForMatchItem(item);
+                // Sort rule:
+                // 0) price-drop flagged items
+                // 1) non-intro matched items
+                // 2) intro-duplicate items
+                const sortGroup = introCompare.isPriceDrop ? 0 : (introCompare.isIntroDuplicate ? 2 : 1);
+                return {
+                    ...item,
+                    is_intro_duplicate: introCompare.isIntroDuplicate,
+                    is_intro_price_drop: introCompare.isPriceDrop,
+                    _sort_group: sortGroup,
+                    _update_order: index,
+                    _bd_number_sort: parseBdNumber(item?.bd_number) ?? -1,
+                };
+            })
+            .sort((a, b) => {
+                if (a._sort_group !== b._sort_group) return a._sort_group - b._sort_group;
+                if (a._update_order !== b._update_order) return a._update_order - b._update_order;
+                return b._bd_number_sort - a._bd_number_sort;
+            });
+
+        const totalCount = rankedItems.length;
+        if (!totalCount) {
             tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">조건에 맞는 매물이 없습니다.</div>';
-            setCustomerMatchCount(totalCount || 0);
+            setCustomerMatchCount(0);
             renderCustomerMatchPagination(0, 1);
             return;
         }
 
-        tbody.innerHTML = items.map(item => `
+        const totalPages = Math.ceil(totalCount / CUSTOMER_MATCH_PAGE_SIZE);
+        const safePage = Math.min(Math.max(1, customerMatchCurrentPage), totalPages);
+        customerMatchCurrentPage = safePage;
+        const pageStart = (safePage - 1) * CUSTOMER_MATCH_PAGE_SIZE;
+        const pageItems = rankedItems.slice(pageStart, pageStart + CUSTOMER_MATCH_PAGE_SIZE);
+
+        tbody.innerHTML = pageItems.map(item => `
             <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 cursor-pointer hover:border-blue-300" onclick="openBuildingDetail(${item.bd_number})">
                 <div class="flex items-start justify-between gap-3 mb-2">
                     <div class="flex flex-wrap items-center gap-2">
-                        <label class="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1" onclick="event.stopPropagation()">
-                            <input type="checkbox"
-                                ${selectedMatchBuildingIds.has(Number(item.bd_number)) ? "checked" : ""}
-                                onchange="toggleMatchBuildingSelection(${item.bd_number}, this.checked)">
-                            선택
-                        </label>
-                        <span class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded">ID: ${item.bd_number || "-"}</span>
-                        <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">FLAG: ${[
-                            item.location_decide,
-                            item.price_decide,
-                            item.yield_decide,
-                            item.vacancy_decide,
-                            item.limit_decide,
-                            item.loan_decide
-                        ].map(v => (v === "\uC120\uD0DD" || !v ? "N" : v)).join("")}</span>
+                        ${(() => {
+                            const isPriceDrop = Boolean(item.is_intro_price_drop);
+                            return `
+                                <label class="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1" onclick="event.stopPropagation()">
+                                    <input type="checkbox"
+                                        ${selectedMatchBuildingIds.has(Number(item.bd_number)) ? "checked" : ""}
+                                        onchange="toggleMatchBuildingSelection(${item.bd_number}, this.checked)">
+                                    선택
+                                </label>
+                                <span class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded">ID: ${item.bd_number || "-"}</span>
+                                <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">FLAG: ${[
+                                    item.location_decide,
+                                    item.price_decide,
+                                    item.yield_decide,
+                                    item.vacancy_decide,
+                                    item.limit_decide,
+                                    item.loan_decide
+                                ].map(v => (v === "\uC120\uD0DD" || !v ? "N" : v)).join("")}</span>
+                                ${item.is_intro_duplicate ? '<span class="text-xs font-bold text-amber-800 bg-amber-100 px-2 py-1 rounded">소개</span>' : ""}
+                                ${isPriceDrop ? '<span class="text-xs font-bold text-red-800 bg-red-100 px-2 py-1 rounded">가격하락</span>' : ""}
+                            `;
+                        })()}
                     </div>
                     <span class="text-sm text-slate-400">\uC0C8 \uCC3D\uC5D0\uC11C \uC0C1\uC138\uC815\uBCF4 \u2197</span>
                 </div>
@@ -2477,8 +2626,8 @@ async function searchCustomerMatchBuildings(page = 1) {
                 </div>
             </div>
         `).join("");
-        setCustomerMatchCount(totalCount || items.length);
-        renderCustomerMatchPagination(totalPages, currentPage);
+        setCustomerMatchCount(totalCount);
+        renderCustomerMatchPagination(totalPages, safePage);
     } catch (err) {
         console.error(err);
         tbody.innerHTML = '<div class="py-6 text-red-400 text-center">검색 중 오류가 발생했습니다.</div>';
