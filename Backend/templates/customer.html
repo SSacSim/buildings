@@ -215,9 +215,14 @@
             <div class="section-card flex flex-col">
                 <div class="bg-slate-800 text-white text-[15px] px-3 py-1.5 font-bold border-b border-slate-700 flex items-center justify-between">
                     <span>매수 조건 / 매칭 영역 (중앙)</span>
-                    <button id="customerMatchSearchBtn" type="button" class="px-4 py-1 rounded bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700">
-                        매칭 검색
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="customerMatchHistoryBtn" type="button" class="px-4 py-1 rounded bg-slate-100 text-slate-800 text-[13px] font-semibold hover:bg-slate-200">
+                            기록 목록
+                        </button>
+                        <button id="customerMatchSearchBtn" type="button" class="px-4 py-1 rounded bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700">
+                            매칭 검색
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="p-3 bg-white space-y-3">
@@ -606,6 +611,49 @@
                 class="mt-3 bg-slate-700 hover:bg-slate-800 text-white py-2 rounded-lg">
                 닫기
             </button>
+        </div>
+    </div>
+
+    <div id="customerMatchHistoryModal" class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl w-[880px] max-w-[96vw] max-h-[84vh] p-4 shadow-xl flex flex-col">
+            <div class="flex items-center justify-between gap-2 mb-3">
+                <div class="text-[17px] font-bold text-slate-800">매수조건 기록 목록</div>
+                <div class="flex items-center gap-2">
+                    <button id="customerMatchHistoryCloseBtn" type="button"
+                        class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">닫기</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 mb-3">
+                <input id="customerMatchHistoryNameInput" type="text" placeholder="기록 이름 (예: 강남구 중형 수익형)"
+                    class="flex-1 border border-slate-300 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-400">
+                <button id="customerMatchHistorySaveBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 whitespace-nowrap">현재 조건 저장</button>
+            </div>
+            <div class="text-[12px] text-slate-500 mb-2">한 줄 요약을 클릭하면 상세 조건이 펼쳐집니다. 각 항목의 비교 버튼으로 별도 비교 팝업을 열 수 있습니다.</div>
+            <div id="customerMatchHistoryList" class="overflow-y-auto border border-slate-200 rounded-lg p-2 bg-slate-50 space-y-2">
+                <div class="py-8 text-slate-400 text-center">저장된 조건이 없습니다.</div>
+            </div>
+        </div>
+    </div>
+    <div id="customerMatchHistoryCompareModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[60]">
+        <div class="bg-white rounded-2xl w-[1400px] max-w-[98vw] max-h-[90vh] p-5 shadow-2xl flex flex-col">
+            <div class="flex items-center justify-between gap-3 mb-3">
+                <div>
+                    <div class="text-[18px] font-bold text-slate-800">매수조건 비교</div>
+                    <div class="text-[12px] text-slate-500 mt-0.5">현재 조건만 표시합니다. 추가된 값은 파란색, 빠진 값은 빨간색으로 표시됩니다.</div>
+                </div>
+                <button id="customerMatchHistoryCompareCloseBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">닫기</button>
+            </div>
+            <div class="flex-1 min-h-0 overflow-auto pr-1">
+                <div class="min-w-[1080px]">
+                    <div id="customerMatchHistoryCompareRightTitle"
+                        class="text-[14px] font-bold text-slate-700 px-3 py-2 rounded bg-slate-50 border border-slate-200 mb-2">
+                        현재 조건
+                    </div>
+                    <div id="customerMatchHistoryCompareBody" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2"></div>
+                </div>
+            </div>
         </div>
     </div>
     <script src="/statics/js/customer_page.js"></script>

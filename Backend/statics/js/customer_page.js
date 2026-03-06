@@ -1,4 +1,4 @@
-const INTRO_STATUS_OPTIONS = ["준비", "소개", "답사", "계약협의", "계약완료", "보류"];
+﻿const INTRO_STATUS_OPTIONS = ["예비", "소개", "답사", "계약진행", "계약완료", "보류"];
 
 let introRows = [];
 let ownedRows = [];
@@ -9,6 +9,10 @@ const selectedMatchBuildingIds = new Set();
 let introSearchKeyword = "";
 let currentIntroManagerName = "";
 let lastCustomerMatchQueryString = "";
+const CUSTOMER_MATCH_HISTORY_MAX_ITEMS = 50;
+let customerMatchHistoryItems = [];
+let currentMatchHistoryConditions = null;
+let selectedHistoryCompareId = "";
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -50,7 +54,7 @@ function getCustomerImageBoxId(slot) {
 }
 
 function getCustomerImagePlaceholder(slot) {
-    return slot === "profile" ? "인물 사진" : "명함 사진";
+    return slot === "profile" ? "프로필 사진" : "명함 사진";
 }
 
 function normalizeSlotImagePayload(value) {
@@ -110,8 +114,7 @@ function renderCustomerImageBox(slot) {
             ${thumbs}
         </div>
         <div class="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[10px]">
-            ${entries.length}장
-        </div>
+            ${entries.length}??        </div>
     `;
 }
 
@@ -162,7 +165,7 @@ function openCustomerImageManageModal(slot) {
     const titleEl = document.getElementById("customerImageManageTitle");
     if (!modalEl || !slot) return;
     currentManageImageSlot = slot;
-    if (titleEl) titleEl.innerText = slot === "profile" ? "사진 이미지 등록" : "명함 이미지 등록";
+    if (titleEl) titleEl.innerText = slot === "profile" ? "프로필 이미지 등록" : "명함 이미지 등록";
     modalEl.classList.remove("hidden");
     modalEl.classList.add("flex");
     renderCustomerImageManageList();
@@ -273,7 +276,7 @@ function renderCustomerImageManageList() {
             <button
                 onclick="removeCustomerImageAt(${index}); event.stopPropagation();"
                 class="absolute top-1 right-1 bg-black/60 text-white w-5 h-5 rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100">
-                ×
+                ??
             </button>
         </div>
     `).join("");
@@ -309,7 +312,7 @@ function setCustomerImagePreview(slot, src) {
     const box = document.getElementById(getCustomerImageBoxId(slot));
     if (!box) return;
 
-    const placeholder = slot === "profile" ? "인물 사진" : "명함 사진";
+    const placeholder = slot === "profile" ? "프로필 사진" : "명함 사진";
     if (!src) {
         box.innerHTML = placeholder;
         customerImageUrls[slot] = [];
@@ -800,7 +803,7 @@ function createEmptyIntroDetail(overrides = {}) {
         detail_id: generateRowId(),
         intro_id: null,
         intro_date: nowLocalDateTimeMinute(),
-        progress_status: "준비",
+        progress_status: "예비",
         intro_cost: "",
         manager_name: getDefaultIntroManagerName(),
         intro_note: "",
@@ -850,7 +853,7 @@ function getLatestIntroCostForRow(row) {
         const ts = Date.parse(String(dtLocal || "").replace("T", " "));
         const timeScore = Number.isFinite(ts) ? ts : 0;
 
-        // 화면 상단(작은 idx)을 최신 우선으로 간주
+        // 동률이면 상단(작은 idx)을 최신 우선으로 간주
         if (!best || timeScore > best.timeScore || (timeScore === best.timeScore && idx < best.idx)) {
             best = { amount, timeScore, idx };
         }
@@ -962,7 +965,7 @@ function renderIntroRows() {
     if (!filteredRows.length) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="p-3 text-slate-400">검색된 소개 매물이 없습니다.</td>
+                <td colspan="6" class="p-3 text-slate-400">검색한 소개 매물이 없습니다.</td>
             </tr>
         `;
         notifyCustomerIntroRowsChanged();
@@ -1029,10 +1032,10 @@ function renderIntroRows() {
                                         class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px] bg-white text-slate-700">
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span class="text-[11px] font-bold text-slate-600 shrink-0">소개</span>
+                                    <span class="text-[11px] font-bold text-slate-600 shrink-0">진행</span>
                                     <select onchange="updateIntroDetailField('${row.row_id}','${detail.detail_id}','progress_status', this.value)"
                                         class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px]">
-                                        ${renderStatusOptions(detail.progress_status || "준비")}
+                                        ${renderStatusOptions(detail.progress_status || "예비")}
                                     </select>
                                 </div>
                             </div>
@@ -1446,6 +1449,369 @@ function applyMatchConditions(saved) {
     applyChecked('input[name="matchUsageCategory"]', saved.usage_categories);
 }
 
+function escapeMatchHistoryHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
+
+function getMatchHistoryCustomerNumber() {
+    const fromInput = String(document.getElementById("customer_number")?.value || "").trim();
+    const fromPath = String(getCustomerNumberFromPath() || "").trim();
+    const raw = fromInput || fromPath;
+    const parsed = Number(raw);
+    if (!Number.isInteger(parsed) || parsed <= 0) return null;
+    return parsed;
+}
+
+async function loadMatchHistoryItems() {
+    const customerNumber = getMatchHistoryCustomerNumber();
+    if (!customerNumber) {
+        customerMatchHistoryItems = [];
+        return false;
+    }
+
+    const res = await fetch(`/api/customer/${customerNumber}/match-histories`);
+    if (!res.ok) throw new Error("failed to load match history");
+
+    const payload = await res.json();
+    const rows = Array.isArray(payload?.items) ? payload.items : [];
+    customerMatchHistoryItems = rows
+        .filter((item) => item && typeof item === "object" && item.id && item.conditions)
+        .slice(0, CUSTOMER_MATCH_HISTORY_MAX_ITEMS);
+    return true;
+}
+
+async function createMatchHistoryItem(name, conditions) {
+    const customerNumber = getMatchHistoryCustomerNumber();
+    if (!customerNumber) throw new Error("customer not saved");
+
+    const res = await fetch(`/api/customer/${customerNumber}/match-histories`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, conditions }),
+    });
+    if (!res.ok) throw new Error("failed to save match history");
+}
+
+async function deleteMatchHistoryItem(historyId) {
+    const customerNumber = getMatchHistoryCustomerNumber();
+    if (!customerNumber) throw new Error("customer not saved");
+
+    const encodedId = encodeURIComponent(String(historyId || "").trim());
+    const res = await fetch(`/api/customer/${customerNumber}/match-histories/${encodedId}`, {
+        method: "DELETE",
+    });
+    if (!res.ok) throw new Error("failed to delete match history");
+}
+
+function hasAnyMatchConditionValue(conditions) {
+    if (!conditions || typeof conditions !== "object") return false;
+    return Object.entries(conditions).some(([key, value]) => {
+        if (Array.isArray(value)) return value.length > 0;
+        if (key === "building_status" || key === "violation_option") return value && value !== "전체";
+        return String(value ?? "").trim() !== "";
+    });
+}
+
+function formatMatchHistorySummary(item) {
+    const c = item.conditions || {};
+    const parts = [];
+    if (c.address) parts.push(`주소:${c.address}`);
+    if (c.business_area) parts.push(`상권:${c.business_area}`);
+    if (Array.isArray(c.types) && c.types.length) parts.push(`유형:${c.types.join(",")}`);
+    if (c.min_price || c.max_price) parts.push(`매매가:${c.min_price || "-"}~${c.max_price || "-"}`);
+    if (c.min_yield) parts.push(`수익률>=${c.min_yield}%`);
+    if (parts.length === 0) parts.push("조건 값 없음");
+    return parts.slice(0, 3).join(" | ");
+}
+
+function formatMatchHistoryDetailRows(conditions) {
+    const rows = getMatchHistoryDetailRows(conditions);
+    return rows.map(([label, value]) => `
+        <div class="flex items-start gap-2 text-[12px]">
+            <span class="w-28 shrink-0 font-bold text-slate-700">${escapeMatchHistoryHtml(label)}</span>
+            <span class="text-slate-600">${escapeMatchHistoryHtml(value)}</span>
+        </div>
+    `).join("");
+}
+
+function getMatchHistoryDetailRows(conditions) {
+    const c = conditions || {};
+    return [
+        ["유형", Array.isArray(c.types) && c.types.length ? c.types.join(", ") : "-"],
+        ["건물상태", c.building_status || "전체"],
+        ["등급조건", [
+            c.location_decide || "입지",
+            c.price_decide || "가격",
+            c.yield_decide || "수익률",
+            c.vacancy_decide || "명도",
+            c.limit_decide || "제한",
+            c.loan_decide || "상태",
+        ].join(" / ")],
+        ["용도지역", Array.isArray(c.zoning_categories) && c.zoning_categories.length ? c.zoning_categories.join(", ") : "-"],
+        ["건축용도", Array.isArray(c.usage_categories) && c.usage_categories.length ? c.usage_categories.join(", ") : "-"],
+        ["위반여부", c.violation_option || "전체"],
+        ["주소/상권", `${c.address || "-"} / ${c.business_area || "-"}`],
+        ["주변역", `${c.station_keyword || "-"} / ${c.station_walk_min || "-"}~${c.station_walk_max || "-"}분`],
+        ["현금보유액", `${c.cash_hold_manwon || "-"}만원 / ${c.cash_hold_percent || "-"}%`],
+        ["매매가", `${c.min_price || "-"}~${c.max_price || "-"}만원`],
+        ["수익률", `${c.min_yield || "-"}% 이상`],
+        ["토지 평단가", `${c.land_pp_min || "-"}~${c.land_pp_max || "-"}만원`],
+        ["연면적 평단가", `${c.gross_pp_min || "-"}~${c.gross_pp_max || "-"}만원`],
+        ["토지면적", `${c.land_area_min || "-"}~${c.land_area_max || "-"}평`],
+        ["연면적", `${c.gross_area_min || "-"}~${c.gross_area_max || "-"}평`],
+        ["사용가능면적", `${c.usable_area_min || "-"}~${c.usable_area_max || "-"}평`],
+        ["건축면적", `${c.building_area_min || "-"}~${c.building_area_max || "-"}평`],
+        ["사용승인/도로폭", `${c.approval_year_min || "-"}년 이후 / ${c.road_width_min || "-"}m 이상`],
+        ["승강기/주차대수", `${c.elevator_option || "전체"} / ${c.parking_min || "-"}대 이상`],
+    ];
+}
+
+function getMatchHistoryCompareRows(conditions) {
+    const c = conditions || {};
+    const toText = (value) => String(value ?? "").trim();
+    const nonDefault = (value, defaults = []) => {
+        const text = toText(value);
+        if (!text) return "";
+        return defaults.includes(text) ? "" : text;
+    };
+    const formatRange = (minValue, maxValue, unit = "") => {
+        const minText = toText(minValue);
+        const maxText = toText(maxValue);
+        if (!minText && !maxText) return "";
+        const rangeText = `${minText}\u00A0-\u00A0${maxText}`.trim();
+        return unit ? `${rangeText} ${unit}` : rangeText;
+    };
+    const joinParts = (...values) => values.map((v) => toText(v)).filter(Boolean).join(" / ");
+
+    const decideValues = [
+        nonDefault(c.location_decide, ["입지"]),
+        nonDefault(c.price_decide, ["가격"]),
+        nonDefault(c.yield_decide, ["수익률"]),
+        nonDefault(c.vacancy_decide, ["명도"]),
+        nonDefault(c.limit_decide, ["제한"]),
+        nonDefault(c.loan_decide, ["상태"]),
+    ].filter(Boolean);
+
+    return [
+        ["유형", Array.isArray(c.types) && c.types.length ? c.types.join(", ") : ""],
+        ["건물상태", nonDefault(c.building_status, ["전체"])],
+        ["등급조건", decideValues.join(" / ")],
+        ["용도지역", Array.isArray(c.zoning_categories) && c.zoning_categories.length ? c.zoning_categories.join(", ") : ""],
+        ["건축용도", Array.isArray(c.usage_categories) && c.usage_categories.length ? c.usage_categories.join(", ") : ""],
+        ["위반여부", nonDefault(c.violation_option, ["전체"])],
+        ["주소/상권", joinParts(c.address, c.business_area)],
+        ["주변역", joinParts(c.station_keyword, formatRange(c.station_walk_min, c.station_walk_max, "분"))],
+        ["현금보유액", joinParts(
+            toText(c.cash_hold_manwon) ? `${toText(c.cash_hold_manwon)}만원` : "",
+            toText(c.cash_hold_percent) ? `${toText(c.cash_hold_percent)}%` : ""
+        )],
+        ["매매가", formatRange(c.min_price, c.max_price, "만원")],
+        ["수익률", toText(c.min_yield) ? `${toText(c.min_yield)}% 이상` : ""],
+        ["토지 평단가", formatRange(c.land_pp_min, c.land_pp_max, "만원")],
+        ["연면적 평단가", formatRange(c.gross_pp_min, c.gross_pp_max, "만원")],
+        ["토지면적", formatRange(c.land_area_min, c.land_area_max, "평")],
+        ["연면적", formatRange(c.gross_area_min, c.gross_area_max, "평")],
+        ["사용가능면적", formatRange(c.usable_area_min, c.usable_area_max, "평")],
+        ["건축면적", formatRange(c.building_area_min, c.building_area_max, "평")],
+        ["사용승인/도로폭", joinParts(
+            toText(c.approval_year_min) ? `${toText(c.approval_year_min)}년 이후` : "",
+            toText(c.road_width_min) ? `${toText(c.road_width_min)}m 이상` : ""
+        )],
+        ["승강기/주차대수", joinParts(
+            nonDefault(c.elevator_option, ["전체"]),
+            toText(c.parking_min) ? `${toText(c.parking_min)}대 이상` : ""
+        )],
+    ];
+}
+
+function toCompareTokens(value) {
+    const raw = String(value ?? "").trim();
+    if (!raw || raw === "-") return [];
+    const split = raw.split(",").map((token) => token.trim()).filter(Boolean);
+    return split.length ? split : [raw];
+}
+
+function buildCompareDiff(leftValue, rightValue) {
+    const leftTokens = toCompareTokens(leftValue);
+    const rightTokens = toCompareTokens(rightValue);
+    const leftSet = new Set(leftTokens);
+    const rightSet = new Set(rightTokens);
+    const added = rightTokens.filter((token) => !leftSet.has(token));
+    const removed = leftTokens.filter((token) => !rightSet.has(token));
+    return { added, removed };
+}
+
+function renderCompareDiffText(diff) {
+    const rows = [];
+    if (diff.added.length) {
+        rows.push(`<div class="mt-1 text-[13px] font-semibold text-blue-600">+ ${escapeMatchHistoryHtml(diff.added.join(", "))}</div>`);
+    }
+    if (diff.removed.length) {
+        rows.push(`<div class="mt-1 text-[13px] font-semibold text-rose-600">- ${escapeMatchHistoryHtml(diff.removed.join(", "))}</div>`);
+    }
+    return rows.join("");
+}
+
+function openMatchHistoryCompareModal() {
+    const modalEl = document.getElementById("customerMatchHistoryCompareModal");
+    if (!modalEl) return;
+    modalEl.classList.remove("hidden");
+    modalEl.classList.add("flex");
+}
+
+function closeMatchHistoryCompareModal() {
+    const modalEl = document.getElementById("customerMatchHistoryCompareModal");
+    if (!modalEl) return;
+    modalEl.classList.add("hidden");
+    modalEl.classList.remove("flex");
+}
+
+function renderMatchHistoryComparePanel(baseItem) {
+    const modalEl = document.getElementById("customerMatchHistoryCompareModal");
+    const body = document.getElementById("customerMatchHistoryCompareBody");
+    const rightTitle = document.getElementById("customerMatchHistoryCompareRightTitle");
+    if (!modalEl || !body || !rightTitle) return;
+
+    if (!baseItem || !currentMatchHistoryConditions) {
+        body.innerHTML = "";
+        closeMatchHistoryCompareModal();
+        return;
+    }
+
+    const leftRows = getMatchHistoryCompareRows(baseItem.conditions || {});
+    const rightRows = getMatchHistoryCompareRows(currentMatchHistoryConditions || {});
+    rightTitle.textContent = `현재 조건 (기준 기록: ${baseItem.name || "저장한 조건"})`;
+
+    body.innerHTML = rightRows.map(([label, rightValue], idx) => {
+        const leftValue = leftRows[idx]?.[1] ?? "-";
+        const changed = String(leftValue ?? "") !== String(rightValue ?? "");
+        const diff = changed ? buildCompareDiff(leftValue, rightValue) : { added: [], removed: [] };
+        const diffText = changed ? renderCompareDiffText(diff) : "";
+        return `
+            <div class="rounded-lg border p-3 bg-slate-100 ${changed ? "border-emerald-300 ring-1 ring-emerald-200" : "border-slate-300"}">
+                <div class="text-[13px] font-bold text-slate-700">${escapeMatchHistoryHtml(label)}</div>
+                <div class="mt-1 text-[14px] text-slate-800 font-semibold break-words">
+                    <div>${escapeMatchHistoryHtml(rightValue)}</div>
+                </div>
+                ${diffText}
+            </div>
+        `;
+    }).join("");
+    openMatchHistoryCompareModal();
+}
+
+function renderMatchHistoryList() {
+    const container = document.getElementById("customerMatchHistoryList");
+    if (!container) return;
+    if (!customerMatchHistoryItems.length) {
+        container.innerHTML = '<div class="py-8 text-slate-400 text-center">저장된 기록이 없습니다.</div>';
+        return;
+    }
+
+    container.innerHTML = customerMatchHistoryItems.map((item) => `
+        <div class="border rounded-lg bg-white ${selectedHistoryCompareId === item.id ? "border-emerald-400 shadow-sm" : "border-slate-200"}">
+            <div class="px-3 py-2 flex items-center justify-between gap-2">
+                <button type="button" data-role="toggle" data-id="${escapeMatchHistoryHtml(item.id)}"
+                    class="flex-1 text-left text-[13px] text-slate-700 hover:text-blue-700">
+                    <span class="font-bold">${escapeMatchHistoryHtml(item.name || "저장한 조건")}</span>
+                    <span class="text-slate-400 ml-2">${escapeMatchHistoryHtml(formatMatchHistorySummary(item))}</span>
+                </button>
+                <div class="flex items-center gap-1 shrink-0">
+                    <button type="button" data-role="apply" data-id="${escapeMatchHistoryHtml(item.id)}"
+                        class="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700">적용</button>
+                    <button type="button" data-role="compare" data-id="${escapeMatchHistoryHtml(item.id)}"
+                        class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700">비교</button>
+                    <button type="button" data-role="delete" data-id="${escapeMatchHistoryHtml(item.id)}"
+                        class="px-2 py-1 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700">삭제</button>
+                </div>
+            </div>
+            <div data-role="detail" data-id="${escapeMatchHistoryHtml(item.id)}" class="hidden border-t border-slate-100 px-3 py-2 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                ${formatMatchHistoryDetailRows(item.conditions)}
+            </div>
+        </div>
+    `).join("");
+}
+
+async function openMatchHistoryModal() {
+    const modalEl = document.getElementById("customerMatchHistoryModal");
+    if (!modalEl) return;
+    modalEl.classList.remove("hidden");
+    modalEl.classList.add("flex");
+    currentMatchHistoryConditions = null;
+    selectedHistoryCompareId = "";
+    closeMatchHistoryCompareModal();
+    const compareBody = document.getElementById("customerMatchHistoryCompareBody");
+    if (compareBody) compareBody.innerHTML = "";
+
+    const container = document.getElementById("customerMatchHistoryList");
+    const customerNumber = getMatchHistoryCustomerNumber();
+    if (!customerNumber) {
+        if (container) {
+            container.innerHTML = '<div class="py-8 text-slate-400 text-center">고객 저장 후 사용 가능합니다.</div>';
+        }
+        return;
+    }
+
+    if (container) {
+        container.innerHTML = '<div class="py-8 text-slate-400 text-center">불러오는 중...</div>';
+    }
+
+    try {
+        await loadMatchHistoryItems();
+        renderMatchHistoryList();
+    } catch (err) {
+        console.error(err);
+        if (container) {
+            container.innerHTML = '<div class="py-8 text-red-400 text-center">기록을 불러오지 못했습니다.</div>';
+        }
+    }
+}
+
+function closeMatchHistoryModal() {
+    const modalEl = document.getElementById("customerMatchHistoryModal");
+    if (!modalEl) return;
+    modalEl.classList.add("hidden");
+    modalEl.classList.remove("flex");
+    currentMatchHistoryConditions = null;
+    selectedHistoryCompareId = "";
+    closeMatchHistoryCompareModal();
+    const compareBody = document.getElementById("customerMatchHistoryCompareBody");
+    if (compareBody) compareBody.innerHTML = "";
+}
+
+async function saveCurrentMatchHistory() {
+    const conditions = collectMatchConditions();
+    if (!hasAnyMatchConditionValue(conditions)) {
+        alert("저장할 매수 조건이 없습니다.");
+        return;
+    }
+
+    const customerNumber = getMatchHistoryCustomerNumber();
+    if (!customerNumber) {
+        alert("고객 저장 후 사용 가능합니다.");
+        return;
+    }
+
+    const nameInput = document.getElementById("customerMatchHistoryNameInput");
+    const customName = String(nameInput?.value || "").trim();
+    const now = new Date();
+    const fallbackName = `${conditions.address || conditions.business_area || "조건"} ${now.toLocaleString("ko-KR", { hour12: false })}`;
+
+    try {
+        await createMatchHistoryItem(customName || fallbackName, conditions);
+        await loadMatchHistoryItems();
+        if (nameInput) nameInput.value = "";
+        renderMatchHistoryList();
+    } catch (err) {
+        console.error(err);
+        alert("기록 저장 중 오류가 발생했습니다.");
+    }
+}
 function buildSavePayload() {
     const formElement = document.getElementById("customerForm");
     const formData = new FormData(formElement);
@@ -1458,7 +1824,7 @@ function buildSavePayload() {
             .map(detail => ({
                 intro_id: detail.intro_id || null,
                 intro_date: detail.intro_date || nowLocalDateTimeMinute(),
-                progress_status: detail.progress_status || "준비",
+                progress_status: detail.progress_status || "예비",
                 intro_cost: detail.intro_cost || "",
                 manager_name: detail.manager_name || "",
                 bd_number: Number(row.bd_number),
@@ -1569,7 +1935,7 @@ function bindIntroRows(introList) {
             detail_id: generateRowId(),
             intro_id: item?.intro_id ?? null,
             intro_date: normalizeDateTimeLocal(item?.intro_date),
-            progress_status: item?.progress_status || "준비",
+            progress_status: item?.progress_status || "예비",
             intro_cost: item?.intro_cost || "",
             manager_name: item?.manager_name || "",
             intro_note: item?.intro_note || ""
@@ -1796,7 +2162,7 @@ async function downloadSelectedMatchPpt() {
         const filenameMatch = cd.match(/filename\s*=\s*\"?([^\";]+)\"?/i);
         const filename = filenameStarMatch
             ? decodeURIComponent(filenameStarMatch[1])
-            : (filenameMatch ? decodeURIComponent(filenameMatch[1]) : `[ERA]매매물건비교표_${Date.now()}.pptx`);
+            : (filenameMatch ? decodeURIComponent(filenameMatch[1]) : `[ERA]매물비교_${Date.now()}.pptx`);
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -2180,6 +2546,82 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (customerMatchSearchBtn) {
         customerMatchSearchBtn.addEventListener("click", () => searchCustomerMatchBuildings(1));
     }
+    const customerMatchHistoryBtn = document.getElementById("customerMatchHistoryBtn");
+    if (customerMatchHistoryBtn) {
+        customerMatchHistoryBtn.addEventListener("click", openMatchHistoryModal);
+    }
+    const customerMatchHistoryCloseBtn = document.getElementById("customerMatchHistoryCloseBtn");
+    if (customerMatchHistoryCloseBtn) {
+        customerMatchHistoryCloseBtn.addEventListener("click", closeMatchHistoryModal);
+    }
+    const customerMatchHistoryCompareCloseBtn = document.getElementById("customerMatchHistoryCompareCloseBtn");
+    if (customerMatchHistoryCompareCloseBtn) {
+        customerMatchHistoryCompareCloseBtn.addEventListener("click", closeMatchHistoryCompareModal);
+    }
+    const customerMatchHistoryCompareModal = document.getElementById("customerMatchHistoryCompareModal");
+    if (customerMatchHistoryCompareModal) {
+        customerMatchHistoryCompareModal.addEventListener("click", (e) => {
+            if (e.target === customerMatchHistoryCompareModal) {
+                closeMatchHistoryCompareModal();
+            }
+        });
+    }
+    const customerMatchHistorySaveBtn = document.getElementById("customerMatchHistorySaveBtn");
+    if (customerMatchHistorySaveBtn) {
+        customerMatchHistorySaveBtn.addEventListener("click", saveCurrentMatchHistory);
+    }
+    const customerMatchHistoryNameInput = document.getElementById("customerMatchHistoryNameInput");
+    if (customerMatchHistoryNameInput) {
+        customerMatchHistoryNameInput.addEventListener("keydown", async (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            await saveCurrentMatchHistory();
+        });
+    }
+    const customerMatchHistoryList = document.getElementById("customerMatchHistoryList");
+    if (customerMatchHistoryList) {
+        customerMatchHistoryList.addEventListener("click", async (e) => {
+            const target = e.target?.closest("button[data-role]");
+            if (!target) return;
+            const role = target.dataset.role;
+            const id = target.dataset.id;
+            if (!id) return;
+            const found = customerMatchHistoryItems.find((item) => item.id === id);
+            if (!found) return;
+
+            if (role === "toggle") {
+                const detailEl = customerMatchHistoryList.querySelector(`[data-role="detail"][data-id="${id}"]`);
+                if (detailEl) detailEl.classList.toggle("hidden");
+                return;
+            }
+            if (role === "apply") {
+                applyMatchConditions(found.conditions);
+                closeMatchHistoryModal();
+                return;
+            }
+            if (role === "compare") {
+                currentMatchHistoryConditions = collectMatchConditions();
+                selectedHistoryCompareId = id;
+                renderMatchHistoryList();
+                renderMatchHistoryComparePanel(found);
+                return;
+            }
+            if (role === "delete") {
+                try {
+                    await deleteMatchHistoryItem(id);
+                    await loadMatchHistoryItems();
+                    if (selectedHistoryCompareId === id) {
+                        selectedHistoryCompareId = "";
+                        renderMatchHistoryComparePanel(null);
+                    }
+                    renderMatchHistoryList();
+                } catch (err) {
+                    console.error(err);
+                    alert("기록 삭제 중 오류가 발생했습니다.");
+                }
+            }
+        });
+    }
     const customerMatchDownloadBtn = document.getElementById("customerMatchDownloadBtn");
     if (customerMatchDownloadBtn) {
         customerMatchDownloadBtn.addEventListener("click", downloadSelectedMatchPpt);
@@ -2239,6 +2681,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
     document.addEventListener("keydown", (e) => {
+        const historyModalEl = document.getElementById("customerMatchHistoryModal");
+        if (historyModalEl && !historyModalEl.classList.contains("hidden") && e.key === "Escape") {
+            closeMatchHistoryModal();
+            return;
+        }
         const manageModalEl = document.getElementById("customerImageManageModal");
         if (manageModalEl && !manageModalEl.classList.contains("hidden") && e.key === "Escape") {
             closeCustomerImageManageModal();
@@ -2260,6 +2707,12 @@ document.addEventListener("DOMContentLoaded", async () => {
             showNextCustomerPreviewImage();
         }
     });
+    const customerMatchHistoryModal = document.getElementById("customerMatchHistoryModal");
+    if (customerMatchHistoryModal) {
+        customerMatchHistoryModal.addEventListener("click", (e) => {
+            if (e.target === customerMatchHistoryModal) closeMatchHistoryModal();
+        });
+    }
 
     ["matchAddressInput", "matchBusinessAreaInput", "matchStationKeyword", "matchMinPrice", "matchMaxPrice", "matchStationWalkMin", "matchStationWalkMax", "matchCashHoldManwon", "matchCashHoldPercent", "matchMinYieldInput", "matchLandPyeongMin", "matchLandPyeongMax", "matchGrossPyeongMin", "matchGrossPyeongMax", "matchLandAreaMin", "matchLandAreaMax", "matchGrossAreaMin", "matchGrossAreaMax", "matchUsableAreaMin", "matchUsableAreaMax", "matchBuildingAreaMin", "matchBuildingAreaMax", "matchApprovalYearMin", "matchRoadWidthMin", "matchParkingMin"].forEach((id) => {
         const el = document.getElementById(id);
@@ -2321,3 +2774,5 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     window.__authRedirectFetchGuardInstalled = true;
 })();
+
+

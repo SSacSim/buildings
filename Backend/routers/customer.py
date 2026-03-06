@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Request, HTTPException, Query, UploadFile, File
+﻿from fastapi import APIRouter, Request, HTTPException, Query, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from pathlib import Path
 import shutil
 import uuid
+import json
 
 import sys
 
@@ -47,6 +48,28 @@ def _ensure_customer_image_table(cur):
         """
         CREATE INDEX IF NOT EXISTS idx_customer_image_info_lookup
         ON customer_image_info (customer_number, slot, delete_flag, img_number DESC);
+        """
+    )
+
+
+def _ensure_customer_match_history_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_match_history (
+            history_id BIGSERIAL PRIMARY KEY,
+            customer_number INTEGER NOT NULL,
+            history_name VARCHAR(120) NOT NULL DEFAULT '',
+            conditions_json TEXT NOT NULL DEFAULT '{}',
+            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            delete_flag BOOLEAN DEFAULT FALSE
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customer_match_history_lookup
+        ON customer_match_history (customer_number, delete_flag, history_id DESC);
         """
     )
 
@@ -298,6 +321,7 @@ def ensure_customer_intro_table(conn, cur):
         """
     )
     _ensure_customer_image_table(cur)
+    _ensure_customer_match_history_table(cur)
     conn.commit()
 
 
@@ -372,6 +396,189 @@ def get_customer_detail(customer_number: int):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+class CustomerMatchHistoryCreatePayload(BaseModel):
+    name: Optional[str] = ""
+    conditions: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/api/customer/{customer_number:int}/match-histories")
+def get_customer_match_histories(customer_number: int):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        cur.execute(
+            """
+            SELECT 1
+            FROM customer_info
+            WHERE customer_number = %s
+              AND delete_flag = FALSE
+            LIMIT 1
+            """,
+            (customer_number,),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        cur.execute(
+            """
+            SELECT history_id, history_name, conditions_json, create_time
+            FROM customer_match_history
+            WHERE customer_number = %s
+              AND delete_flag = FALSE
+            ORDER BY history_id DESC
+            LIMIT 200
+            """,
+            (customer_number,),
+        )
+        items = []
+        for history_id, history_name, conditions_json, create_time in cur.fetchall():
+            try:
+                parsed_conditions = json.loads(conditions_json or "{}")
+            except Exception:
+                parsed_conditions = {}
+            if not isinstance(parsed_conditions, dict):
+                parsed_conditions = {}
+            items.append(
+                {
+                    "id": str(history_id),
+                    "name": (history_name or "").strip(),
+                    "saved_at": create_time.isoformat() if create_time else None,
+                    "conditions": parsed_conditions,
+                }
+            )
+        return {"items": items}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.post("/api/customer/{customer_number:int}/match-histories")
+def create_customer_match_history(customer_number: int, payload: CustomerMatchHistoryCreatePayload):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        cur.execute(
+            """
+            SELECT 1
+            FROM customer_info
+            WHERE customer_number = %s
+              AND delete_flag = FALSE
+            LIMIT 1
+            """,
+            (customer_number,),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        conditions = payload.conditions if isinstance(payload.conditions, dict) else {}
+        name = (payload.name or "").strip()
+        if len(name) > 120:
+            raise HTTPException(status_code=400, detail="name must be 120 characters or fewer")
+        if not name:
+            name = "저장한 조건"
+
+        cur.execute(
+            """
+            INSERT INTO customer_match_history (
+                customer_number,
+                history_name,
+                conditions_json,
+                delete_flag
+            )
+            VALUES (%s, %s, %s, FALSE)
+            RETURNING history_id, create_time
+            """,
+            (
+                customer_number,
+                name,
+                json.dumps(conditions, ensure_ascii=False),
+            ),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        history_id, create_time = row
+        return {
+            "status": "created",
+            "item": {
+                "id": str(history_id),
+                "name": name,
+                "saved_at": create_time.isoformat() if create_time else None,
+                "conditions": conditions,
+            },
+        }
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.delete("/api/customer/{customer_number:int}/match-histories/{history_id}")
+def delete_customer_match_history(customer_number: int, history_id: str):
+    conn = None
+    cur = None
+    try:
+        history_id_int = int(str(history_id).strip())
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid history id")
+
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        cur.execute(
+            """
+            UPDATE customer_match_history
+            SET delete_flag = TRUE,
+                update_time = CURRENT_TIMESTAMP
+            WHERE customer_number = %s
+              AND history_id = %s
+              AND delete_flag = FALSE
+            """,
+            (customer_number, history_id_int),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="history not found")
+        conn.commit()
+        return {"status": "deleted", "history_id": str(history_id_int)}
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if cur:
@@ -1182,7 +1389,7 @@ def customer_match_search(
             "수익형": "is_investment",
             "개발/전환": "is_development",
             "보유안정": "is_stable_holding",
-            "투자용": "is_investment",
+            "투자형": "is_investment",
             "개발": "is_development",
         }
         type_columns = [type_map[t] for t in selected_types if t in type_map]
@@ -1480,3 +1687,4 @@ async def update_customer(customer_number: int, data: CustomerCreate):
             cur.close()
         if conn:
             conn.close()
+
