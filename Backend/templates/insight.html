@@ -25,20 +25,20 @@
 
     <main class="max-w-[1500px] mx-auto px-6 py-6">
         <section class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-4">
-            <div class="bg-slate-700 text-white text-[13px] px-3 py-2 font-bold flex items-center justify-between gap-3">
+            <div class="bg-slate-700 text-white text-[19px] px-4 py-3 font-bold flex items-center justify-between gap-4">
                 <span>소개 매물 기준 선택</span>
-                <span class="text-[11px] text-slate-200 font-medium">파란 검색 버튼으로 건물을 선택하면 아래 매수조건이 자동 입력됩니다.</span>
+                <span class="text-[14px] text-slate-200 font-medium">파란 검색 버튼으로 건물을 선택하면 아래 매수조건이 자동 입력됩니다.</span>
             </div>
             <div class="overflow-x-auto">
-                <table class="w-full text-[11px] border-collapse">
+                <table class="w-full text-[16px] border-collapse">
                     <thead>
                         <tr class="bg-slate-100 border-b border-slate-300 text-slate-600">
-                            <th class="p-1 border-r font-normal whitespace-nowrap w-[56px]">검색</th>
-                            <th class="p-1 border-r font-normal whitespace-nowrap w-[56px]">열기</th>
-                            <th class="p-1 border-r font-normal">주소</th>
-                            <th class="p-1 border-r font-normal whitespace-nowrap w-[140px]">건물명</th>
-                            <th class="p-1 border-r font-normal whitespace-nowrap w-[100px]">매매가</th>
-                            <th class="p-1 font-normal whitespace-nowrap w-[140px]">자동 입력</th>
+                            <th class="p-2 border-r font-normal whitespace-nowrap w-[84px]">검색</th>
+                            <th class="p-2 border-r font-normal whitespace-nowrap w-[84px]">열기</th>
+                            <th class="p-2 border-r font-normal">주소</th>
+                            <th class="p-2 border-r font-normal whitespace-nowrap w-[210px]">건물명</th>
+                            <th class="p-2 border-r font-normal whitespace-nowrap w-[150px]">매매가</th>
+                            <th class="p-2 font-normal whitespace-nowrap w-[300px]">자동 입력</th>
                         </tr>
                     </thead>
                     <tbody id="insightIntroPropertyBody" class="text-center divide-y divide-slate-200"></tbody>
@@ -265,7 +265,15 @@
             </div>
 
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                <div class="px-4 py-2 border-b border-slate-200 bg-slate-100 font-bold text-slate-700">빌딩 섹션 (<span id="buildingCount">0</span>)</div>
+                <div class="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center justify-between gap-2">
+                    <div class="font-bold text-slate-700">빌딩 섹션 (<span id="buildingCount">0</span>)</div>
+                    <button id="openMainKakaoMapBtn" type="button"
+                        aria-label="검색 결과 카카오 지도 보기"
+                        title="검색 결과 카카오 지도 보기"
+                        class="flex items-center gap-2 bg-yellow-400 text-slate-900 px-4 py-1.5 rounded-lg text-[12px] font-bold hover:bg-yellow-300 transition-all whitespace-nowrap">
+                        카카오 지도
+                    </button>
+                </div>
                 <div class="overflow-auto max-h-[70vh]">
                     <div id="buildingBody" class="overflow-auto max-h-[70vh] p-3 space-y-3"></div>
                 </div>
@@ -299,6 +307,24 @@
                     <tbody id="insightBuildingSearchResultBody"></tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <div id="mainKakaoMapModal"
+        data-kakao-app-key="{{ kakao_js_app_key | default('', true) }}"
+        class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl w-[95vw] max-w-[1280px] h-[86vh] shadow-2xl flex flex-col overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2">
+                <div id="mainKakaoMapTitle" class="text-[14px] font-bold text-slate-700">검색 결과 지도</div>
+                <button id="closeMainKakaoMapBtn" type="button"
+                    class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200">
+                    닫기
+                </button>
+            </div>
+            <div id="mainKakaoMapResult" class="px-4 py-2 text-[12px] text-slate-600 border-b border-slate-100">
+                검색된 건물 주소를 지도에 표시합니다.
+            </div>
+            <div id="mainKakaoMap" class="flex-1 min-h-0"></div>
         </div>
     </div>
 
@@ -381,6 +407,32 @@
         let insightCustomerPage = 1;
         let insightBuildingPage = 1;
         let selectedInsightBuilding = null;
+        let insightLatestBuildingMapItems = [];
+
+        function syncInsightMapItems(items) {
+            const normalized = (Array.isArray(items) ? items : [])
+                .map((row) => {
+                    const address = String(row?.address || "").trim();
+                    if (!address) return null;
+                    const bdNumber = String(row?.bd_number || "").trim();
+                    return {
+                        bd_number: bdNumber || null,
+                        bd_name: String(row?.bd_name || "").trim(),
+                        address: address,
+                        sale_price: String(row?.sale_price || "").trim(),
+                        detail_url: bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : "",
+                    };
+                })
+                .filter(Boolean);
+            insightLatestBuildingMapItems = normalized;
+            window.dispatchEvent(new CustomEvent("main:searchResultsUpdated", {
+                detail: { results: insightLatestBuildingMapItems }
+            }));
+        }
+
+        window.getMainSearchMapItems = function getMainSearchMapItemsFromInsight() {
+            return insightLatestBuildingMapItems;
+        };
 
         function normalizeNumber(value, allowDecimal = true) {
             const cleaned = String(value ?? "").replace(allowDecimal ? /[^0-9.]/g : /[^0-9]/g, "");
@@ -438,6 +490,21 @@
         function extractYear(value) {
             const match = String(value ?? "").match(/(19|20)\d{2}/);
             return match ? match[0] : "";
+        }
+
+        function toAddressUpToDong(value) {
+            const raw = String(value ?? "").trim().replace(/\s+/g, " ");
+            if (!raw) return "";
+
+            const tokens = raw.split(" ");
+            const dongIdx = tokens.findIndex((tok) => /(?:동|읍|면|리)$/.test(tok));
+            if (dongIdx >= 0) return tokens.slice(0, dongIdx + 1).join(" ");
+
+            const digitIdx = tokens.findIndex((tok) => /\d/.test(tok));
+            if (digitIdx > 0) return tokens.slice(0, digitIdx).join(" ");
+            if (digitIdx === 0) return "";
+
+            return tokens.slice(0, Math.min(tokens.length, 3)).join(" ");
         }
 
         function extractStationInfo(nearbyStation, nearbyStation2) {
@@ -540,40 +607,42 @@
 
             tbody.innerHTML = `
                 <tr class="border-b border-slate-200">
-                    <td class="p-1">
+                    <td class="p-2">
                         <button type="button" onclick="openInsightBuildingSearchModal()"
-                            class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
+                            class="px-3 py-2 text-[14px] whitespace-nowrap rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
                     </td>
-                    <td class="p-1">
+                    <td class="p-2">
                         <button type="button" onclick="openInsightSelectedBuilding()"
                             ${hasSelection ? "" : "disabled"}
-                            class="px-2 py-1 text-[10px] whitespace-nowrap rounded ${hasSelection ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">열기</button>
+                            class="px-3 py-2 text-[14px] whitespace-nowrap rounded ${hasSelection ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">열기</button>
                     </td>
-                    <td class="p-1 text-left">
-                        <div class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]" style="min-width: 220px;">
+                    <td class="p-2 text-left">
+                        <div class="w-full min-w-0 bg-slate-50 px-2 py-2 border border-slate-200 rounded text-[15px]" style="min-width: 330px;">
                             ${esc(getSafeBuildingValue(row.address))}
                         </div>
                     </td>
-                    <td class="p-1 text-left">
-                        <div class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]" style="min-width: 120px;">
+                    <td class="p-2 text-left">
+                        <div class="w-full min-w-0 bg-slate-50 px-2 py-2 border border-slate-200 rounded text-[15px]" style="min-width: 180px;">
                             ${esc(getSafeBuildingValue(row.bd_name))}
                         </div>
                     </td>
-                    <td class="p-1">
-                        <div class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px] text-right" style="min-width: 90px;">
+                    <td class="p-2">
+                        <div class="w-full min-w-0 bg-slate-50 px-2 py-2 border border-slate-200 rounded text-[15px] text-right" style="min-width: 135px;">
                             ${esc(getSafeBuildingValue(row.sale_price))}
                         </div>
                     </td>
-                    <td class="p-1">
-                        <div class="inline-flex items-center gap-1">
-                            <span class="inline-flex items-center px-2 py-1 rounded text-[10px] font-bold ${badgeClass}">
-                                ${esc(fillStatus === "DONE" ? "AUTO APPLIED" : "WAITING")}
-                            </span>
+                    <td class="p-2">
+                        <div class="inline-flex items-center gap-2">
                             <button type="button"
                                 onclick="searchInsightWithSelectedBuilding()"
                                 ${hasSelection ? "" : "disabled"}
-                                class="px-2 py-1 rounded text-[10px] font-bold ${hasSelection ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">
-                                SEARCH
+                                class="px-3 py-2 rounded text-[13px] font-bold ${hasSelection ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}">
+                                조건 초기화
+                            </button>
+                            <button type="button"
+                                onclick="resetInsightSearchAddress()"
+                                class="px-3 py-2 rounded text-[13px] font-bold bg-rose-600 text-white hover:bg-rose-700">
+                                주소 초기화
                             </button>
                         </div>
                     </td>
@@ -597,6 +666,16 @@
             );
 
             loadInsightData(1, 1);
+        }
+
+        function resetInsightSearchAddress() {
+            setInputValueById("matchAddressInput", "");
+            if (selectedInsightBuilding) {
+                selectedInsightBuilding.address = "";
+                selectedInsightBuilding.bd_name = "";
+                selectedInsightBuilding.sale_price = "";
+                renderInsightIntroRow();
+            }
         }
 
         function openInsightBuildingSearchModal() {
@@ -721,7 +800,7 @@
         }
 
         async function applyInsightFiltersFromBuilding(bdNumber, quickItem = {}) {
-            setInputValueById("matchAddressInput", quickItem.address || "");
+            setInputValueById("matchAddressInput", toAddressUpToDong(quickItem.address || ""));
             setInputValueById("matchMinPrice", "");
             setInputValueById("matchMaxPrice", toIntegerInputText(quickItem.sale_price));
             setInputValueById("matchLandPyeongMin", "");
@@ -739,7 +818,7 @@
                 const roadWidth = extractRoadWidth(info.road_access2, info.road_access);
                 const elevatorTotal = (normalizeNumber(info.elevator, false) || 0) + (normalizeNumber(info.emergency_elevator, false) || 0);
 
-                setInputValueById("matchAddressInput", info.address || quickItem.address || "");
+                setInputValueById("matchAddressInput", toAddressUpToDong(info.address || quickItem.address || ""));
                 setInputValueById("matchBusinessAreaInput", info.site_location || "");
                 setInputValueById("matchStationKeyword", stationInfo.keyword || "");
                 setInputValueById("matchStationWalkMin", "");
@@ -958,6 +1037,7 @@
 
                 const customers = Array.isArray(payload.customers) ? payload.customers : [];
                 const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
+                syncInsightMapItems(buildings);
                 const customerTotalCount = Number(payload.customers_total_count ?? customers.length);
                 const buildingTotalCount = Number(payload.buildings_total_count ?? buildings.length);
                 const customerTotalPages = Number(payload.customers_total_pages ?? (customerTotalCount > 0 ? Math.ceil(customerTotalCount / INSIGHT_PAGE_SIZE) : 0));
@@ -1044,6 +1124,7 @@
                 renderInsightPagination("insightCustomerPagination", customerTotalPages, currentCustomerPage, "goInsightCustomerPage");
                 renderInsightPagination("insightBuildingPagination", buildingTotalPages, currentBuildingPage, "goInsightBuildingPage");
             } catch (e) {
+                syncInsightMapItems([]);
                 setEmptyRow(customerBody, 1, "조회 중 오류가 발생했습니다.");
                 setEmptyRow(buildingBody, 1, "조회 중 오류가 발생했습니다.");
             }
@@ -1078,6 +1159,7 @@
             setEmptyRow(document.getElementById("buildingBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");
             renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
             renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
+            syncInsightMapItems([]);
         });
 
         [
@@ -1129,5 +1211,6 @@
         renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
         renderInsightIntroRow();
     </script>
+    <script src="/statics/js/main_kakao_map.js"></script>
 </body>
 </html>

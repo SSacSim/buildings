@@ -1435,7 +1435,10 @@ def index(request: Request):
 def insight_page(request: Request):
     return templates.TemplateResponse(
         "insight.html",
-        {"request": request}
+        {
+            "request": request,
+            "kakao_js_app_key": customer._get_kakao_js_app_key(),
+        }
     )
 
 
