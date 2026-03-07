@@ -13,6 +13,33 @@ const CUSTOMER_MATCH_HISTORY_MAX_ITEMS = 50;
 let customerMatchHistoryItems = [];
 let currentMatchHistoryConditions = null;
 let selectedHistoryCompareId = "";
+let activeMatchSectors = new Set();
+let matchSectorToggleInitialized = false;
+const MATCH_SECTOR_KEY_FALLBACK = [
+    "types",
+    "building_status",
+    "grade",
+    "zoning",
+    "usage",
+    "violation",
+    "address",
+    "business_area",
+    "station",
+    "station_walk",
+    "cash_hold",
+    "sale_price",
+    "yield",
+    "land_pp",
+    "gross_pp",
+    "land_area",
+    "gross_area",
+    "usable_area",
+    "building_area",
+    "approval_year",
+    "road_width",
+    "elevator",
+    "parking",
+];
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -1445,6 +1472,78 @@ function confirmDelete() {
     deleteBuilding();
 }
 
+function getMatchSectorKeysFromDom() {
+    return Array.from(document.querySelectorAll("[data-match-sector]"))
+        .map((el) => String(el.dataset.matchSector || "").trim())
+        .filter(Boolean);
+}
+
+function getAllMatchSectorKeys() {
+    const keysFromDom = getMatchSectorKeysFromDom();
+    if (keysFromDom.length) return keysFromDom;
+    return [...MATCH_SECTOR_KEY_FALLBACK];
+}
+
+function isMatchSectorActive(sectorKey) {
+    return true;
+}
+
+function renderMatchSectorLabels() {
+    document.querySelectorAll("[data-match-sector]").forEach((labelEl) => {
+        labelEl.classList.remove(
+            "inline-flex",
+            "items-center",
+            "justify-center",
+            "cursor-pointer",
+            "select-none",
+            "rounded",
+            "px-2",
+            "py-0.5",
+            "border",
+            "transition-colors",
+            "duration-150",
+            "bg-emerald-100",
+            "text-emerald-800",
+            "border-emerald-300",
+            "bg-slate-100",
+            "text-slate-500",
+            "border-slate-300"
+        );
+
+        labelEl.style.backgroundColor = "";
+        labelEl.style.color = "";
+        labelEl.style.borderColor = "";
+        labelEl.removeAttribute("role");
+        labelEl.removeAttribute("tabindex");
+        labelEl.removeAttribute("aria-pressed");
+        labelEl.removeAttribute("data-active");
+        labelEl.removeAttribute("title");
+    });
+}
+
+function setActiveMatchSectors(sectors, { fallbackToAll = false } = {}) {
+    activeMatchSectors = new Set(getAllMatchSectorKeys());
+    matchSectorToggleInitialized = false;
+    renderMatchSectorLabels();
+}
+
+function toggleMatchSector(sectorKey) {
+    return;
+}
+
+function initializeMatchSectorToggles() {
+    const labelElements = Array.from(document.querySelectorAll("[data-match-sector]"));
+    if (!labelElements.length) return;
+
+    activeMatchSectors = new Set(getAllMatchSectorKeys());
+    matchSectorToggleInitialized = false;
+    renderMatchSectorLabels();
+}
+
+function getActiveMatchSectorKeys() {
+    return getAllMatchSectorKeys();
+}
+
 function collectMatchConditions() {
     return {
         address: document.getElementById("matchAddressInput")?.value || "",
@@ -1484,6 +1583,7 @@ function collectMatchConditions() {
         types: Array.from(document.querySelectorAll('input[name="matchType"]:checked')).map((el) => el.value),
         zoning_categories: Array.from(document.querySelectorAll('input[name="matchZoningCategory"]:checked')).map((el) => el.value),
         usage_categories: Array.from(document.querySelectorAll('input[name="matchUsageCategory"]:checked')).map((el) => el.value),
+        active_sectors: getActiveMatchSectorKeys(),
     };
 }
 
@@ -1541,6 +1641,12 @@ function applyMatchConditions(saved) {
     applyChecked('input[name="matchType"]', saved.types);
     applyChecked('input[name="matchZoningCategory"]', saved.zoning_categories);
     applyChecked('input[name="matchUsageCategory"]', saved.usage_categories);
+
+    if (Array.isArray(saved.active_sectors)) {
+        setActiveMatchSectors(saved.active_sectors);
+    } else {
+        setActiveMatchSectors(getAllMatchSectorKeys(), { fallbackToAll: true });
+    }
 }
 
 function escapeMatchHistoryHtml(value) {
@@ -2425,44 +2531,87 @@ async function searchCustomerMatchBuildings(page = 1) {
     const vacancyDecide = (vacancyDecideInput?.value || "").trim();
     const limitDecide = (limitDecideInput?.value || "").trim();
     const loanDecide = (loanDecideInput?.value || "").trim();
-    const useMinYield = minYield !== null && !Number.isNaN(minYield);
-    const hasAnyCondition = Boolean(address)
-        || Boolean(businessArea)
-        || Boolean(stationKeyword)
-        || (minPrice !== null && !Number.isNaN(minPrice))
-        || (maxPrice !== null && !Number.isNaN(maxPrice))
-        || (stationWalkMin !== null && !Number.isNaN(stationWalkMin))
-        || (stationWalkMax !== null && !Number.isNaN(stationWalkMax))
-        || (cashHoldManwon !== null && !Number.isNaN(cashHoldManwon))
-        || (cashHoldPercent !== null && !Number.isNaN(cashHoldPercent))
-        || checkedTypes.length > 0
+    const hasAddress = isMatchSectorActive("address") && Boolean(address);
+    const hasBusinessArea = isMatchSectorActive("business_area") && Boolean(businessArea);
+    const hasStationKeyword = isMatchSectorActive("station") && Boolean(stationKeyword);
+    const hasStationWalkMin = isMatchSectorActive("station_walk") && stationWalkMin !== null && !Number.isNaN(stationWalkMin);
+    const hasStationWalkMax = isMatchSectorActive("station_walk") && stationWalkMax !== null && !Number.isNaN(stationWalkMax);
+    const hasCashHoldManwon = isMatchSectorActive("cash_hold") && cashHoldManwon !== null && !Number.isNaN(cashHoldManwon);
+    const hasCashHoldPercent = isMatchSectorActive("cash_hold") && cashHoldPercent !== null && !Number.isNaN(cashHoldPercent);
+
+    const hasMinPrice = isMatchSectorActive("sale_price") && minPrice !== null && !Number.isNaN(minPrice);
+    const hasMaxPrice = isMatchSectorActive("sale_price") && maxPrice !== null && !Number.isNaN(maxPrice);
+    const useMinYield = isMatchSectorActive("yield") && minYield !== null && !Number.isNaN(minYield);
+
+    const hasLandPpMin = isMatchSectorActive("land_pp") && landMin !== null && !Number.isNaN(landMin);
+    const hasLandPpMax = isMatchSectorActive("land_pp") && landMax !== null && !Number.isNaN(landMax);
+    const hasGrossPpMin = isMatchSectorActive("gross_pp") && grossMin !== null && !Number.isNaN(grossMin);
+    const hasGrossPpMax = isMatchSectorActive("gross_pp") && grossMax !== null && !Number.isNaN(grossMax);
+
+    const hasLandAreaMin = isMatchSectorActive("land_area") && landAreaMin !== null && !Number.isNaN(landAreaMin);
+    const hasLandAreaMax = isMatchSectorActive("land_area") && landAreaMax !== null && !Number.isNaN(landAreaMax);
+    const hasGrossAreaMin = isMatchSectorActive("gross_area") && grossAreaMin !== null && !Number.isNaN(grossAreaMin);
+    const hasGrossAreaMax = isMatchSectorActive("gross_area") && grossAreaMax !== null && !Number.isNaN(grossAreaMax);
+    const hasUsableAreaMin = isMatchSectorActive("usable_area") && usableAreaMin !== null && !Number.isNaN(usableAreaMin);
+    const hasUsableAreaMax = isMatchSectorActive("usable_area") && usableAreaMax !== null && !Number.isNaN(usableAreaMax);
+    const hasBuildingAreaMin = isMatchSectorActive("building_area") && buildingAreaMin !== null && !Number.isNaN(buildingAreaMin);
+    const hasBuildingAreaMax = isMatchSectorActive("building_area") && buildingAreaMax !== null && !Number.isNaN(buildingAreaMax);
+
+    const hasApprovalYearMin = isMatchSectorActive("approval_year") && approvalYearMin !== null && !Number.isNaN(approvalYearMin);
+    const hasRoadWidthMin = isMatchSectorActive("road_width") && roadWidthMin !== null && !Number.isNaN(roadWidthMin);
+    const hasElevatorOption = isMatchSectorActive("elevator") && Boolean(elevatorOption);
+    const hasParkingMin = isMatchSectorActive("parking") && parkingMin !== null && !Number.isNaN(parkingMin);
+
+    const hasBuildingStatus = isMatchSectorActive("building_status") && buildingStatus && buildingStatus !== "전체";
+    const hasViolationOption = isMatchSectorActive("violation") && violationOption && violationOption !== "전체";
+    const hasLocationDecide = isMatchSectorActive("grade") && Boolean(locationDecide);
+    const hasPriceDecide = isMatchSectorActive("grade") && Boolean(priceDecide);
+    const hasYieldDecide = isMatchSectorActive("grade") && Boolean(yieldDecide);
+    const hasVacancyDecide = isMatchSectorActive("grade") && Boolean(vacancyDecide);
+    const hasLimitDecide = isMatchSectorActive("grade") && Boolean(limitDecide);
+    const hasLoanDecide = isMatchSectorActive("grade") && Boolean(loanDecide);
+
+    const hasTypes = isMatchSectorActive("types") && checkedTypes.length > 0;
+    const hasZoningCategories = isMatchSectorActive("zoning") && checkedZoningCategories.length > 0;
+    const hasUsageCategories = isMatchSectorActive("usage") && checkedUsageCategories.length > 0;
+
+    const hasAnyCondition = hasAddress
+        || hasBusinessArea
+        || hasStationKeyword
+        || hasStationWalkMin
+        || hasStationWalkMax
+        || hasCashHoldManwon
+        || hasCashHoldPercent
+        || hasMinPrice
+        || hasMaxPrice
         || useMinYield
-        || (landMin !== null && !Number.isNaN(landMin))
-        || (landMax !== null && !Number.isNaN(landMax))
-        || (grossMin !== null && !Number.isNaN(grossMin))
-        || (grossMax !== null && !Number.isNaN(grossMax))
-        || (landAreaMin !== null && !Number.isNaN(landAreaMin))
-        || (landAreaMax !== null && !Number.isNaN(landAreaMax))
-        || (grossAreaMin !== null && !Number.isNaN(grossAreaMin))
-        || (grossAreaMax !== null && !Number.isNaN(grossAreaMax))
-        || (usableAreaMin !== null && !Number.isNaN(usableAreaMin))
-        || (usableAreaMax !== null && !Number.isNaN(usableAreaMax))
-        || (buildingAreaMin !== null && !Number.isNaN(buildingAreaMin))
-        || (buildingAreaMax !== null && !Number.isNaN(buildingAreaMax))
-        || (approvalYearMin !== null && !Number.isNaN(approvalYearMin))
-        || (roadWidthMin !== null && !Number.isNaN(roadWidthMin))
-        || Boolean(elevatorOption)
-        || (parkingMin !== null && !Number.isNaN(parkingMin))
-        || (buildingStatus && buildingStatus !== "전체")
-        || (violationOption && violationOption !== "전체")
-        || Boolean(locationDecide)
-        || Boolean(priceDecide)
-        || Boolean(yieldDecide)
-        || Boolean(vacancyDecide)
-        || Boolean(limitDecide)
-        || Boolean(loanDecide)
-        || checkedZoningCategories.length > 0
-        || checkedUsageCategories.length > 0;
+        || hasLandPpMin
+        || hasLandPpMax
+        || hasGrossPpMin
+        || hasGrossPpMax
+        || hasLandAreaMin
+        || hasLandAreaMax
+        || hasGrossAreaMin
+        || hasGrossAreaMax
+        || hasUsableAreaMin
+        || hasUsableAreaMax
+        || hasBuildingAreaMin
+        || hasBuildingAreaMax
+        || hasApprovalYearMin
+        || hasRoadWidthMin
+        || hasElevatorOption
+        || hasParkingMin
+        || hasBuildingStatus
+        || hasViolationOption
+        || hasLocationDecide
+        || hasPriceDecide
+        || hasYieldDecide
+        || hasVacancyDecide
+        || hasLimitDecide
+        || hasLoanDecide
+        || hasTypes
+        || hasZoningCategories
+        || hasUsageCategories;
 
     if (!hasAnyCondition) {
         lastCustomerMatchQueryString = "";
@@ -2473,43 +2622,43 @@ async function searchCustomerMatchBuildings(page = 1) {
     }
 
     const params = new URLSearchParams();
-    if (address) params.set("address", address);
-    if (businessArea) params.set("business_area", businessArea);
-    if (stationKeyword) params.set("station_keyword", stationKeyword);
-    if (minPrice !== null && !Number.isNaN(minPrice)) params.set("min_price", String(minPrice));
-    if (maxPrice !== null && !Number.isNaN(maxPrice)) params.set("max_price", String(maxPrice));
-    if (stationWalkMin !== null && !Number.isNaN(stationWalkMin)) params.set("station_walk_min", String(stationWalkMin));
-    if (stationWalkMax !== null && !Number.isNaN(stationWalkMax)) params.set("station_walk_max", String(stationWalkMax));
-    if (cashHoldManwon !== null && !Number.isNaN(cashHoldManwon)) params.set("cash_hold_manwon", String(cashHoldManwon));
-    if (cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
+    if (hasAddress) params.set("address", address);
+    if (hasBusinessArea) params.set("business_area", businessArea);
+    if (hasStationKeyword) params.set("station_keyword", stationKeyword);
+    if (hasMinPrice) params.set("min_price", String(minPrice));
+    if (hasMaxPrice) params.set("max_price", String(maxPrice));
+    if (hasStationWalkMin) params.set("station_walk_min", String(stationWalkMin));
+    if (hasStationWalkMax) params.set("station_walk_max", String(stationWalkMax));
+    if (hasCashHoldManwon) params.set("cash_hold_manwon", String(cashHoldManwon));
+    if (hasCashHoldPercent) params.set("cash_hold_percent", String(cashHoldPercent));
     if (useMinYield) params.set("min_yield", String(minYield));
-    if (landMin !== null && !Number.isNaN(landMin)) params.set("land_pp_min", String(landMin));
-    if (landMax !== null && !Number.isNaN(landMax)) params.set("land_pp_max", String(landMax));
-    if (grossMin !== null && !Number.isNaN(grossMin)) params.set("gross_pp_min", String(grossMin));
-    if (grossMax !== null && !Number.isNaN(grossMax)) params.set("gross_pp_max", String(grossMax));
-    if (landAreaMin !== null && !Number.isNaN(landAreaMin)) params.set("land_area_min", String(landAreaMin));
-    if (landAreaMax !== null && !Number.isNaN(landAreaMax)) params.set("land_area_max", String(landAreaMax));
-    if (grossAreaMin !== null && !Number.isNaN(grossAreaMin)) params.set("gross_area_min", String(grossAreaMin));
-    if (grossAreaMax !== null && !Number.isNaN(grossAreaMax)) params.set("gross_area_max", String(grossAreaMax));
-    if (usableAreaMin !== null && !Number.isNaN(usableAreaMin)) params.set("usable_area_min", String(usableAreaMin));
-    if (usableAreaMax !== null && !Number.isNaN(usableAreaMax)) params.set("usable_area_max", String(usableAreaMax));
-    if (buildingAreaMin !== null && !Number.isNaN(buildingAreaMin)) params.set("building_area_min", String(buildingAreaMin));
-    if (buildingAreaMax !== null && !Number.isNaN(buildingAreaMax)) params.set("building_area_max", String(buildingAreaMax));
-    if (approvalYearMin !== null && !Number.isNaN(approvalYearMin)) params.set("approval_year_min", String(approvalYearMin));
-    if (roadWidthMin !== null && !Number.isNaN(roadWidthMin)) params.set("road_width_min", String(roadWidthMin));
-    if (elevatorOption) params.set("elevator_option", elevatorOption);
-    if (parkingMin !== null && !Number.isNaN(parkingMin)) params.set("parking_min", String(parkingMin));
-    if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
-    if (violationOption && violationOption !== "전체") params.set("violation_flag", violationOption);
-    if (locationDecide) params.set("location_decide", locationDecide);
-    if (priceDecide) params.set("price_decide", priceDecide);
-    if (yieldDecide) params.set("yield_decide", yieldDecide);
-    if (vacancyDecide) params.set("vacancy_decide", vacancyDecide);
-    if (limitDecide) params.set("limit_decide", limitDecide);
-    if (loanDecide) params.set("loan_decide", loanDecide);
-    if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
-    if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
-    if (checkedTypes.length) params.set("types", checkedTypes.join(","));
+    if (hasLandPpMin) params.set("land_pp_min", String(landMin));
+    if (hasLandPpMax) params.set("land_pp_max", String(landMax));
+    if (hasGrossPpMin) params.set("gross_pp_min", String(grossMin));
+    if (hasGrossPpMax) params.set("gross_pp_max", String(grossMax));
+    if (hasLandAreaMin) params.set("land_area_min", String(landAreaMin));
+    if (hasLandAreaMax) params.set("land_area_max", String(landAreaMax));
+    if (hasGrossAreaMin) params.set("gross_area_min", String(grossAreaMin));
+    if (hasGrossAreaMax) params.set("gross_area_max", String(grossAreaMax));
+    if (hasUsableAreaMin) params.set("usable_area_min", String(usableAreaMin));
+    if (hasUsableAreaMax) params.set("usable_area_max", String(usableAreaMax));
+    if (hasBuildingAreaMin) params.set("building_area_min", String(buildingAreaMin));
+    if (hasBuildingAreaMax) params.set("building_area_max", String(buildingAreaMax));
+    if (hasApprovalYearMin) params.set("approval_year_min", String(approvalYearMin));
+    if (hasRoadWidthMin) params.set("road_width_min", String(roadWidthMin));
+    if (hasElevatorOption) params.set("elevator_option", elevatorOption);
+    if (hasParkingMin) params.set("parking_min", String(parkingMin));
+    if (hasBuildingStatus) params.set("building_status", buildingStatus);
+    if (hasViolationOption) params.set("violation_flag", violationOption);
+    if (hasLocationDecide) params.set("location_decide", locationDecide);
+    if (hasPriceDecide) params.set("price_decide", priceDecide);
+    if (hasYieldDecide) params.set("yield_decide", yieldDecide);
+    if (hasVacancyDecide) params.set("vacancy_decide", vacancyDecide);
+    if (hasLimitDecide) params.set("limit_decide", limitDecide);
+    if (hasLoanDecide) params.set("loan_decide", loanDecide);
+    if (hasZoningCategories) params.set("zoning_categories", checkedZoningCategories.join(","));
+    if (hasUsageCategories) params.set("usage_categories", checkedUsageCategories.join(","));
+    if (hasTypes) params.set("types", checkedTypes.join(","));
     const customerNumber = getCustomerNumberFromPath();
     if (customerNumber) {
         params.set("customer_number", String(customerNumber));
@@ -2690,6 +2839,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             }
         });
     }
+
+    initializeMatchSectorToggles();
 
     const customerMatchSearchBtn = document.getElementById("customerMatchSearchBtn");
     if (customerMatchSearchBtn) {

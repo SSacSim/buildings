@@ -1526,32 +1526,6 @@ def get_insight_overview(
         site_location_terms = [term.strip() for term in (site_location or "").split(",") if term.strip()]
         station_terms = [term.strip() for term in (station_keyword or "").split(",") if term.strip()]
 
-        if address_terms:
-            address_ors = []
-            for term in address_terms:
-                address_ors.append(
-                    """
-                    (
-                        COALESCE(company_address, '') ILIKE %s
-                        OR COALESCE(home_address, '') ILIKE %s
-                        OR COALESCE(main_interest_region, '') ILIKE %s
-                        OR COALESCE(buyer_name, '') ILIKE %s
-                        OR COALESCE(match_conditions_json, '') ILIKE %s
-                    )
-                    """
-                )
-                customer_params.extend([f"%{term}%"] * 5)
-            customer_sql += " AND (" + " OR ".join(address_ors) + ")"
-
-        if site_location_terms:
-            site_ors = []
-            for term in site_location_terms:
-                site_ors.append(
-                    "(COALESCE(business_area, '') ILIKE %s OR COALESCE(match_conditions_json, '') ILIKE %s)"
-                )
-                customer_params.extend([f"%{term}%", f"%{term}%"])
-            customer_sql += " AND (" + " OR ".join(site_ors) + ")"
-
         customer_sql += " ORDER BY update_time DESC, customer_number DESC"
 
         cur.execute(customer_sql, tuple(customer_params))
@@ -1571,23 +1545,7 @@ def get_insight_overview(
             "DEVELOPMENT": "개발/전환",
             "STABLE": "보유안정",
         }
-        zoning_code_to_kor = {
-            "COMMERCIAL": "상업",
-            "INDUSTRIAL": "공업",
-            "RESIDENTIAL": "주거",
-            "OTHER": "기타",
-        }
-        usage_code_to_kor = {
-            "NEIGHBORHOOD": "근린",
-            "OFFICE_USE": "업무",
-            "LODGING": "숙박",
-            "ENTERTAINMENT": "위락",
-            "HOUSING": "주택",
-            "OTHER": "기타",
-        }
         selected_types_customer = [type_code_to_kor[c] for c in selected_types_codes if c in type_code_to_kor]
-        selected_zoning_customer = [zoning_code_to_kor[c] for c in selected_zoning_codes if c in zoning_code_to_kor]
-        selected_usage_customer = [usage_code_to_kor[c] for c in selected_usage_codes if c in usage_code_to_kor]
 
         def to_num(value):
             if value is None:
@@ -1620,52 +1578,18 @@ def get_insight_overview(
             c_right = cmax if cmax is not None else float("inf")
             return max(left, c_left) <= min(right, c_right)
 
-        def calc_cash_max_price_manwon(cash_manwon, percent):
-            if cash_manwon is None:
-                return None
-            p = 0.0 if percent is None else percent
-            if p < 0 or p >= 100:
-                return None
-            ratio = 1 - (p / 100.0)
-            if ratio <= 0:
-                return None
-            return cash_manwon / ratio
-
         range_keys = [
+            # Insight customer matching uses only type and sale price range.
             ("min_price", "max_price", min_price, max_price),
-            ("land_pp_min", "land_pp_max", land_pp_min, land_pp_max),
-            ("gross_pp_min", "gross_pp_max", gross_pp_min, gross_pp_max),
-            ("land_area_min", "land_area_max", land_area_min, land_area_max),
-            ("gross_area_min", "gross_area_max", gross_area_min, gross_area_max),
-            ("usable_area_min", "usable_area_max", usable_area_min, usable_area_max),
-            ("building_area_min", "building_area_max", building_area_min, building_area_max),
         ]
 
         customers = []
         for row in customers_raw:
-            if customer_status and customer_status != "전체":
-                if str(row.get("status") or "").strip() != customer_status:
-                    continue
-
             cond = parse_json(row.get("match_conditions_json"))
 
-            cond_address = str(cond.get("address") or "").strip().lower()
-            if address_terms and not any(term.lower() in cond_address for term in address_terms):
-                continue
-
-            cond_business_area = str(cond.get("business_area") or "").strip().lower()
-            if site_location_terms and not any(term.lower() in cond_business_area for term in site_location_terms):
-                continue
-
             cond_types = cond.get("types") if isinstance(cond.get("types"), list) else []
-            cond_zoning = cond.get("zoning_categories") if isinstance(cond.get("zoning_categories"), list) else []
-            cond_usage = cond.get("usage_categories") if isinstance(cond.get("usage_categories"), list) else []
 
-            if selected_types_customer and not set(selected_types_customer).issubset(set(cond_types)):
-                continue
-            if selected_zoning_customer and not set(selected_zoning_customer).issubset(set(cond_zoning)):
-                continue
-            if selected_usage_customer and not set(selected_usage_customer).issubset(set(cond_usage)):
+            if selected_types_customer and not (set(selected_types_customer) & set(cond_types)):
                 continue
 
             range_ok = True
@@ -1678,58 +1602,17 @@ def get_insight_overview(
             if not range_ok:
                 continue
 
-            if station_terms:
-                cond_station_keyword = str(cond.get("station_keyword") or "").strip()
-                cond_station_keyword_lower = cond_station_keyword.lower()
-                if not cond_station_keyword or not any(term.lower() in cond_station_keyword_lower for term in station_terms):
-                    continue
-
-            if not range_overlap(
-                station_walk_min,
-                station_walk_max,
-                to_num(cond.get("station_walk_min")),
-                to_num(cond.get("station_walk_max")),
-            ):
-                continue
-
-            if (cash_hold_manwon is not None) or (cash_hold_percent is not None):
-                q_cash_max = calc_cash_max_price_manwon(cash_hold_manwon, cash_hold_percent)
-                if q_cash_max is None:
-                    continue
-                c_cash_max = calc_cash_max_price_manwon(
-                    to_num(cond.get("cash_hold_manwon")),
-                    to_num(cond.get("cash_hold_percent")),
-                )
-                if c_cash_max is None or c_cash_max < q_cash_max:
-                    continue
-
-            def _cond_equals(key, query_value):
-                if not query_value:
-                    return True
-                return str(cond.get(key) or "").strip().upper() == str(query_value).strip().upper()
-
-            if not _cond_equals("location_decide", location_decide):
-                continue
-            if not _cond_equals("price_decide", price_decide):
-                continue
-            if not _cond_equals("yield_decide", yield_decide):
-                continue
-            if not _cond_equals("vacancy_decide", vacancy_decide):
-                continue
-            if not _cond_equals("limit_decide", limit_decide):
-                continue
-            if not _cond_equals("loan_decide", loan_decide):
-                continue
-
-            if elevator_option:
-                normalized_query_elevator = "HAS" if elevator_option in ("HAS", "있음") else ("NONE" if elevator_option in ("NONE", "없음") else "")
-                cond_elevator_raw = str(cond.get("elevator_option") or "").strip()
-                normalized_cond_elevator = "HAS" if cond_elevator_raw in ("HAS", "있음") else ("NONE" if cond_elevator_raw in ("NONE", "없음") else "")
-                if normalized_query_elevator and normalized_cond_elevator != normalized_query_elevator:
-                    continue
-
             row.pop("match_conditions_json", None)
             customers.append(row)
+
+        status_priority = {
+            "집중": 0,
+            "검토": 1,
+            "보류": 2,
+            "완료": 3,
+        }
+        # Keep existing order within each status group (stable sort).
+        customers.sort(key=lambda row: status_priority.get(str(row.get("status") or "").strip(), 99))
 
         building_sql = """
             SELECT
@@ -2102,7 +1985,18 @@ def get_insight_overview(
         if type_columns:
             building_sql += " AND (" + " OR ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        building_sql += " ORDER BY bi.update_time DESC, bi.bd_number DESC"
+        building_sql += """
+            ORDER BY
+                CASE COALESCE(bm.status, '')
+                    WHEN '완료' THEN 0
+                    WHEN '준비' THEN 1
+                    WHEN '보류' THEN 2
+                    WHEN '매각' THEN 3
+                    ELSE 99
+                END,
+                bi.update_time DESC,
+                bi.bd_number DESC
+        """
 
         cur.execute(building_sql, tuple(building_params))
         building_rows = cur.fetchall()

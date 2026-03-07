@@ -666,7 +666,16 @@ def search_customer(
                 main_interest_region
             FROM customer_info
             WHERE {where_sql}
-            ORDER BY update_time DESC, customer_number DESC
+            ORDER BY
+                CASE COALESCE(status, '')
+                    WHEN '집중' THEN 0
+                    WHEN '검토' THEN 1
+                    WHEN '보류' THEN 2
+                    WHEN '완료' THEN 3
+                    ELSE 99
+                END,
+                update_time DESC,
+                customer_number DESC
             LIMIT %s OFFSET %s
             """,
             tuple(params + [page_size, offset])
@@ -1404,7 +1413,19 @@ def customer_match_search(
         safe_page = min(page, total_pages) if total_pages > 0 else 1
         offset = (safe_page - 1) * page_size
 
-        sql += " ORDER BY bi.update_time DESC, bi.bd_number DESC LIMIT %s OFFSET %s"
+        sql += """
+            ORDER BY
+                CASE COALESCE(bm.status, '')
+                    WHEN '완료' THEN 0
+                    WHEN '준비' THEN 1
+                    WHEN '보류' THEN 2
+                    WHEN '매각' THEN 3
+                    ELSE 99
+                END,
+                bi.update_time DESC,
+                bi.bd_number DESC
+            LIMIT %s OFFSET %s
+        """
         page_params = list(params) + [page_size, offset]
 
         cur.execute(sql, tuple(page_params))

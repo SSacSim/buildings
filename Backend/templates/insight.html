@@ -50,6 +50,7 @@
             <div class="flex items-center justify-between mb-2">
                 <h2 class="font-bold text-slate-700">매수 조건 - 실제 매칭 필터</h2>
                 <div class="flex gap-2">
+                    <button id="clearSectorBtn" type="button" class="px-4 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50">선택 해제</button>
                     <button id="resetBtn" type="button" class="px-4 py-2 rounded-lg bg-slate-200 text-slate-700 font-semibold hover:bg-slate-300">초기화</button>
                     <button id="searchBtn" type="button" class="px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">매칭 검색</button>
                 </div>
@@ -408,6 +409,176 @@
         let insightBuildingPage = 1;
         let selectedInsightBuilding = null;
         let insightLatestBuildingMapItems = [];
+        const INSIGHT_SECTOR_KEYS = [
+            "types",
+            "building_status",
+            "customer_status",
+            "grade",
+            "zoning",
+            "usage",
+            "violation",
+            "address",
+            "business_area",
+            "station",
+            "station_walk",
+            "cash_hold",
+            "sale_price",
+            "yield",
+            "land_pp",
+            "gross_pp",
+            "land_area",
+            "gross_area",
+            "usable_area",
+            "building_area",
+            "approval_year",
+            "road_width",
+            "elevator",
+            "parking",
+        ];
+        let activeInsightSectors = new Set();
+        let insightSectorToggleInitialized = false;
+
+        function isInsightSectorActive(key) {
+            const normalized = String(key || "").trim();
+            if (!normalized) return true;
+            if (!insightSectorToggleInitialized) return true;
+            if (!activeInsightSectors.size) return false;
+            return activeInsightSectors.has(normalized);
+        }
+
+        function findPreviousBoldSpan(el) {
+            let cursor = el ? el.previousElementSibling : null;
+            while (cursor) {
+                if (cursor.tagName === "SPAN" && cursor.classList.contains("font-bold")) {
+                    return cursor;
+                }
+                cursor = cursor.previousElementSibling;
+            }
+            return null;
+        }
+
+        function getInsightSectorLabelMap() {
+            const typeInput = document.querySelector('input[name="matchType"]');
+            const zoningInput = document.querySelector('input[name="matchZoningCategory"]');
+            const usageInput = document.querySelector('input[name="matchUsageCategory"]');
+
+            return {
+                types: () => typeInput?.closest("div")?.querySelector("span.font-bold") || null,
+                building_status: () => findPreviousBoldSpan(document.getElementById("matchBuildingStatus")),
+                customer_status: () => findPreviousBoldSpan(document.getElementById("matchCustomerStatus")),
+                grade: () => findPreviousBoldSpan(document.getElementById("matchLocationDecide")),
+                zoning: () => zoningInput?.closest("div")?.querySelector("span.font-bold") || null,
+                usage: () => usageInput?.closest("div")?.querySelector("span.font-bold") || null,
+                violation: () => findPreviousBoldSpan(document.getElementById("matchViolationOption")),
+                address: () => findPreviousBoldSpan(document.getElementById("matchAddressInput")),
+                business_area: () => findPreviousBoldSpan(document.getElementById("matchBusinessAreaInput")),
+                station: () => findPreviousBoldSpan(document.getElementById("matchStationKeyword")),
+                station_walk: () => findPreviousBoldSpan(document.getElementById("matchStationWalkMin")),
+                cash_hold: () => findPreviousBoldSpan(document.getElementById("matchCashHoldManwon")),
+                sale_price: () => findPreviousBoldSpan(document.getElementById("matchMinPrice")),
+                yield: () => findPreviousBoldSpan(document.getElementById("matchMinYieldInput")),
+                land_pp: () => findPreviousBoldSpan(document.getElementById("matchLandPyeongMin")),
+                gross_pp: () => findPreviousBoldSpan(document.getElementById("matchGrossPyeongMin")),
+                land_area: () => findPreviousBoldSpan(document.getElementById("matchLandAreaMin")),
+                gross_area: () => findPreviousBoldSpan(document.getElementById("matchGrossAreaMin")),
+                usable_area: () => findPreviousBoldSpan(document.getElementById("matchUsableAreaMin")),
+                building_area: () => findPreviousBoldSpan(document.getElementById("matchBuildingAreaMin")),
+                approval_year: () => findPreviousBoldSpan(document.getElementById("matchApprovalYearMin")),
+                road_width: () => findPreviousBoldSpan(document.getElementById("matchRoadWidthMin")),
+                elevator: () => findPreviousBoldSpan(document.getElementById("matchElevatorOption")),
+                parking: () => findPreviousBoldSpan(document.getElementById("matchParkingMin")),
+            };
+        }
+
+        function renderInsightSectorLabels() {
+            document.querySelectorAll("[data-insight-sector]").forEach((labelEl) => {
+                const key = String(labelEl.dataset.insightSector || "").trim();
+                const isActive = isInsightSectorActive(key);
+
+                labelEl.classList.add(
+                    "inline-flex",
+                    "items-center",
+                    "justify-center",
+                    "cursor-pointer",
+                    "select-none",
+                    "rounded",
+                    "px-2",
+                    "py-0.5",
+                    "border",
+                    "transition-colors",
+                    "duration-150"
+                );
+
+                if (isActive) {
+                    labelEl.style.backgroundColor = "#dcfce7";
+                    labelEl.style.color = "#166534";
+                    labelEl.style.borderColor = "#86efac";
+                } else {
+                    labelEl.style.backgroundColor = "#f1f5f9";
+                    labelEl.style.color = "#64748b";
+                    labelEl.style.borderColor = "#cbd5e1";
+                }
+
+                labelEl.setAttribute("role", "button");
+                labelEl.setAttribute("tabindex", "0");
+                labelEl.setAttribute("aria-pressed", isActive ? "true" : "false");
+                labelEl.setAttribute("data-active", isActive ? "1" : "0");
+                labelEl.title = isActive ? "클릭하면 검색 조건에서 제외" : "클릭하면 검색 조건에 포함";
+            });
+        }
+
+        function setActiveInsightSectors(keys, { fallbackToAll = false } = {}) {
+            const allowed = new Set(INSIGHT_SECTOR_KEYS);
+            const next = new Set();
+
+            if (Array.isArray(keys)) {
+                keys.forEach((key) => {
+                    const normalized = String(key || "").trim();
+                    if (allowed.has(normalized)) next.add(normalized);
+                });
+            }
+
+            if (!next.size && fallbackToAll) {
+                INSIGHT_SECTOR_KEYS.forEach((key) => next.add(key));
+            }
+
+            activeInsightSectors = next;
+            renderInsightSectorLabels();
+        }
+
+        function toggleInsightSector(key) {
+            const normalized = String(key || "").trim();
+            if (!normalized) return;
+            if (activeInsightSectors.has(normalized)) {
+                activeInsightSectors.delete(normalized);
+            } else {
+                activeInsightSectors.add(normalized);
+            }
+            renderInsightSectorLabels();
+        }
+
+        function initializeInsightSectorToggles() {
+            const labelMap = getInsightSectorLabelMap();
+            INSIGHT_SECTOR_KEYS.forEach((key) => {
+                const resolver = labelMap[key];
+                const labelEl = typeof resolver === "function" ? resolver() : null;
+                if (!labelEl) return;
+
+                labelEl.dataset.insightSector = key;
+                if (!labelEl.dataset.sectorBound) {
+                    labelEl.dataset.sectorBound = "1";
+                    labelEl.addEventListener("click", () => toggleInsightSector(key));
+                    labelEl.addEventListener("keydown", (e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        toggleInsightSector(key);
+                    });
+                }
+            });
+
+            insightSectorToggleInitialized = true;
+            setActiveInsightSectors(INSIGHT_SECTOR_KEYS, { fallbackToAll: true });
+        }
 
         function syncInsightMapItems(items) {
             const normalized = (Array.isArray(items) ? items : [])
@@ -993,30 +1164,51 @@
                 road_width_min: "matchRoadWidthMin",
                 parking_min: "matchParkingMin",
             };
+            const numericKeySectorMap = {
+                min_price: "sale_price",
+                max_price: "sale_price",
+                land_pp_min: "land_pp",
+                land_pp_max: "land_pp",
+                gross_pp_min: "gross_pp",
+                gross_pp_max: "gross_pp",
+                land_area_min: "land_area",
+                land_area_max: "land_area",
+                gross_area_min: "gross_area",
+                gross_area_max: "gross_area",
+                usable_area_min: "usable_area",
+                usable_area_max: "usable_area",
+                building_area_min: "building_area",
+                building_area_max: "building_area",
+                approval_year_min: "approval_year",
+                road_width_min: "road_width",
+                parking_min: "parking",
+            };
 
-            if (address) params.set("address", address);
-            if (siteLocation) params.set("site_location", siteLocation);
-            if (stationKeyword) params.set("station_keyword", stationKeyword);
-            if (minYield !== null && !Number.isNaN(minYield)) params.set("min_yield", String(minYield));
-            if (stationWalkMin !== null && !Number.isNaN(stationWalkMin)) params.set("station_walk_min", String(stationWalkMin));
-            if (stationWalkMax !== null && !Number.isNaN(stationWalkMax)) params.set("station_walk_max", String(stationWalkMax));
-            if (cashHoldManwon !== null && !Number.isNaN(cashHoldManwon)) params.set("cash_hold_manwon", String(cashHoldManwon));
-            if (cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
-            if (elevatorOption) params.set("elevator_option", elevatorOption);
-            if (buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
-            if (violationOption && violationOption !== "전체") params.set("violation_flag", violationOption);
-            if (customerStatus && customerStatus !== "전체") params.set("customer_status", customerStatus);
-            if (locationDecide) params.set("location_decide", locationDecide);
-            if (priceDecide) params.set("price_decide", priceDecide);
-            if (yieldDecide) params.set("yield_decide", yieldDecide);
-            if (vacancyDecide) params.set("vacancy_decide", vacancyDecide);
-            if (limitDecide) params.set("limit_decide", limitDecide);
-            if (loanDecide) params.set("loan_decide", loanDecide);
-            if (checkedTypes.length) params.set("types", checkedTypes.join(","));
-            if (checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
-            if (checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
+            if (isInsightSectorActive("address") && address) params.set("address", address);
+            if (isInsightSectorActive("business_area") && siteLocation) params.set("site_location", siteLocation);
+            if (isInsightSectorActive("station") && stationKeyword) params.set("station_keyword", stationKeyword);
+            if (isInsightSectorActive("yield") && minYield !== null && !Number.isNaN(minYield)) params.set("min_yield", String(minYield));
+            if (isInsightSectorActive("station_walk") && stationWalkMin !== null && !Number.isNaN(stationWalkMin)) params.set("station_walk_min", String(stationWalkMin));
+            if (isInsightSectorActive("station_walk") && stationWalkMax !== null && !Number.isNaN(stationWalkMax)) params.set("station_walk_max", String(stationWalkMax));
+            if (isInsightSectorActive("cash_hold") && cashHoldManwon !== null && !Number.isNaN(cashHoldManwon)) params.set("cash_hold_manwon", String(cashHoldManwon));
+            if (isInsightSectorActive("cash_hold") && cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
+            if (isInsightSectorActive("elevator") && elevatorOption) params.set("elevator_option", elevatorOption);
+            if (isInsightSectorActive("building_status") && buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
+            if (isInsightSectorActive("violation") && violationOption && violationOption !== "전체") params.set("violation_flag", violationOption);
+            if (isInsightSectorActive("customer_status") && customerStatus && customerStatus !== "전체") params.set("customer_status", customerStatus);
+            if (isInsightSectorActive("grade") && locationDecide) params.set("location_decide", locationDecide);
+            if (isInsightSectorActive("grade") && priceDecide) params.set("price_decide", priceDecide);
+            if (isInsightSectorActive("grade") && yieldDecide) params.set("yield_decide", yieldDecide);
+            if (isInsightSectorActive("grade") && vacancyDecide) params.set("vacancy_decide", vacancyDecide);
+            if (isInsightSectorActive("grade") && limitDecide) params.set("limit_decide", limitDecide);
+            if (isInsightSectorActive("grade") && loanDecide) params.set("loan_decide", loanDecide);
+            if (isInsightSectorActive("types") && checkedTypes.length) params.set("types", checkedTypes.join(","));
+            if (isInsightSectorActive("zoning") && checkedZoningCategories.length) params.set("zoning_categories", checkedZoningCategories.join(","));
+            if (isInsightSectorActive("usage") && checkedUsageCategories.length) params.set("usage_categories", checkedUsageCategories.join(","));
 
             Object.entries(numericIds).forEach(([key, id]) => {
+                const sectorKey = numericKeySectorMap[key];
+                if (sectorKey && !isInsightSectorActive(sectorKey)) return;
                 const raw = (document.getElementById(id)?.value || "").replace(/[^0-9.]/g, "");
                 if (!raw) return;
                 const val = Number(raw);
@@ -1130,7 +1322,12 @@
             }
         }
 
+        initializeInsightSectorToggles();
+
         document.getElementById("searchBtn").addEventListener("click", () => loadInsightData(1, 1));
+        document.getElementById("clearSectorBtn").addEventListener("click", () => {
+            setActiveInsightSectors([]);
+        });
         document.getElementById("resetBtn").addEventListener("click", () => {
             document.querySelectorAll("input").forEach((el) => {
                 if (el.type === "checkbox") {
@@ -1153,6 +1350,7 @@
                 const el = document.getElementById(id);
                 if (el) el.value = "";
             });
+            setActiveInsightSectors(INSIGHT_SECTOR_KEYS, { fallbackToAll: true });
             document.getElementById("customerCount").textContent = "0";
             document.getElementById("buildingCount").textContent = "0";
             setEmptyRow(document.getElementById("customerBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");

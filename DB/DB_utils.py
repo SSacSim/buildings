@@ -153,7 +153,16 @@ def extract_simple_info(conn, address :str ,page : int , category : str) -> dict
                     {decide_sql}
                 )
                 AND (%s = '' OR bm.status = %s) AND bi.delete_flag = FALSE
-            ORDER BY bi.update_time DESC, bi.bd_number ASC
+            ORDER BY
+                CASE COALESCE(bm.status, '')
+                    WHEN '완료' THEN 0
+                    WHEN '준비' THEN 1
+                    WHEN '보류' THEN 2
+                    WHEN '매각' THEN 3
+                    ELSE 99
+                END,
+                bi.update_time DESC,
+                bi.bd_number ASC
             LIMIT %s OFFSET %s
             """
 
