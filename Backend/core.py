@@ -77,20 +77,20 @@ app_settings = DB_utils._load_settings().get("app", {})
 JUSO_ADDRLINK_URL = app_settings.get("juso_addrlink_url") or ""
 BLDRGST_TITLE_URL = app_settings.get("bldrgst_title_url") or ""
 BLDRGST_FLR_OULN_URL = app_settings.get("bldrgst_flr_ouln_url") or ""
-VWORLD_LADFRL_URL = app_settings.get("vworld_ladfrl_url") or "https://api.vworld.kr/ned/data/ladfrlList"
+VWORLD_LADFRL_URL = app_settings.get("vworld_ladfrl_url") or ""
 VWORLD_LADFRL_KEY = (
     os.getenv("VWORLD_LADFRL_KEY")
     or app_settings.get("vworld_ladfrl_key")
-    or "49BE4E9F-8EC3-3507-83DC-89AD76813293"
+    or ""
 )
 VWORLD_LADFRL_DOMAIN = (
     os.getenv("VWORLD_LADFRL_DOMAIN")
     or app_settings.get("vworld_ladfrl_domain")
-    or "localhost:8"
+    or ""
 )
 VWORLD_INDVD_LAND_PRICE_URL = (
     app_settings.get("vworld_indvd_land_price_url")
-    or "https://api.vworld.kr/ned/data/getIndvdLandPriceAttr"
+    or ""
 )
 VWORLD_INDVD_LAND_PRICE_KEY = (
     os.getenv("VWORLD_INDVD_LAND_PRICE_KEY")
@@ -101,6 +101,7 @@ VWORLD_INDVD_LAND_PRICE_DOMAIN = (
     os.getenv("VWORLD_INDVD_LAND_PRICE_DOMAIN")
     or app_settings.get("vworld_indvd_land_price_domain")
     or VWORLD_LADFRL_DOMAIN
+    or ""
 )
 JUSO_CONFM_KEY = (
     os.getenv("JUSO_CONFM_KEY")

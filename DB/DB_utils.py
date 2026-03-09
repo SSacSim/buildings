@@ -287,6 +287,7 @@ def extract_detail_management(conn, bd_number: str) -> dict:
                     WHEN floor IS NULL OR btrim(floor) = '' THEN 2
                     WHEN btrim(upper(floor)) ~ '^B[0-9]+$' THEN 0
                     WHEN btrim(floor) ~ '^-?[0-9]+$' THEN 0
+                    WHEN regexp_replace(btrim(floor), '\s+', '', 'g') ~ '^-?[0-9]+' THEN 0
                     WHEN btrim(floor) ~ '^[0-9]+층$' THEN 0
                     ELSE 1
                 END,
@@ -295,11 +296,12 @@ def extract_detail_management(conn, bd_number: str) -> dict:
                         THEN -CAST(substring(btrim(upper(floor)) from 2) AS INTEGER)
                     WHEN btrim(floor) ~ '^-?[0-9]+$'
                         THEN CAST(btrim(floor) AS INTEGER)
+                    WHEN regexp_replace(btrim(floor), '\s+', '', 'g') ~ '^-?[0-9]+'
+                        THEN CAST(substring(regexp_replace(btrim(floor), '\s+', '', 'g') from '^-?[0-9]+') AS INTEGER)
                     WHEN btrim(floor) ~ '^[0-9]+층$'
                         THEN CAST(regexp_replace(btrim(floor), '[^0-9-]', '', 'g') AS INTEGER)
                     ELSE NULL
                 END ASC NULLS LAST,
-                floor ASC,
                 dm_number ASC
         """, (bd_number,))
     

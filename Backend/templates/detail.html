@@ -1862,6 +1862,52 @@
         return Number.isInteger(rounded) ? String(Math.trunc(rounded)) : rounded.toFixed(1);
     }
 
+    function buildLeaseFloorSortMeta(rawFloor) {
+        const floorText = String(rawFloor ?? "").trim();
+        const compact = floorText.replace(/\s+/g, "");
+        const headNumberMatch = compact.match(/^-?\d+/);
+        const anyNumberMatch = compact.match(/-?\d+/);
+        const numberToken = headNumberMatch?.[0] || anyNumberMatch?.[0] || "";
+        const hasNumber = numberToken !== "";
+
+        if (!hasNumber) {
+            return {
+                hasNumber: false,
+                floorNumber: Number.POSITIVE_INFINITY,
+                floorText,
+            };
+        }
+
+        const floorNumber = Number.parseInt(numberToken, 10);
+
+        return {
+            hasNumber: true,
+            floorNumber: Number.isFinite(floorNumber) ? floorNumber : Number.POSITIVE_INFINITY,
+            floorText,
+        };
+    }
+
+    function sortLeaseRowsByFloor(rows) {
+        if (!Array.isArray(rows)) return [];
+
+        // Sort by numeric floor only. For equal floor numbers, keep original order.
+        return rows
+            .map((row, index) => ({ row, index }))
+            .sort((leftWrapped, rightWrapped) => {
+            const leftRow = leftWrapped.row;
+            const rightRow = rightWrapped.row;
+            const left = buildLeaseFloorSortMeta(leftRow?.floor);
+            const right = buildLeaseFloorSortMeta(rightRow?.floor);
+
+            if (left.hasNumber !== right.hasNumber) return left.hasNumber ? -1 : 1;
+            if (left.floorNumber !== right.floorNumber) return left.floorNumber - right.floorNumber;
+
+            // Same numeric floor (e.g. -1, -1층, -1층중층): preserve current order.
+            return leftWrapped.index - rightWrapped.index;
+        })
+            .map((wrapped) => wrapped.row);
+    }
+
     function normalizeLeaseAutofillRows(rawRows) {
         if (!Array.isArray(rawRows)) return [];
 
@@ -1928,7 +1974,7 @@
     }
 
     function applyLeaseDetailsAutofill(rawRows, mode = "empty_only") {
-        const normalizedRows = normalizeLeaseAutofillRows(rawRows);
+        const normalizedRows = sortLeaseRowsByFloor(normalizeLeaseAutofillRows(rawRows));
         if (!normalizedRows.length) return;
 
         const tbody = document.getElementById("lease-body");
@@ -2107,7 +2153,7 @@
                     const tbody = document.getElementById('lease-body');
                     tbody.innerHTML = ''; // 기존에 있던 빈 행이나 샘플 행을 삭제
 
-                    item.lease_details.forEach(detail => {
+                    sortLeaseRowsByFloor(item.lease_details).forEach(detail => {
                         // 행 추가 함수 호출 (데이터를 파라미터로 전달)
                         addRow(detail);
                     });
