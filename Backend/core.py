@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import os 
 import json
 import re
@@ -77,6 +77,31 @@ app_settings = DB_utils._load_settings().get("app", {})
 JUSO_ADDRLINK_URL = app_settings.get("juso_addrlink_url") or ""
 BLDRGST_TITLE_URL = app_settings.get("bldrgst_title_url") or ""
 BLDRGST_FLR_OULN_URL = app_settings.get("bldrgst_flr_ouln_url") or ""
+VWORLD_LADFRL_URL = app_settings.get("vworld_ladfrl_url") or "https://api.vworld.kr/ned/data/ladfrlList"
+VWORLD_LADFRL_KEY = (
+    os.getenv("VWORLD_LADFRL_KEY")
+    or app_settings.get("vworld_ladfrl_key")
+    or "49BE4E9F-8EC3-3507-83DC-89AD76813293"
+)
+VWORLD_LADFRL_DOMAIN = (
+    os.getenv("VWORLD_LADFRL_DOMAIN")
+    or app_settings.get("vworld_ladfrl_domain")
+    or "localhost:8"
+)
+VWORLD_INDVD_LAND_PRICE_URL = (
+    app_settings.get("vworld_indvd_land_price_url")
+    or "https://api.vworld.kr/ned/data/getIndvdLandPriceAttr"
+)
+VWORLD_INDVD_LAND_PRICE_KEY = (
+    os.getenv("VWORLD_INDVD_LAND_PRICE_KEY")
+    or app_settings.get("vworld_indvd_land_price_key")
+    or VWORLD_LADFRL_KEY
+)
+VWORLD_INDVD_LAND_PRICE_DOMAIN = (
+    os.getenv("VWORLD_INDVD_LAND_PRICE_DOMAIN")
+    or app_settings.get("vworld_indvd_land_price_domain")
+    or VWORLD_LADFRL_DOMAIN
+)
 JUSO_CONFM_KEY = (
     os.getenv("JUSO_CONFM_KEY")
     or app_settings.get("juso_confm_key")
@@ -408,6 +433,72 @@ def _to_4digit_code(value: Any) -> str:
     return digits.zfill(4)
 
 
+def _build_pnu_from_juso_parts(adm_cd: str, lnbr_mnnm: Any, lnbr_slno: Any) -> str:
+    adm_digits = re.sub(r"[^0-9]", "", _to_clean_text(adm_cd))[:10]
+    if len(adm_digits) != 10:
+        return ""
+    return f"{adm_digits}1{_to_4digit_code(lnbr_mnnm)}{_to_4digit_code(lnbr_slno)}"
+
+
+def _find_first_nested_key_value(payload: Any, key_name: str) -> str:
+    if isinstance(payload, dict):
+        direct = _to_clean_text(payload.get(key_name))
+        if direct:
+            return direct
+        for value in payload.values():
+            found = _find_first_nested_key_value(value, key_name)
+            if found:
+                return found
+        return ""
+
+    if isinstance(payload, list):
+        for value in payload:
+            found = _find_first_nested_key_value(value, key_name)
+            if found:
+                return found
+        return ""
+
+    return ""
+
+
+def _normalize_land_category_text(value: Any) -> str:
+    text = _to_clean_text(value)
+    aliases = {
+        "\ub300\uc9c0": "\ub300",
+    }
+    return aliases.get(text, text)
+
+
+def _collect_price_item_candidates(payload: Any, output: List[Dict[str, Any]]) -> None:
+    if isinstance(payload, dict):
+        if ("stdrYear" in payload) or ("pblntfPclnd" in payload):
+            output.append(payload)
+        for value in payload.values():
+            _collect_price_item_candidates(value, output)
+        return
+
+    if isinstance(payload, list):
+        for value in payload:
+            _collect_price_item_candidates(value, output)
+
+
+def _extract_latest_indvd_land_price(payload: Any) -> Dict[str, str]:
+    candidates: List[Dict[str, Any]] = []
+    _collect_price_item_candidates(payload, candidates)
+    if not candidates:
+        return {}
+
+    for candidate in reversed(candidates):
+        stdr_year = _to_clean_text(candidate.get("stdrYear"))
+        pblntf_price = _to_clean_text(candidate.get("pblntfPclnd"))
+        if stdr_year or pblntf_price:
+            return {
+                "stdrYear": stdr_year,
+                "pblntfPclnd": pblntf_price,
+            }
+    return {}
+
+
 def _pick_first_non_empty(*values: Any) -> str:
     for value in values:
         cleaned = _to_clean_text(value)
@@ -627,13 +718,21 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
     if len(adm_cd) < 10:
         return {}
 
+    bun_code = _to_4digit_code(juso_item.get("lnbrMnnm"))
+    ji_code = _to_4digit_code(juso_item.get("lnbrSlno"))
+    pnu_code = _build_pnu_from_juso_parts(
+        adm_cd,
+        juso_item.get("lnbrMnnm"),
+        juso_item.get("lnbrSlno"),
+    )
+
     bld_common_params = {
         "serviceKey": BLDRGST_SERVICE_KEY,
         "sigunguCd": adm_cd[:5],
         "bjdongCd": adm_cd[5:10],
         "platGbCd": _to_clean_text(juso_item.get("mtYn")) or "0",
-        "bun": _to_4digit_code(juso_item.get("lnbrMnnm")),
-        "ji": _to_4digit_code(juso_item.get("lnbrSlno")),
+        "bun": bun_code,
+        "ji": ji_code,
         "pageNo": "1",
         "_type": "json",
     }
@@ -705,10 +804,55 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
         road_addr = _to_clean_text(juso_item.get("roadAddr"))
         jibun_address = re.sub(r"\s*\([^)]*\)\s*$", "", road_addr).strip()
 
+    land_category = ""
+    if VWORLD_LADFRL_URL and VWORLD_LADFRL_KEY and pnu_code:
+        try:
+            vworld_response = requests.get(
+                VWORLD_LADFRL_URL,
+                params={
+                    "pnu": pnu_code,
+                    "key": VWORLD_LADFRL_KEY,
+                    "domain": VWORLD_LADFRL_DOMAIN,
+                },
+                timeout=8,
+            )
+            vworld_response.raise_for_status()
+            vworld_payload = vworld_response.json()
+            land_category = _normalize_land_category_text(
+                _find_first_nested_key_value(vworld_payload, "lndcgrCodeNm")
+            )
+        except Exception as exc:
+            print(f"[struct_info_call] vworld ladfrlList request failed: {exc}")
+
+    official_price_per_sqm_won = ""
+    official_price_per_pyeong_million_date = ""
+    if VWORLD_INDVD_LAND_PRICE_URL and VWORLD_INDVD_LAND_PRICE_KEY and pnu_code:
+        try:
+            vworld_price_response = requests.get(
+                VWORLD_INDVD_LAND_PRICE_URL,
+                params={
+                    "pnu": pnu_code,
+                    "key": VWORLD_INDVD_LAND_PRICE_KEY,
+                    "domain": VWORLD_INDVD_LAND_PRICE_DOMAIN,
+                    "format": "json",
+                },
+                timeout=8,
+            )
+            vworld_price_response.raise_for_status()
+            vworld_price_payload = vworld_price_response.json()
+            latest_price = _extract_latest_indvd_land_price(vworld_price_payload)
+            official_price_per_pyeong_million_date = _to_clean_text(latest_price.get("stdrYear"))
+            official_price_per_sqm_won = _to_clean_text(latest_price.get("pblntfPclnd"))
+        except Exception as exc:
+            print(f"[struct_info_call] vworld getIndvdLandPriceAttr request failed: {exc}")
+
     autofill_data = {
         "address": jibun_address,
         "bd_name": bd_name,
         "building_name": bd_name,
+        "land_category": land_category,
+        "official_price_per_sqm_won": official_price_per_sqm_won,
+        "official_price_per_pyeong_million_date": official_price_per_pyeong_million_date,
         "approval_date": _format_yyyymmdd(item_data.get("useAprDay")),
         "building_usage": _normalize_building_usage_text(item_data.get("mainPurpsCdNm")),
         "building_structure": _to_clean_text(item_data.get("strctCdNm")),

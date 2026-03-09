@@ -1800,6 +1800,9 @@
         setFieldValueByMode("address", normalizeAutofillAddress(data.address), "overwrite_all");
 
         [
+            "land_category",
+            "official_price_per_sqm_won",
+            "official_price_per_pyeong_million_date",
             "approval_date",
             "land_area_sqm",
             "gross_area_sqm",
@@ -4200,7 +4203,6 @@
         closeDeleteModal();
         deleteBuilding(); // 🔥 실제 삭제 로직
     }
-
 
 
     // 다중 선택 관련 
