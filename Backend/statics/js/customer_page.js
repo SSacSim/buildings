@@ -40,6 +40,10 @@ const MATCH_SECTOR_KEY_FALLBACK = [
     "elevator",
     "parking",
 ];
+const CUSTOMER_MATCH_DRAG_MIME = "application/x-customer-match-building";
+const CUSTOMER_MATCH_DRAG_TEXT_PREFIX = "customer-match-building:";
+let introDropZoneDragDepth = 0;
+let isDraggingMatchCard = false;
 
 const modal = document.getElementById("deleteModal");
 const input = document.getElementById("deleteInput");
@@ -2435,6 +2439,215 @@ function openBuildingDetail(bdNumber) {
     window.open(`/detail/${bdNumber}`, "_blank");
 }
 
+function normalizeMatchBuildingForIntro(item) {
+    if (!item || typeof item !== "object") return null;
+
+    const parsedBdNumber = parseBdNumber(item.bd_number);
+    const rawBdNumber = String(item.bd_number ?? "").trim();
+    const bdNumber = parsedBdNumber !== null ? String(parsedBdNumber) : rawBdNumber;
+    const address = String(item.address || "").trim();
+    const bdName = String(item.bd_name || "").trim();
+    const salePrice = formatThousandsInputValue(item.sale_price ?? "");
+    const pricePerPyeong = formatThousandsInputValue(item.price_per_pyeong ?? "");
+
+    if (!bdNumber && !address && !bdName) return null;
+
+    return {
+        bd_number: bdNumber,
+        address: address,
+        bd_name: bdName,
+        sale_price: salePrice,
+        price_per_pyeong: pricePerPyeong,
+    };
+}
+
+function findExistingIntroRowForMatchBuilding(building) {
+    const targetBdNumber = parseBdNumber(building?.bd_number);
+    const targetAddress = String(building?.address || "").trim();
+    const targetBdName = String(building?.bd_name || "").trim();
+
+    return (introRows || []).find((row) => {
+        const rowBdNumber = parseBdNumber(row?.bd_number);
+        if (targetBdNumber !== null && rowBdNumber !== null && targetBdNumber === rowBdNumber) {
+            return true;
+        }
+
+        const rowAddress = String(row?.address || "").trim();
+        const rowBdName = String(row?.bd_name || "").trim();
+        return Boolean(
+            targetAddress
+            && rowAddress
+            && targetBdName
+            && rowBdName
+            && targetAddress === rowAddress
+            && targetBdName === rowBdName
+        );
+    }) || null;
+}
+
+function addMatchBuildingToIntroRows(rawItem) {
+    const building = normalizeMatchBuildingForIntro(rawItem);
+    if (!building) return;
+
+    const existingRow = findExistingIntroRowForMatchBuilding(building);
+    if (existingRow) {
+        if (!existingRow.bd_number && building.bd_number) existingRow.bd_number = building.bd_number;
+        if (!existingRow.address && building.address) existingRow.address = building.address;
+        if (!existingRow.bd_name && building.bd_name) existingRow.bd_name = building.bd_name;
+        if (!existingRow.sale_price && building.sale_price) existingRow.sale_price = building.sale_price;
+        if (!existingRow.price_per_pyeong && building.price_per_pyeong) existingRow.price_per_pyeong = building.price_per_pyeong;
+        if (!Array.isArray(existingRow.details) || !existingRow.details.length) {
+            existingRow.details = [createEmptyIntroDetail()];
+        }
+        existingRow.is_expanded = true;
+        renderIntroRows();
+        return;
+    }
+
+    const newRow = createEmptyIntroRow();
+    newRow.bd_number = building.bd_number;
+    newRow.address = building.address;
+    newRow.bd_name = building.bd_name;
+    newRow.sale_price = building.sale_price;
+    newRow.price_per_pyeong = building.price_per_pyeong;
+    newRow.is_expanded = true;
+    introRows.unshift(newRow);
+    renderIntroRows();
+}
+
+function getIntroDropZoneElement() {
+    const sidebar = document.getElementById("rightSidebar");
+    if (sidebar) return sidebar;
+
+    const introBody = document.getElementById("introPropertyBody");
+    if (!introBody) return null;
+    return introBody.closest(".section-card") || introBody;
+}
+
+function setIntroDropZoneActive(active) {
+    const zone = getIntroDropZoneElement();
+    if (!zone) return;
+    zone.classList.toggle("drag-over", Boolean(active));
+}
+
+function extractDraggedMatchBuilding(dataTransfer) {
+    if (!dataTransfer) return null;
+
+    let raw = dataTransfer.getData(CUSTOMER_MATCH_DRAG_MIME);
+    if (!raw) {
+        const plainText = dataTransfer.getData("text/plain");
+        if (plainText && plainText.startsWith(CUSTOMER_MATCH_DRAG_TEXT_PREFIX)) {
+            raw = plainText.slice(CUSTOMER_MATCH_DRAG_TEXT_PREFIX.length);
+        }
+    }
+    if (!raw) return null;
+
+    try {
+        return normalizeMatchBuildingForIntro(JSON.parse(raw));
+    } catch (error) {
+        console.warn("invalid dragged match payload", error);
+        return null;
+    }
+}
+
+function hasMatchBuildingDragType(dataTransfer) {
+    if (!dataTransfer) return false;
+    const types = Array.from(dataTransfer.types || []);
+    return types.includes(CUSTOMER_MATCH_DRAG_MIME);
+}
+
+function isCustomerMatchDragEvent(event) {
+    return isDraggingMatchCard || hasMatchBuildingDragType(event?.dataTransfer);
+}
+
+function handleCustomerMatchCardDragStart(event) {
+    const card = event?.currentTarget;
+    if (!card) return;
+
+    const payloadRaw = String(card.dataset?.matchPayload || "").trim();
+    if (!payloadRaw) {
+        event.preventDefault();
+        return;
+    }
+
+    let payload = null;
+    try {
+        payload = normalizeMatchBuildingForIntro(JSON.parse(payloadRaw));
+    } catch (error) {
+        console.warn("failed to parse match payload for drag", error);
+    }
+    if (!payload) {
+        event.preventDefault();
+        return;
+    }
+
+    const serialized = JSON.stringify(payload);
+    isDraggingMatchCard = true;
+    if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "copy";
+        event.dataTransfer.setData(CUSTOMER_MATCH_DRAG_MIME, serialized);
+        event.dataTransfer.setData("text/plain", `${CUSTOMER_MATCH_DRAG_TEXT_PREFIX}${serialized}`);
+    }
+
+    card.classList.add("opacity-70");
+}
+
+function handleCustomerMatchCardDragEnd(event) {
+    const card = event?.currentTarget;
+    if (card) card.classList.remove("opacity-70");
+    isDraggingMatchCard = false;
+    introDropZoneDragDepth = 0;
+    setIntroDropZoneActive(false);
+}
+
+function handleIntroDropZoneDragEnter(event) {
+    if (!isCustomerMatchDragEvent(event)) return;
+    event.preventDefault();
+    introDropZoneDragDepth += 1;
+    setIntroDropZoneActive(true);
+}
+
+function handleIntroDropZoneDragOver(event) {
+    if (!isCustomerMatchDragEvent(event)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    setIntroDropZoneActive(true);
+}
+
+function handleIntroDropZoneDragLeave(event) {
+    if (!isCustomerMatchDragEvent(event)) return;
+    const zone = getIntroDropZoneElement();
+    if (zone && event.relatedTarget && zone.contains(event.relatedTarget)) return;
+
+    introDropZoneDragDepth = Math.max(0, introDropZoneDragDepth - 1);
+    if (introDropZoneDragDepth === 0) {
+        setIntroDropZoneActive(false);
+    }
+}
+
+function handleIntroDropZoneDrop(event) {
+    if (!isCustomerMatchDragEvent(event)) return;
+    event.preventDefault();
+    isDraggingMatchCard = false;
+    introDropZoneDragDepth = 0;
+    setIntroDropZoneActive(false);
+
+    const payload = extractDraggedMatchBuilding(event.dataTransfer);
+    if (!payload) return;
+    addMatchBuildingToIntroRows(payload);
+}
+
+function initializeIntroMatchDropZone() {
+    const zone = getIntroDropZoneElement();
+    if (!zone) return;
+    zone.classList.add("intro-dropzone-target");
+    zone.title = "매칭 카드를 드래그해서 소개매물에 놓으면 추가됩니다.";
+    zone.addEventListener("dragenter", handleIntroDropZoneDragEnter);
+    zone.addEventListener("dragover", handleIntroDropZoneDragOver);
+    zone.addEventListener("dragleave", handleIntroDropZoneDragLeave);
+    zone.addEventListener("drop", handleIntroDropZoneDrop);
+}
+
 async function searchCustomerMatchBuildings(page = 1) {
     customerMatchCurrentPage = page;
     const tbody = getMatchResultBody();
@@ -2739,7 +2952,18 @@ async function searchCustomerMatchBuildings(page = 1) {
         const pageItems = rankedItems.slice(pageStart, pageStart + CUSTOMER_MATCH_PAGE_SIZE);
 
         tbody.innerHTML = pageItems.map(item => `
-            <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 cursor-pointer hover:border-blue-300" onclick="openBuildingDetail(${item.bd_number})">
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 cursor-pointer hover:border-blue-300"
+                onclick="openBuildingDetail(${item.bd_number})"
+                draggable="true"
+                data-match-payload="${escapeMatchHistoryHtml(JSON.stringify({
+                    bd_number: item.bd_number ?? "",
+                    address: item.address || "",
+                    bd_name: item.bd_name || "",
+                    sale_price: item.sale_price || "",
+                    price_per_pyeong: item.price_per_pyeong || "",
+                }))}"
+                ondragstart="handleCustomerMatchCardDragStart(event)"
+                ondragend="handleCustomerMatchCardDragEnd(event)">
                 <div class="flex items-start justify-between gap-3 mb-2">
                     <div class="flex flex-wrap items-center gap-2">
                         ${(() => {
@@ -2805,6 +3029,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await loadCurrentIntroManagerName();
     await loadCustomerDetail();
+    initializeIntroMatchDropZone();
 
     const customerForm = document.getElementById("customerForm");
     if (customerForm) {
