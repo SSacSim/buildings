@@ -1100,8 +1100,8 @@ function renderIntroRows() {
                     class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
             </td>
             <td class="p-1">
-                <button type="button" onclick="openIntroBuildingFromRow('${row.row_id}')"
-                    class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-emerald-600 text-white hover:bg-emerald-700">열기</button>
+                <button type="button" onclick="removeIntroRow('${row.row_id}')"
+                    class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-red-500 text-white hover:bg-red-600">제거</button>
             </td>
             <td class="p-1 text-left">
                 <input type="text" value="${row.address || ""}" readonly
@@ -1275,7 +1275,9 @@ function renderOwnedRows() {
 }
 
 function addIntroRow() {
-    introRows.unshift(createEmptyIntroRow());
+    const newRow = createEmptyIntroRow();
+    newRow.is_expanded = true;
+    introRows.unshift(newRow);
     renderIntroRows();
 }
 
@@ -1304,6 +1306,11 @@ function removeIntroDetail(rowId, detailId) {
     const row = introRows.find(r => r.row_id === rowId);
     if (!row || !Array.isArray(row.details)) return;
     row.details = row.details.filter(d => d.detail_id !== detailId);
+    renderIntroRows();
+}
+
+function removeIntroRow(rowId) {
+    introRows = introRows.filter(r => r.row_id !== rowId);
     renderIntroRows();
 }
 

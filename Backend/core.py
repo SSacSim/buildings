@@ -738,6 +738,7 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
         "_type": "json",
     }
 
+    bld_response = None
     try:
         bld_response = requests.get(
             BLDRGST_TITLE_URL,
@@ -750,21 +751,18 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
         bld_response.raise_for_status()
     except Exception as exc:
         print(f"[struct_info_call] bld request failed: {exc}")
-        return {}
 
     item_data: Dict[str, Any] = {}
-    try:
-        bld_payload = bld_response.json()
-        title_items = _extract_bldrgst_items_from_json_payload(bld_payload)
-        if title_items:
-            item_data = title_items[0]
-    except ValueError:
-        parsed_items = _parse_bldrgst_xml_items(bld_response.text)
-        if parsed_items:
-            item_data = parsed_items[0]
-
-    if not item_data:
-        return {}
+    if bld_response is not None:
+        try:
+            bld_payload = bld_response.json()
+            title_items = _extract_bldrgst_items_from_json_payload(bld_payload)
+            if title_items:
+                item_data = title_items[0]
+        except ValueError:
+            parsed_items = _parse_bldrgst_xml_items(bld_response.text)
+            if parsed_items:
+                item_data = parsed_items[0]
 
     lease_details: List[Dict[str, str]] = []
     if BLDRGST_FLR_OULN_URL:
