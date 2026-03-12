@@ -1314,6 +1314,7 @@ function removeIntroDetail(rowId, detailId) {
 }
 
 function removeIntroRow(rowId) {
+    if (!confirm("정말 삭제하시겠습니까?")) return;
     introRows = introRows.filter(r => r.row_id !== rowId);
     renderIntroRows();
 }
