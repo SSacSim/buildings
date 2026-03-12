@@ -289,7 +289,7 @@ def _fill_slide(slide, infos):
             _set_cell_text(row_cells[col_idx], value, 8)
 
 
-def run(bd_numbers):
+def run(bd_numbers, pin_first=False):
     if not bd_numbers:
         raise ValueError("bd_numbers is empty")
 
@@ -304,13 +304,20 @@ def run(bd_numbers):
         conn.close()
 
     # 매도희망가격(매매가) 낮은 순으로 정렬
+        # 매매가가 비어있는 값은 뒤로 보냄
+
     def _sale_price_sort_key(info):
         building_info = (info or {}).get("building_info") or {}
         sale_price_num = _to_number(building_info.get("sale_price"))
-        # 매매가가 비어있는 값은 뒤로 보냄
         return (sale_price_num is None, sale_price_num if sale_price_num is not None else float("inf"))
 
-    infos_all.sort(key=_sale_price_sort_key)
+    if pin_first and len(infos_all) > 1:
+        first_info = infos_all[0]
+        rest_infos = infos_all[1:]
+        rest_infos.sort(key=_sale_price_sort_key)
+        infos_all = [first_info] + rest_infos
+    else:
+        infos_all.sort(key=_sale_price_sort_key)
 
     template_path = PPT_DIR / "statics" / "template2.pptx"
     prs = Presentation(str(template_path))

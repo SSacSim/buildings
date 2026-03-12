@@ -2959,6 +2959,7 @@ import make_ppt_template2
 
 class ComparePptRequest(BaseModel):
     bd_numbers: List[int]
+    pin_first: bool = False
 
 @app.post("/api/building/{bd_id}/ppt")
 async def generate_ppt(bd_id: int):
@@ -2977,7 +2978,7 @@ async def generate_compare_ppt(data: ComparePptRequest):
     if not bd_numbers:
         raise HTTPException(status_code=400, detail="bd_numbers is empty")
 
-    ppt_path, filename = make_ppt_template2.run(bd_numbers)
+    ppt_path, filename = make_ppt_template2.run(bd_numbers, pin_first=data.pin_first)
     return FileResponse(
         ppt_path,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",

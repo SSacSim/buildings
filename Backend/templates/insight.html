@@ -268,12 +268,18 @@
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <div class="px-4 py-2 border-b border-slate-200 bg-slate-100 flex items-center justify-between gap-2">
                     <div class="font-bold text-slate-700">빌딩 섹션 (<span id="buildingCount">0</span>)</div>
-                    <button id="openMainKakaoMapBtn" type="button"
-                        aria-label="검색 결과 카카오 지도 보기"
-                        title="검색 결과 카카오 지도 보기"
-                        class="flex items-center gap-2 bg-yellow-400 text-slate-900 px-4 py-1.5 rounded-lg text-[12px] font-bold hover:bg-yellow-300 transition-all whitespace-nowrap">
-                        카카오 지도
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button id="openMainKakaoMapBtn" type="button"
+                            aria-label="검색 결과 카카오 지도 보기"
+                            title="검색 결과 카카오 지도 보기"
+                            class="flex items-center gap-2 bg-yellow-400 text-slate-900 px-4 py-1.5 rounded-lg text-[12px] font-bold hover:bg-yellow-300 transition-all whitespace-nowrap">
+                            카카오 지도
+                        </button>
+                        <button id="insightBuildingDownloadBtn" type="button"
+                            class="text-[11px] text-blue-700 underline font-semibold hover:text-blue-800 whitespace-nowrap">
+                            [매칭결과 자료 다운로드]
+                        </button>
+                    </div>
                 </div>
                 <div class="overflow-auto max-h-[70vh]">
                     <div id="buildingBody" class="overflow-auto max-h-[70vh] p-3 space-y-3"></div>
@@ -394,6 +400,90 @@
             return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
+        function parsePositiveInt(value) {
+            const text = String(value ?? "").trim();
+            if (!text) return null;
+            const parsed = Number(text);
+            if (!Number.isInteger(parsed) || parsed <= 0) return null;
+            return parsed;
+        }
+
+        function getInsightIntroBaseBdNumberForPpt() {
+            if (!insightLastSearchUsedIntroBase) return null;
+            if (!selectedInsightBuilding) return null;
+            const bdNumber = parsePositiveInt(selectedInsightBuilding.bd_number);
+            if (!bdNumber) return null;
+            return bdNumber;
+        }
+
+        function getInsightPptBdNumbers() {
+            const selected = Array.from(selectedInsightBuildingIds)
+                .map((id) => parsePositiveInt(id))
+                .filter((id) => id !== null);
+
+            const baseBdNumber = getInsightIntroBaseBdNumberForPpt();
+            const ordered = [];
+            if (baseBdNumber !== null) ordered.push(baseBdNumber);
+            selected.forEach((id) => {
+                if (!ordered.includes(id)) ordered.push(id);
+            });
+            return ordered;
+        }
+
+        function refreshInsightBuildingDownloadButton() {
+            const btn = document.getElementById("insightBuildingDownloadBtn");
+            if (!btn) return;
+            const totalCount = getInsightPptBdNumbers().length;
+            btn.textContent = totalCount > 0
+                ? `[매칭결과 자료 다운로드 (${totalCount}건 선택)]`
+                : "[매칭결과 자료 다운로드]";
+        }
+
+        function toggleInsightBuildingSelection(bdNumber, checked) {
+            const id = parsePositiveInt(bdNumber);
+            if (!id) return;
+            if (checked) selectedInsightBuildingIds.add(id);
+            else selectedInsightBuildingIds.delete(id);
+            refreshInsightBuildingDownloadButton();
+        }
+
+        async function downloadSelectedInsightPpt() {
+            const ids = getInsightPptBdNumbers();
+            const pinFirst = getInsightIntroBaseBdNumberForPpt() !== null;
+            if (!ids.length) {
+                alert("먼저 빌딩 섹션에서 건물을 선택해 주세요.");
+                return;
+            }
+
+            try {
+                const res = await fetch("/api/building/compare-ppt", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ bd_numbers: ids, pin_first: pinFirst }),
+                });
+                if (!res.ok) throw new Error("download failed");
+
+                const blob = await res.blob();
+                const cd = res.headers.get("content-disposition") || "";
+                const filenameStarMatch = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+                const filenameMatch = cd.match(/filename\s*=\s*\"?([^\";]+)\"?/i);
+                const filename = filenameStarMatch
+                    ? decodeURIComponent(filenameStarMatch[1])
+                    : (filenameMatch ? decodeURIComponent(filenameMatch[1]) : `[ERA]매물비교_${Date.now()}.pptx`);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error(error);
+                alert("매칭결과 자료 다운로드 중 오류가 발생했습니다.");
+            }
+        }
+
         function customerStateText(code) {
             const map = {
                 A: "A(원활) : 최근 7일 이내 소통, 실행력 높은 매수자",
@@ -408,6 +498,8 @@
         let insightCustomerPage = 1;
         let insightBuildingPage = 1;
         let selectedInsightBuilding = null;
+        const selectedInsightBuildingIds = new Set();
+        let insightLastSearchUsedIntroBase = false;
         let insightLatestBuildingMapItems = [];
         const INSIGHT_SECTOR_KEYS = [
             "types",
@@ -819,6 +911,7 @@
                     </td>
                 </tr>
             `;
+            refreshInsightBuildingDownloadButton();
         }
 
         function openInsightSelectedBuilding() {
@@ -830,6 +923,7 @@
         async function searchInsightWithSelectedBuilding() {
             const hasSelection = Boolean(selectedInsightBuilding?.bd_number || selectedInsightBuilding?.address);
             if (!hasSelection) return;
+            insightLastSearchUsedIntroBase = true;
 
             await applyInsightFiltersFromBuilding(
                 selectedInsightBuilding?.bd_number || "",
@@ -841,12 +935,14 @@
 
         function resetInsightSearchAddress() {
             setInputValueById("matchAddressInput", "");
+            insightLastSearchUsedIntroBase = false;
             if (selectedInsightBuilding) {
                 selectedInsightBuilding.address = "";
                 selectedInsightBuilding.bd_name = "";
                 selectedInsightBuilding.sale_price = "";
                 renderInsightIntroRow();
             }
+            refreshInsightBuildingDownloadButton();
         }
 
         function openInsightBuildingSearchModal() {
@@ -1054,6 +1150,7 @@
                 price_per_pyeong: String(parsed?.price_per_pyeong ?? "").trim(),
                 auto_fill_status: "APPLYING",
             };
+            insightLastSearchUsedIntroBase = true;
             renderInsightIntroRow();
 
             await applyInsightFiltersFromBuilding(selectedInsightBuilding.bd_number, selectedInsightBuilding);
@@ -1277,6 +1374,8 @@
                     setEmptyRow(buildingBody, 1, "조건에 맞는 빌딩이 없습니다.");
                 } else {
                     buildingBody.innerHTML = buildings.map((row) => {
+                        const bdNumberId = parsePositiveInt(row.bd_number);
+                        const isSelected = bdNumberId !== null && selectedInsightBuildingIds.has(bdNumberId);
                         const flagText = [
                             row.location_decide,
                             row.price_decide,
@@ -1290,6 +1389,14 @@
                         <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
                             <div class="flex items-start justify-between gap-3 mb-2">
                                 <div class="flex flex-wrap items-center gap-2">
+                                    ${bdNumberId !== null ? `
+                                        <label class="inline-flex items-center gap-1 text-[11px] text-slate-600 bg-white border border-slate-200 rounded px-2 py-1">
+                                            <input type="checkbox"
+                                                ${isSelected ? "checked" : ""}
+                                                onchange="toggleInsightBuildingSelection(${bdNumberId}, this.checked)">
+                                            선택
+                                        </label>
+                                    ` : ""}
                                     <a class="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded" target="_blank" href="/detail/${esc(row.bd_number)}">ID: ${esc(row.bd_number)}</a>
                                     <span class="text-xs font-bold text-indigo-700 bg-indigo-100 px-2 py-1 rounded">FLAG: ${esc(flagText)}</span>
                                 </div>
@@ -1313,21 +1420,29 @@
                     `;
                     }).join("");
                 }
+                refreshInsightBuildingDownloadButton();
                 renderInsightPagination("insightCustomerPagination", customerTotalPages, currentCustomerPage, "goInsightCustomerPage");
                 renderInsightPagination("insightBuildingPagination", buildingTotalPages, currentBuildingPage, "goInsightBuildingPage");
             } catch (e) {
                 syncInsightMapItems([]);
                 setEmptyRow(customerBody, 1, "조회 중 오류가 발생했습니다.");
                 setEmptyRow(buildingBody, 1, "조회 중 오류가 발생했습니다.");
+                refreshInsightBuildingDownloadButton();
             }
         }
 
         initializeInsightSectorToggles();
 
-        document.getElementById("searchBtn").addEventListener("click", () => loadInsightData(1, 1));
+        document.getElementById("searchBtn").addEventListener("click", () => {
+            loadInsightData(1, 1);
+        });
         document.getElementById("clearSectorBtn").addEventListener("click", () => {
             setActiveInsightSectors([]);
         });
+        const insightBuildingDownloadBtn = document.getElementById("insightBuildingDownloadBtn");
+        if (insightBuildingDownloadBtn) {
+            insightBuildingDownloadBtn.addEventListener("click", downloadSelectedInsightPpt);
+        }
         document.getElementById("resetBtn").addEventListener("click", () => {
             document.querySelectorAll("input").forEach((el) => {
                 if (el.type === "checkbox") {
@@ -1358,6 +1473,9 @@
             renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
             renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
             syncInsightMapItems([]);
+            selectedInsightBuildingIds.clear();
+            insightLastSearchUsedIntroBase = false;
+            refreshInsightBuildingDownloadButton();
         });
 
         [
@@ -1408,6 +1526,7 @@
         renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
         renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
         renderInsightIntroRow();
+        refreshInsightBuildingDownloadButton();
     </script>
     <script src="/statics/js/main_kakao_map.js"></script>
 </body>
