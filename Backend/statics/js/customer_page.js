@@ -5,6 +5,8 @@ let ownedRows = [];
 let pickingContext = null;
 let customerMatchCurrentPage = 1;
 const CUSTOMER_MATCH_PAGE_SIZE = 20;
+const INTRO_BUILDING_SEARCH_PAGE_SIZE = 30;
+const INTRO_BUILDING_SEARCH_PAGE_GROUP_SIZE = 5;
 const selectedMatchBuildingIds = new Set();
 let introSearchKeyword = "";
 let currentIntroManagerName = "";
@@ -1342,6 +1344,7 @@ function openBuildingSearchModal(kind, rowId) {
 
     const resultBody = document.getElementById("buildingSearchResultBody");
     resultBody.innerHTML = "";
+    renderBuildingSearchPagination(0, 1, 0);
 }
 
 function closeBuildingSearchModal() {
@@ -1349,21 +1352,97 @@ function closeBuildingSearchModal() {
     modalEl.classList.add("hidden");
     modalEl.classList.remove("flex");
     pickingContext = null;
+    renderBuildingSearchPagination(0, 1, 0);
 }
 
-async function searchBuildingsForIntro() {
+function renderBuildingSearchPagination(totalCount = 0, currentPage = 1, totalPages = 0) {
+    const infoEl = document.getElementById("buildingSearchPageInfo");
+    const buttonsEl = document.getElementById("buildingSearchPageButtons");
+    if (!infoEl || !buttonsEl) return;
+
+    const safeCount = Math.max(0, Number(totalCount) || 0);
+    const safeTotalPages = Math.max(0, Number(totalPages) || 0);
+    const safeCurrentPage = safeTotalPages > 0
+        ? Math.min(Math.max(1, Number(currentPage) || 1), safeTotalPages)
+        : 1;
+    infoEl.textContent = safeCount > 0
+        ? `총 ${safeCount.toLocaleString()}건 · ${safeCurrentPage}/${safeTotalPages} 페이지`
+        : "총 0건";
+
+    if (safeTotalPages <= 1) {
+        buttonsEl.innerHTML = "";
+        return;
+    }
+
+    const groupStart = Math.floor((safeCurrentPage - 1) / INTRO_BUILDING_SEARCH_PAGE_GROUP_SIZE) * INTRO_BUILDING_SEARCH_PAGE_GROUP_SIZE + 1;
+    const groupEnd = Math.min(groupStart + INTRO_BUILDING_SEARCH_PAGE_GROUP_SIZE - 1, safeTotalPages);
+
+    const prevPage = groupStart - 1;
+    const nextPage = groupStart + INTRO_BUILDING_SEARCH_PAGE_GROUP_SIZE;
+    const prevDisabled = prevPage < 1;
+    const nextDisabled = nextPage > safeTotalPages;
+
+    let html = `
+        <button type="button"
+            ${prevDisabled ? "disabled" : `onclick=\"searchBuildingsForIntro(${prevPage})\"`}
+            class="px-2 py-1 rounded border text-[11px] ${prevDisabled ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+            이전
+        </button>
+    `;
+
+    for (let page = groupStart; page <= groupEnd; page += 1) {
+        const active = page === safeCurrentPage;
+        html += `
+            <button type="button"
+                ${active ? "disabled" : `onclick=\"searchBuildingsForIntro(${page})\"`}
+                class="min-w-[28px] px-2 py-1 rounded border text-[11px] ${active ? "border-blue-600 bg-blue-600 text-white cursor-default" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+                ${page}
+            </button>
+        `;
+    }
+
+    html += `
+        <button type="button"
+            ${nextDisabled ? "disabled" : `onclick=\"searchBuildingsForIntro(${nextPage})\"`}
+            class="px-2 py-1 rounded border text-[11px] ${nextDisabled ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+            다음
+        </button>
+    `;
+
+    buttonsEl.innerHTML = html;
+}
+
+async function searchBuildingsForIntro(page = 1) {
     const q = document.getElementById("buildingSearchInput").value.trim();
     const resultBody = document.getElementById("buildingSearchResultBody");
+    const safePage = Math.max(1, Number(page) || 1);
 
     resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-slate-400">검색 중...</td></tr>`;
 
     try {
-        const res = await fetch(`/api/building/quick-search?q=${encodeURIComponent(q)}`);
+        const params = new URLSearchParams();
+        params.set("q", q);
+        params.set("page", String(safePage));
+        params.set("page_size", String(INTRO_BUILDING_SEARCH_PAGE_SIZE));
+        const res = await fetch(`/api/building/quick-search?${params.toString()}`);
         if (!res.ok) throw new Error("building search failed");
-        const items = await res.json();
+        const payload = await res.json();
+        const items = Array.isArray(payload)
+            ? payload
+            : (Array.isArray(payload?.items) ? payload.items : []);
+        const totalCount = Array.isArray(payload)
+            ? items.length
+            : Number(payload?.total_count || 0);
+        const totalPages = Array.isArray(payload)
+            ? (items.length > 0 ? 1 : 0)
+            : Number(payload?.total_pages || 0);
+        const currentPage = Array.isArray(payload)
+            ? 1
+            : Number(payload?.page || safePage);
 
         if (!Array.isArray(items) || items.length === 0) {
             resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-slate-400">검색 결과가 없습니다.</td></tr>`;
+            renderBuildingSearchPagination(totalCount, currentPage, totalPages);
             return;
         }
 
@@ -1386,9 +1465,11 @@ async function searchBuildingsForIntro() {
                 </td>
             </tr>
         `).join("");
+        renderBuildingSearchPagination(totalCount, currentPage, totalPages);
     } catch (err) {
         console.error(err);
         resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-red-400">검색 실패</td></tr>`;
+        renderBuildingSearchPagination(0, 1, 0);
     }
 }
 

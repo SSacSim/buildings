@@ -314,6 +314,10 @@
                     <tbody id="insightBuildingSearchResultBody"></tbody>
                 </table>
             </div>
+            <div id="insightBuildingSearchPagination" class="mt-2 flex items-center justify-between gap-2 text-[12px]">
+                <div id="insightBuildingSearchPageInfo" class="text-slate-500">총 0건</div>
+                <div id="insightBuildingSearchPageButtons" class="flex items-center gap-1"></div>
+            </div>
         </div>
     </div>
 
@@ -495,6 +499,8 @@
         }
 
         const INSIGHT_PAGE_SIZE = 20;
+        const INSIGHT_BUILDING_SEARCH_PAGE_SIZE = 30;
+        const INSIGHT_BUILDING_SEARCH_PAGE_GROUP_SIZE = 5;
         let insightCustomerPage = 1;
         let insightBuildingPage = 1;
         let selectedInsightBuilding = null;
@@ -959,6 +965,7 @@
 
             const resultBody = document.getElementById("insightBuildingSearchResultBody");
             if (resultBody) resultBody.innerHTML = "";
+            renderInsightBuildingSearchPagination(0, 1, 0);
         }
 
         function closeInsightBuildingSearchModal() {
@@ -966,21 +973,101 @@
             if (!modalEl) return;
             modalEl.classList.add("hidden");
             modalEl.classList.remove("flex");
+            renderInsightBuildingSearchPagination(0, 1, 0);
         }
 
-        async function searchBuildingsForInsight() {
+        function renderInsightBuildingSearchPagination(totalCount = 0, currentPage = 1, totalPages = 0) {
+            const infoEl = document.getElementById("insightBuildingSearchPageInfo");
+            const buttonsEl = document.getElementById("insightBuildingSearchPageButtons");
+            if (!infoEl || !buttonsEl) return;
+
+            const safeCount = Math.max(0, Number(totalCount) || 0);
+            const safeTotalPages = Math.max(0, Number(totalPages) || 0);
+            const safeCurrentPage = safeTotalPages > 0
+                ? Math.min(Math.max(1, Number(currentPage) || 1), safeTotalPages)
+                : 1;
+
+            infoEl.textContent = safeCount > 0
+                ? `총 ${safeCount.toLocaleString()}건 · ${safeCurrentPage}/${safeTotalPages} 페이지`
+/*
+                : "총 0건";
+
+*/
+                : "Total 0";
+
+            if (safeTotalPages <= 1) {
+                buttonsEl.innerHTML = "";
+                return;
+            }
+
+            const groupStart = Math.floor((safeCurrentPage - 1) / INSIGHT_BUILDING_SEARCH_PAGE_GROUP_SIZE) * INSIGHT_BUILDING_SEARCH_PAGE_GROUP_SIZE + 1;
+            const groupEnd = Math.min(groupStart + INSIGHT_BUILDING_SEARCH_PAGE_GROUP_SIZE - 1, safeTotalPages);
+            const prevPage = groupStart - 1;
+            const nextPage = groupStart + INSIGHT_BUILDING_SEARCH_PAGE_GROUP_SIZE;
+            const prevDisabled = prevPage < 1;
+            const nextDisabled = nextPage > safeTotalPages;
+
+            let html = `
+                <button type="button"
+                    ${prevDisabled ? "disabled" : `onclick=\"searchBuildingsForInsight(${prevPage})\"`}
+                    class="px-2 py-1 rounded border text-[11px] ${prevDisabled ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+                    이전
+                </button>
+            `;
+
+            for (let page = groupStart; page <= groupEnd; page += 1) {
+                const active = page === safeCurrentPage;
+                html += `
+                    <button type="button"
+                        ${active ? "disabled" : `onclick=\"searchBuildingsForInsight(${page})\"`}
+                        class="min-w-[28px] px-2 py-1 rounded border text-[11px] ${active ? "border-blue-600 bg-blue-600 text-white cursor-default" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+                        ${page}
+                    </button>
+                `;
+            }
+
+            html += `
+                <button type="button"
+                    ${nextDisabled ? "disabled" : `onclick=\"searchBuildingsForInsight(${nextPage})\"`}
+                    class="px-2 py-1 rounded border text-[11px] ${nextDisabled ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+                    다음
+                </button>
+            `;
+
+            buttonsEl.innerHTML = html;
+        }
+
+        async function searchBuildingsForInsight(page = 1) {
             const q = (document.getElementById("insightBuildingSearchInput")?.value || "").trim();
             const resultBody = document.getElementById("insightBuildingSearchResultBody");
             if (!resultBody) return;
+            const safePage = Math.max(1, Number(page) || 1);
 
             resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-slate-400">검색 중...</td></tr>`;
 
             try {
-                const res = await fetch(`/api/building/quick-search?q=${encodeURIComponent(q)}`);
+                const params = new URLSearchParams();
+                params.set("q", q);
+                params.set("page", String(safePage));
+                params.set("page_size", String(INSIGHT_BUILDING_SEARCH_PAGE_SIZE));
+                const res = await fetch(`/api/building/quick-search?${params.toString()}`);
                 if (!res.ok) throw new Error("building search failed");
-                const items = await res.json();
+                const payload = await res.json();
+                const items = Array.isArray(payload)
+                    ? payload
+                    : (Array.isArray(payload?.items) ? payload.items : []);
+                const totalCount = Array.isArray(payload)
+                    ? items.length
+                    : Number(payload?.total_count || 0);
+                const totalPages = Array.isArray(payload)
+                    ? (items.length > 0 ? 1 : 0)
+                    : Number(payload?.total_pages || 0);
+                const currentPage = Array.isArray(payload)
+                    ? 1
+                    : Number(payload?.page || safePage);
 
                 if (!Array.isArray(items) || items.length === 0) {
+                    renderInsightBuildingSearchPagination(totalCount, currentPage, totalPages);
                     resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-slate-400">검색 결과가 없습니다.</td></tr>`;
                     return;
                 }
@@ -1015,8 +1102,10 @@
                         </tr>
                     `;
                 }).join("");
+                renderInsightBuildingSearchPagination(totalCount, currentPage, totalPages);
             } catch (error) {
                 console.error(error);
+                renderInsightBuildingSearchPagination(0, 1, 0);
                 resultBody.innerHTML = `<tr><td colspan="6" class="p-3 text-red-400">검색 중 오류가 발생했습니다.</td></tr>`;
             }
         }
@@ -1447,8 +1536,6 @@
             document.querySelectorAll("input").forEach((el) => {
                 if (el.type === "checkbox") {
                     el.checked = false;
-                } else if (el.id === "matchMinYieldInput") {
-                    el.value = "3";
                 } else {
                     el.value = "";
                 }

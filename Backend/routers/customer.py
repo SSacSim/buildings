@@ -843,7 +843,8 @@ def reorder_customer_images(
 @router.get("/api/building/quick-search")
 def quick_search_building(
     q: str = Query(""),
-    limit: int = Query(20, ge=1, le=100)
+    page: int = Query(1, ge=1),
+    page_size: int = Query(30, ge=1, le=100),
 ):
     conn = None
     cur = None
@@ -853,37 +854,48 @@ def quick_search_building(
 
         keyword = (q or "").strip()
 
+        where_sql = "WHERE delete_flag = FALSE"
+        where_params: List[Any] = []
         if keyword:
-            cur.execute(
-                """
-                SELECT bd_number, address, bd_name, sale_price, price_per_pyeong
-                FROM building_info
-                WHERE delete_flag = FALSE
-                  AND (
-                        CAST(bd_number AS TEXT) ILIKE %s
-                     OR address ILIKE %s
-                     OR bd_name ILIKE %s
-                  )
-                ORDER BY update_time DESC, bd_number DESC
-                LIMIT %s
-                """,
-                (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%", limit)
-            )
-        else:
-            cur.execute(
-                """
-                SELECT bd_number, address, bd_name, sale_price, price_per_pyeong
-                FROM building_info
-                WHERE delete_flag = FALSE
-                ORDER BY update_time DESC, bd_number DESC
-                LIMIT %s
-                """,
-                (limit,)
-            )
+            where_sql += """
+                AND (
+                    CAST(bd_number AS TEXT) ILIKE %s
+                    OR address ILIKE %s
+                    OR bd_name ILIKE %s
+                )
+            """
+            keyword_like = f"%{keyword}%"
+            where_params.extend([keyword_like, keyword_like, keyword_like])
+
+        count_sql = f"SELECT COUNT(*) FROM building_info {where_sql}"
+        cur.execute(count_sql, tuple(where_params))
+        total_count = cur.fetchone()[0] or 0
+
+        total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+        safe_page = min(page, total_pages) if total_pages > 0 else 1
+        offset = (safe_page - 1) * page_size
+
+        cur.execute(
+            f"""
+            SELECT bd_number, address, bd_name, sale_price, price_per_pyeong
+            FROM building_info
+            {where_sql}
+            ORDER BY update_time DESC, bd_number DESC
+            LIMIT %s OFFSET %s
+            """,
+            tuple(where_params + [page_size, offset])
+        )
 
         rows = cur.fetchall()
         columns = [desc[0] for desc in cur.description]
-        return [dict(zip(columns, row)) for row in rows]
+        items = [dict(zip(columns, row)) for row in rows]
+        return {
+            "items": items,
+            "total_count": total_count,
+            "page": safe_page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
