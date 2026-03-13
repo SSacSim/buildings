@@ -46,6 +46,7 @@ let latestBuildingMapQueryKey = "";
 let latestBuildingMapCacheReady = false;
 let latestBuildingMapFetchPromise = null;
 let hasExecutedBuildingSearch = false;
+let isMainTitleRefreshing = false;
 
 function resolveDisplayName(user) {
     const displayName = String(user?.display_name || "").trim();
@@ -406,6 +407,17 @@ function unifiedSearch() {
         return;
     }
     search();
+}
+
+async function refreshMainDashboardByTitle() {
+    if (isMainTitleRefreshing) return;
+    isMainTitleRefreshing = true;
+
+    const titleEl = document.getElementById('mainDashboardTitle');
+    if (titleEl) titleEl.classList.add('animate-pulse', 'opacity-70');
+    window.setTimeout(() => {
+        window.location.reload();
+    }, 120);
 }
 
 function buildMainSearchMapItems(items) {
@@ -1097,6 +1109,18 @@ document.addEventListener('DOMContentLoaded', () => {
         .addEventListener('keydown', e => {
             if (e.key === 'Enter') unifiedSearch();
         });
+
+    const dashboardTitle = document.getElementById('mainDashboardTitle');
+    if (dashboardTitle) {
+        dashboardTitle.addEventListener('click', () => {
+            refreshMainDashboardByTitle();
+        });
+        dashboardTitle.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            refreshMainDashboardByTitle();
+        });
+    }
 
     const advApplyBtn = document.getElementById('advancedFilterApplyBtn');
     if (advApplyBtn) advApplyBtn.addEventListener('click', applyAdvancedFilters);
