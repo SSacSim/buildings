@@ -1588,6 +1588,7 @@ def insight_page(request: Request):
 @app.get("/api/insight/overview")
 def get_insight_overview(
     address: str = Query(""),
+    keyword: str = Query(""),
     site_location: str = Query(""),
     types: str = Query(""),
     min_price: Optional[int] = Query(None),
@@ -1668,6 +1669,7 @@ def get_insight_overview(
         address_terms = [term.strip() for term in (address or "").split(",") if term.strip()]
         site_location_terms = [term.strip() for term in (site_location or "").split(",") if term.strip()]
         station_terms = [term.strip() for term in (station_keyword or "").split(",") if term.strip()]
+        normalized_keyword = (keyword or "").strip()
 
         customer_sql += " ORDER BY update_time DESC, customer_number DESC"
 
@@ -1790,6 +1792,18 @@ def get_insight_overview(
                 address_ors.append("(COALESCE(address, '') ILIKE %s OR COALESCE(address_detail, '') ILIKE %s)")
                 building_params.extend([f"%{term}%", f"%{term}%"])
             building_sql += " AND (" + " OR ".join(address_ors) + ")"
+
+        if normalized_keyword:
+            keyword_like = f"%{normalized_keyword}%"
+            building_sql += """
+                AND (
+                    COALESCE(bi.address, '') ILIKE %s
+                    OR COALESCE(bi.address_detail, '') ILIKE %s
+                    OR COALESCE(bi.bd_name, '') ILIKE %s
+                    OR COALESCE(bi.nearby_station, '') ILIKE %s
+                )
+            """
+            building_params.extend([keyword_like, keyword_like, keyword_like, keyword_like])
 
         if site_location_terms:
             site_ors = []

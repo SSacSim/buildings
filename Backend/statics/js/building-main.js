@@ -456,16 +456,19 @@ function getMainBuildingMapQueryKey() {
     }
     if (hasAdvancedFilters()) {
         const advanced = collectAdvancedFilters();
-        return `advanced:${JSON.stringify(advanced)}|status:${String(currentcategory || "")}`;
+        const keyword = String(currentAddress || "").trim();
+        return `advanced:${JSON.stringify(advanced)}|keyword:${keyword}|status:${String(currentcategory || "")}`;
     }
     return `simple:${String(currentAddress || "")}|status:${String(currentcategory || "")}`;
 }
 
-function buildAdvancedOverviewParams(advanced, category, page = 1, pageSize = 100) {
+function buildAdvancedOverviewParams(advanced, category, page = 1, pageSize = 100, keyword = "") {
     const params = new URLSearchParams();
     params.set("building_page", String(page));
     params.set("page_size", String(pageSize));
-    params.set("address", advanced.address || currentAddress || "");
+    if (advanced.address) params.set("address", advanced.address);
+    const normalizedKeyword = String(keyword || "").trim();
+    if (normalizedKeyword) params.set("keyword", normalizedKeyword);
     if (advanced.site_location) params.set("site_location", advanced.site_location);
     if (advanced.station_keyword) params.set("station_keyword", advanced.station_keyword);
     if (advanced.station_walk_min) params.set("station_walk_min", advanced.station_walk_min);
@@ -555,8 +558,8 @@ async function fetchAllSimpleSearchRows(address, category) {
     return rows;
 }
 
-async function fetchAllAdvancedSearchRows(advanced, category) {
-    const firstParams = buildAdvancedOverviewParams(advanced, category, 1, 100);
+async function fetchAllAdvancedSearchRows(advanced, category, keyword = "") {
+    const firstParams = buildAdvancedOverviewParams(advanced, category, 1, 100, keyword);
     const firstRes = await fetch(`/api/insight/overview?${firstParams.toString()}`);
     const firstPayload = await firstRes.json();
     const rows = Array.isArray(firstPayload?.buildings) ? [...firstPayload.buildings] : [];
@@ -566,7 +569,7 @@ async function fetchAllAdvancedSearchRows(advanced, category) {
     }
 
     for (let page = 2; page <= totalPages; page += 1) {
-        const params = buildAdvancedOverviewParams(advanced, category, page, 100);
+        const params = buildAdvancedOverviewParams(advanced, category, page, 100, keyword);
         const res = await fetch(`/api/insight/overview?${params.toString()}`);
         const payload = await res.json();
         const pageRows = Array.isArray(payload?.buildings) ? payload.buildings : [];
@@ -603,7 +606,7 @@ async function loadMainSearchMapItems(force = false) {
 
     const fetchPromise = (async () => {
         const rows = hasAdvancedFilters()
-            ? await fetchAllAdvancedSearchRows(collectAdvancedFilters(), currentcategory)
+            ? await fetchAllAdvancedSearchRows(collectAdvancedFilters(), currentcategory, currentAddress)
             : await fetchAllSimpleSearchRows(currentAddress, currentcategory);
 
         updateMainSearchMapItems(rows, { isFullSet: true, queryKey });
@@ -754,7 +757,9 @@ async function fetchBuildingsAdvanced(page, category) {
     const params = new URLSearchParams();
     params.set('building_page', String(page));
     params.set('page_size', '20');
-    params.set('address', advanced.address || currentAddress || '');
+    if (advanced.address) params.set('address', advanced.address);
+    const keyword = String(currentAddress || '').trim();
+    if (keyword) params.set('keyword', keyword);
     if (advanced.site_location) params.set('site_location', advanced.site_location);
     if (advanced.station_keyword) params.set('station_keyword', advanced.station_keyword);
     if (advanced.station_walk_min) params.set('station_walk_min', advanced.station_walk_min);
