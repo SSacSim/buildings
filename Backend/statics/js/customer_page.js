@@ -2972,54 +2972,16 @@ async function searchCustomerMatchBuildings(page = 1) {
     tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">검색 중...</div>';
 
     try {
-        const baseParams = new URLSearchParams(params);
-        baseParams.delete("page");
-        baseParams.delete("page_size");
-        const loadPage = async (pageNo) => {
-            const pageParams = new URLSearchParams(baseParams);
-            pageParams.set("page", String(pageNo));
-            pageParams.set("page_size", "100");
-            const res = await fetch(`/api/customer/match-search?${pageParams.toString()}`);
-            if (!res.ok) throw new Error("match search failed");
-            const payload = await res.json();
-            return parseCustomerMatchPayload(payload, pageNo);
-        };
+        const res = await fetch(`/api/customer/match-search?${params.toString()}`);
+        if (!res.ok) throw new Error("match search failed");
+        const payload = await res.json();
+        const parsed = parseCustomerMatchPayload(payload, customerMatchCurrentPage);
 
-        const firstPage = await loadPage(1);
-        const apiTotalPages = Math.max(1, Number(firstPage.totalPages) || 1);
-        let allItems = Array.isArray(firstPage.items) ? [...firstPage.items] : [];
+        const totalCount = Number(parsed.totalCount) || 0;
+        const totalPages = Math.max(0, Number(parsed.totalPages) || 0);
+        const safePage = Math.max(1, Number(parsed.currentPage) || customerMatchCurrentPage);
+        customerMatchCurrentPage = safePage;
 
-        for (let pageNo = 2; pageNo <= apiTotalPages; pageNo += 1) {
-            const pageData = await loadPage(pageNo);
-            if (Array.isArray(pageData.items) && pageData.items.length) {
-                allItems = allItems.concat(pageData.items);
-            }
-        }
-
-        const rankedItems = allItems
-            .map((item, index) => {
-                const introCompare = resolveIntroComparisonForMatchItem(item);
-                // Sort rule:
-                // 0) price-drop flagged items
-                // 1) non-intro matched items
-                // 2) intro-duplicate items
-                const sortGroup = introCompare.isPriceDrop ? 0 : (introCompare.isIntroDuplicate ? 2 : 1);
-                return {
-                    ...item,
-                    is_intro_duplicate: introCompare.isIntroDuplicate,
-                    is_intro_price_drop: introCompare.isPriceDrop,
-                    _sort_group: sortGroup,
-                    _update_order: index,
-                    _bd_number_sort: parseBdNumber(item?.bd_number) ?? -1,
-                };
-            })
-            .sort((a, b) => {
-                if (a._sort_group !== b._sort_group) return a._sort_group - b._sort_group;
-                if (a._update_order !== b._update_order) return a._update_order - b._update_order;
-                return b._bd_number_sort - a._bd_number_sort;
-            });
-
-        const totalCount = rankedItems.length;
         if (!totalCount) {
             tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">조건에 맞는 매물이 없습니다.</div>';
             setCustomerMatchCount(0);
@@ -3027,11 +2989,7 @@ async function searchCustomerMatchBuildings(page = 1) {
             return;
         }
 
-        const totalPages = Math.ceil(totalCount / CUSTOMER_MATCH_PAGE_SIZE);
-        const safePage = Math.min(Math.max(1, customerMatchCurrentPage), totalPages);
-        customerMatchCurrentPage = safePage;
-        const pageStart = (safePage - 1) * CUSTOMER_MATCH_PAGE_SIZE;
-        const pageItems = rankedItems.slice(pageStart, pageStart + CUSTOMER_MATCH_PAGE_SIZE);
+        const pageItems = Array.isArray(parsed.items) ? parsed.items : [];
 
         tbody.innerHTML = pageItems.map(item => `
             <div class="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 cursor-pointer hover:border-blue-300"

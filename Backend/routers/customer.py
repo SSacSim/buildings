@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import uuid
 import json
+import threading
 
 import sys
 
@@ -18,6 +19,8 @@ router = APIRouter()
 templates = Jinja2Templates(directory="./templates")
 CUSTOMER_PHOTO_BASE_DIR = Path(__file__).resolve().parent.parent / "photo"
 CUSTOMER_IMAGE_SLOTS = {"profile", "card"}
+_customer_schema_ready = False
+_customer_schema_lock = threading.Lock()
 
 
 def _get_kakao_js_app_key() -> str:
@@ -245,84 +248,111 @@ def _reorder_customer_images(cur, customer_number: int, slot: str, image_names: 
 
 
 def ensure_customer_intro_table(conn, cur):
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS customer_intro_property (
-            intro_id BIGSERIAL PRIMARY KEY,
-            customer_number INTEGER NOT NULL,
-            bd_number INTEGER NOT NULL,
-            intro_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            progress_status VARCHAR(255),
-            intro_cost VARCHAR(255),
-            manager_name VARCHAR(255),
-            address VARCHAR(255),
-            bd_name VARCHAR(255),
-            sale_price VARCHAR(255),
-            price_per_pyeong VARCHAR(255),
-            intro_note TEXT,
-            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            delete_flag BOOLEAN DEFAULT FALSE
-        );
-        """
-    )
-    cur.execute(
-        """
-        ALTER TABLE customer_intro_property
-        ADD COLUMN IF NOT EXISTS manager_name VARCHAR(255);
-        """
-    )
-    cur.execute(
-        """
-        ALTER TABLE customer_intro_property
-        ADD COLUMN IF NOT EXISTS intro_cost VARCHAR(255);
-        """
-    )
-    cur.execute(
-        """
-        DO $$
-        BEGIN
-            IF EXISTS (
-                SELECT 1
-                FROM information_schema.columns
-                WHERE table_name = 'customer_intro_property'
-                  AND column_name = 'intro_date'
-                  AND data_type = 'date'
-            ) THEN
-                ALTER TABLE customer_intro_property
-                ALTER COLUMN intro_date TYPE TIMESTAMP
-                USING intro_date::timestamp;
-            END IF;
-        END $$;
-        """
-    )
-    cur.execute(
-        """
-        ALTER TABLE customer_intro_property
-        ALTER COLUMN intro_date SET DEFAULT CURRENT_TIMESTAMP;
-        """
-    )
-    cur.execute(
-        """
-        ALTER TABLE customer_info
-        ADD COLUMN IF NOT EXISTS owned_properties_json TEXT;
-        """
-    )
-    cur.execute(
-        """
-        ALTER TABLE customer_info
-        ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-        """
-    )
-    cur.execute(
-        """
-        ALTER TABLE customer_info
-        ADD COLUMN IF NOT EXISTS desired_price_manwon VARCHAR(255);
-        """
-    )
-    _ensure_customer_image_table(cur)
-    _ensure_customer_match_history_table(cur)
-    conn.commit()
+    global _customer_schema_ready
+    if _customer_schema_ready:
+        return
+
+    with _customer_schema_lock:
+        if _customer_schema_ready:
+            return
+
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS customer_intro_property (
+                intro_id BIGSERIAL PRIMARY KEY,
+                customer_number INTEGER NOT NULL,
+                bd_number INTEGER NOT NULL,
+                intro_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                progress_status VARCHAR(255),
+                intro_cost VARCHAR(255),
+                manager_name VARCHAR(255),
+                address VARCHAR(255),
+                bd_name VARCHAR(255),
+                sale_price VARCHAR(255),
+                price_per_pyeong VARCHAR(255),
+                intro_note TEXT,
+                create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                delete_flag BOOLEAN DEFAULT FALSE
+            );
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE customer_intro_property
+            ADD COLUMN IF NOT EXISTS manager_name VARCHAR(255);
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE customer_intro_property
+            ADD COLUMN IF NOT EXISTS intro_cost VARCHAR(255);
+            """
+        )
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_name = 'customer_intro_property'
+                      AND column_name = 'intro_date'
+                      AND data_type = 'date'
+                ) THEN
+                    ALTER TABLE customer_intro_property
+                    ALTER COLUMN intro_date TYPE TIMESTAMP
+                    USING intro_date::timestamp;
+                END IF;
+            END $$;
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE customer_intro_property
+            ALTER COLUMN intro_date SET DEFAULT CURRENT_TIMESTAMP;
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_customer_intro_property_lookup
+            ON customer_intro_property (customer_number, delete_flag, intro_date DESC, intro_id DESC);
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_customer_intro_property_bd_number
+            ON customer_intro_property (customer_number, delete_flag, bd_number);
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_customer_intro_property_address
+            ON customer_intro_property (customer_number, delete_flag, address);
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE customer_info
+            ADD COLUMN IF NOT EXISTS owned_properties_json TEXT;
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE customer_info
+            ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE customer_info
+            ADD COLUMN IF NOT EXISTS desired_price_manwon VARCHAR(255);
+            """
+        )
+        _ensure_customer_image_table(cur)
+        _ensure_customer_match_history_table(cur)
+        conn.commit()
+        _customer_schema_ready = True
 
 
 @router.get("/customer/new", response_class=HTMLResponse)
@@ -964,7 +994,7 @@ def customer_match_search(
                 bi.location_decide, bi.price_decide, bi.yield_decide, bi.vacancy_decide, bi.limit_decide, bi.loan_decide,
                 bi.land_area_pyeong, bi.gross_area_pyeong, bi.zoning_type, bi.approval_date, bi.elevator, bi.parking_capacity,
                 bi.is_new_site, bi.is_remodeling, bi.is_office_building, bi.is_investment, bi.is_development, bi.is_stable_holding,
-                bi.is_violation_checked
+                bi.is_violation_checked, bi.update_time
             FROM building_info bi
             LEFT JOIN building_memo bm
               ON bi.bd_number = bm.bd_number
@@ -1417,30 +1447,9 @@ def customer_match_search(
         if type_columns:
             sql += " AND (" + " OR ".join([f"COALESCE({col}, FALSE) = TRUE" for col in type_columns]) + ")"
 
-        count_sql = f"SELECT COUNT(*) FROM ({sql}) AS matched_buildings"
-        cur.execute(count_sql, tuple(params))
-        total_count = cur.fetchone()[0] or 0
-
-        total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
-        safe_page = min(page, total_pages) if total_pages > 0 else 1
-        offset = (safe_page - 1) * page_size
-
-        sql += """
-            ORDER BY
-                CASE COALESCE(bm.status, '')
-                    WHEN '완료' THEN 0
-                    WHEN '준비' THEN 1
-                    WHEN '보류' THEN 2
-                    WHEN '매각' THEN 3
-                    ELSE 99
-                END,
-                bi.update_time DESC,
-                bi.bd_number DESC
-            LIMIT %s OFFSET %s
-        """
-        page_params = list(params) + [page_size, offset]
-
-        cur.execute(sql, tuple(page_params))
+        # Global ranking (price-drop first, intro duplicate last, middle by update_time)
+        # is applied in Python after duplicate/price checks are computed.
+        cur.execute(sql, tuple(params))
         rows = cur.fetchall()
         columns = [desc[0] for desc in cur.description]
 
@@ -1454,7 +1463,19 @@ def customer_match_search(
             except (TypeError, ValueError):
                 return None
 
-        intro_rows: List[Dict[str, Any]] = []
+        def _to_sort_timestamp(value: Any) -> float:
+            try:
+                if value is not None and hasattr(value, "timestamp"):
+                    return float(value.timestamp())
+            except Exception:
+                return 0.0
+            return 0.0
+
+        intro_bd_numbers = set()
+        intro_addresses = set()
+        intro_price_by_address_name: Dict[tuple[str, str], int] = {}
+        intro_price_by_address: Dict[str, int] = {}
+        intro_price_by_bd_number: Dict[int, int] = {}
         if customer_number is not None:
             cur.execute(
                 """
@@ -1476,14 +1497,21 @@ def customer_match_search(
                         intro_bd_key = None
                 normalized_intro_address = (intro_address or "").strip()
                 normalized_intro_bd_name = (intro_bd_name or "").strip()
-                intro_rows.append(
-                    {
-                        "bd_number": intro_bd_key,
-                        "address": normalized_intro_address,
-                        "bd_name": normalized_intro_bd_name,
-                        "sale_price": parsed_intro_price,
-                    }
-                )
+                if intro_bd_key is not None:
+                    intro_bd_numbers.add(intro_bd_key)
+                if normalized_intro_address:
+                    intro_addresses.add(normalized_intro_address)
+                if parsed_intro_price is None:
+                    continue
+                if normalized_intro_address and normalized_intro_bd_name:
+                    intro_price_by_address_name.setdefault(
+                        (normalized_intro_address, normalized_intro_bd_name),
+                        parsed_intro_price,
+                    )
+                if normalized_intro_address:
+                    intro_price_by_address.setdefault(normalized_intro_address, parsed_intro_price)
+                if intro_bd_key is not None:
+                    intro_price_by_bd_number.setdefault(intro_bd_key, parsed_intro_price)
 
         items = []
         for row in rows:
@@ -1506,56 +1534,19 @@ def customer_match_search(
             normalized_bd_name = str(item.get("bd_name") or "").strip()
 
             # duplicate flag: 번호 또는 주소 기준으로 소개이력 존재 여부 표시
-            has_intro_by_bd = False
-            has_intro_by_address = False
-            if intro_rows:
-                if bd_key is not None:
-                    has_intro_by_bd = any(
-                        intro_row.get("bd_number") is not None and bd_key == intro_row.get("bd_number")
-                        for intro_row in intro_rows
-                    )
-                if normalized_address:
-                    has_intro_by_address = any(
-                        intro_row.get("address") and normalized_address == intro_row.get("address")
-                        for intro_row in intro_rows
-                    )
+            has_intro_by_bd = bd_key is not None and bd_key in intro_bd_numbers
+            has_intro_by_address = bool(normalized_address and normalized_address in intro_addresses)
 
             is_intro_duplicate = has_intro_by_bd or has_intro_by_address
             item["is_intro_duplicate"] = is_intro_duplicate
 
             intro_price_ref = None
-            if intro_rows:
-                # 1) 주소+건물명 일치 (화면 우측 소개행과 가장 직관적으로 대응)
-                if normalized_address and normalized_bd_name:
-                    for intro_row in intro_rows:
-                        if intro_row.get("sale_price") is None:
-                            continue
-                        if (
-                            intro_row.get("address")
-                            and intro_row.get("bd_name")
-                            and normalized_address == intro_row.get("address")
-                            and normalized_bd_name == intro_row.get("bd_name")
-                        ):
-                            intro_price_ref = intro_row.get("sale_price")
-                            break
-
-                # 2) 주소 일치
-                if intro_price_ref is None and normalized_address:
-                    for intro_row in intro_rows:
-                        if intro_row.get("sale_price") is None:
-                            continue
-                        if intro_row.get("address") and normalized_address == intro_row.get("address"):
-                            intro_price_ref = intro_row.get("sale_price")
-                            break
-
-                # 3) 번호 일치
-                if intro_price_ref is None and bd_key is not None:
-                    for intro_row in intro_rows:
-                        if intro_row.get("sale_price") is None:
-                            continue
-                        if intro_row.get("bd_number") is not None and bd_key == intro_row.get("bd_number"):
-                            intro_price_ref = intro_row.get("sale_price")
-                            break
+            if normalized_address and normalized_bd_name:
+                intro_price_ref = intro_price_by_address_name.get((normalized_address, normalized_bd_name))
+            if intro_price_ref is None and normalized_address:
+                intro_price_ref = intro_price_by_address.get(normalized_address)
+            if intro_price_ref is None and bd_key is not None:
+                intro_price_ref = intro_price_by_bd_number.get(bd_key)
 
             match_sale_price = _to_int_price(item.get("sale_price"))
             is_match_price_lower = bool(
@@ -1569,10 +1560,34 @@ def customer_match_search(
                 is_intro_duplicate
                 and is_match_price_lower
             )
+            item["_sort_group"] = 0 if item["is_intro_price_drop"] else (2 if is_intro_duplicate else 1)
+            item["_update_ts"] = _to_sort_timestamp(item.get("update_time"))
+            item["_bd_sort"] = bd_key if bd_key is not None else -1
             items.append(item)
 
+        if exclude_intro:
+            items = [item for item in items if not item.get("is_intro_duplicate")]
+
+        items.sort(
+            key=lambda item: (
+                int(item.get("_sort_group", 1)),
+                -float(item.get("_update_ts", 0.0)),
+                -int(item.get("_bd_sort", -1)),
+            )
+        )
+
+        total_count = len(items)
+        total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
+        safe_page = min(page, total_pages) if total_pages > 0 else 1
+        offset = (safe_page - 1) * page_size
+        paged_items = items[offset:offset + page_size]
+        for item in paged_items:
+            item.pop("_sort_group", None)
+            item.pop("_update_ts", None)
+            item.pop("_bd_sort", None)
+
         return {
-            "items": items,
+            "items": paged_items,
             "total_count": total_count,
             "page": safe_page,
             "page_size": page_size,
