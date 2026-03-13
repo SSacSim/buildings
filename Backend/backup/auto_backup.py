@@ -16,6 +16,12 @@ _scheduler_lock = threading.Lock()
 _scheduler_thread: Optional[threading.Thread] = None
 _scheduler_stop_event: Optional[threading.Event] = None
 
+FILE_BACKUP_RELATIVE_DIRS = (
+    Path("photo"),
+    Path("save_file"),
+    Path("ppt") / "img",
+)
+
 
 def _to_positive_int(value: Any, default: int) -> int:
     try:
@@ -158,6 +164,23 @@ def _resolve_pg_dump_executable(raw_value: str) -> Optional[str]:
     return resolved
 
 
+def _sync_file_backups(base_dir: Path, output_dir: Path) -> None:
+    for rel_dir in FILE_BACKUP_RELATIVE_DIRS:
+        source_dir = (base_dir / rel_dir).resolve()
+        target_dir = output_dir / rel_dir
+
+        if not source_dir.exists():
+            logger.warning("Skip file backup because source does not exist: %s", source_dir)
+            continue
+        if not source_dir.is_dir():
+            logger.warning("Skip file backup because source is not a directory: %s", source_dir)
+            continue
+
+        target_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source_dir, target_dir, dirs_exist_ok=True, copy_function=shutil.copy2)
+        logger.info("File backup synced: %s -> %s", source_dir, target_dir)
+
+
 def _run_backup_once(config: Dict[str, Any]) -> bool:
     state_file: Path = config["state_file"]
     interval_seconds = config["interval_seconds"]
@@ -205,6 +228,7 @@ def _run_backup_once(config: Dict[str, Any]) -> bool:
 
     try:
         subprocess.run(cmd, check=True, env=env, capture_output=True, text=True)
+        _sync_file_backups(config["base_dir"], output_dir)
         _save_state(state_file, backup_file, now_ts)
         _cleanup_old_backups(output_dir, config["retention_days"])
         logger.info("PostgreSQL backup completed: %s", backup_file)
@@ -225,6 +249,7 @@ def _scheduler_loop(
     while not stop_event.is_set():
         try:
             config = _load_config(settings_loader, base_dir)
+            config["base_dir"] = base_dir
             if config["enabled"]:
                 _run_backup_once(config)
             wait_seconds = config["check_interval_seconds"]
