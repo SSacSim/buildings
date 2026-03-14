@@ -834,6 +834,7 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
                     "key": VWORLD_INDVD_LAND_PRICE_KEY,
                     "domain": VWORLD_INDVD_LAND_PRICE_DOMAIN,
                     "format": "json",
+                    "numOfRows": 1000,
                 },
                 timeout=8,
             )
