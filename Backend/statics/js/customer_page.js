@@ -15,6 +15,7 @@ const CUSTOMER_MATCH_HISTORY_MAX_ITEMS = 50;
 let customerMatchHistoryItems = [];
 let currentMatchHistoryConditions = null;
 let selectedHistoryCompareId = "";
+let customerSidebarTab = "intro";
 let activeMatchSectors = new Set();
 let matchSectorToggleInitialized = false;
 const MATCH_SECTOR_KEY_FALLBACK = [
@@ -796,6 +797,297 @@ async function loadCurrentIntroManagerName() {
     } catch (e) {
         console.warn("failed to load current intro manager", e);
     }
+}
+
+function getDefaultCustomerHistoryWriter() {
+    return getDefaultIntroManagerName();
+}
+
+function formatCustomerHistoryWriteTime(date = new Date()) {
+    const yy = String(date.getFullYear()).slice(-2);
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    const hours24 = date.getHours();
+    const period = hours24 >= 12 ? "오후" : "오전";
+    const hour12 = hours24 % 12 || 12;
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    return `${yy}-${mm}-${dd} ${period} ${hour12}:${minutes}`;
+}
+
+function getCustomerHistoryListElement() {
+    return document.getElementById("customerHistoryList");
+}
+
+function syncCustomerHistoryEmptyState() {
+    const list = getCustomerHistoryListElement();
+    if (!list) return;
+
+    const hasEntry = Boolean(list.querySelector('[data-history-entry="1"]'));
+    const emptyEl = list.querySelector('[data-history-empty="1"]');
+
+    if (hasEntry) {
+        if (emptyEl) emptyEl.remove();
+        return;
+    }
+    if (emptyEl) return;
+
+    const placeholder = document.createElement("div");
+    placeholder.dataset.historyEmpty = "1";
+    placeholder.className = "py-8 text-slate-400 text-center";
+    placeholder.textContent = "진행 내역이 없습니다.";
+    list.appendChild(placeholder);
+}
+
+function setCustomerSidebarTab(tab) {
+    customerSidebarTab = tab === "history" ? "history" : "intro";
+
+    const introBtn = document.getElementById("customerSidebarIntroTabBtn");
+    const historyBtn = document.getElementById("customerSidebarHistoryTabBtn");
+    const introPanel = document.getElementById("customerIntroPanel");
+    const historyPanel = document.getElementById("customerHistoryPanel");
+    const introToolbar = document.getElementById("customerIntroToolbar");
+
+    if (introPanel) introPanel.classList.toggle("hidden", customerSidebarTab !== "intro");
+    if (historyPanel) {
+        historyPanel.classList.toggle("hidden", customerSidebarTab !== "history");
+        historyPanel.classList.toggle("flex", customerSidebarTab === "history");
+    }
+    if (introToolbar) introToolbar.classList.toggle("hidden", customerSidebarTab !== "intro");
+
+    if (introBtn) {
+        introBtn.classList.toggle("bg-white", customerSidebarTab === "intro");
+        introBtn.classList.toggle("text-slate-900", customerSidebarTab === "intro");
+        introBtn.classList.toggle("bg-slate-600", customerSidebarTab !== "intro");
+        introBtn.classList.toggle("text-slate-200", customerSidebarTab !== "intro");
+        introBtn.classList.toggle("hover:bg-slate-500", customerSidebarTab !== "intro");
+    }
+    if (historyBtn) {
+        historyBtn.classList.toggle("bg-white", customerSidebarTab === "history");
+        historyBtn.classList.toggle("text-slate-900", customerSidebarTab === "history");
+        historyBtn.classList.toggle("bg-slate-600", customerSidebarTab !== "history");
+        historyBtn.classList.toggle("text-slate-200", customerSidebarTab !== "history");
+        historyBtn.classList.toggle("hover:bg-slate-500", customerSidebarTab !== "history");
+    }
+}
+
+function getCustomerHistoryEditHTML({ time, writer = "", content = "" }) {
+    const resolvedWriter = String(writer || "").trim() || getDefaultCustomerHistoryWriter();
+    return `
+        <div class="flex justify-between items-center font-bold text-emerald-700 mb-2">
+            <span data-role="history-time">${escapeMatchHistoryHtml(time)}</span>
+            <div class="flex gap-1.5 items-center">
+                <input type="text"
+                    value="${escapeMatchHistoryHtml(resolvedWriter)}"
+                    placeholder="작성자"
+                    class="w-16 h-6 bg-white border border-slate-300 px-1.5 text-[11px] font-bold outline-none rounded">
+
+                <button type="button" onclick="confirmCustomerHistory(this)"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded shadow-sm text-[10px]">
+                    저장
+                </button>
+
+                <button type="button" onclick="cancelCustomerHistoryEdit(this)"
+                    class="bg-slate-400 hover:bg-slate-500 text-white px-2.5 py-1 rounded shadow-sm text-[10px]">
+                    취소
+                </button>
+            </div>
+        </div>
+
+        <textarea
+            placeholder="진행 내용을 입력하세요..."
+            class="h_memo w-full max-w-full p-2 bg-white border border-slate-300 outline-none text-[12px] resize-y overflow-auto rounded-md h-16 min-h-[4rem] shadow-inner"
+        >${escapeMatchHistoryHtml(content)}</textarea>
+    `;
+}
+
+function getCustomerHistoryViewHTML({ time = "", writer = "", memo = "" }) {
+    return `
+        <div class="flex justify-between font-bold text-blue-600">
+            <div class="flex items-center gap-2">
+                <span class="h_time">${escapeMatchHistoryHtml(time)}</span>
+                <button type="button" onclick="editCustomerHistory(this)"
+                    class="text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[수정]</button>
+                <button type="button" onclick="deleteCustomerHistory(this)"
+                    class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[삭제]</button>
+            </div>
+            <span class="h_writer">${escapeMatchHistoryHtml(writer)}</span>
+        </div>
+        <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${escapeMatchHistoryHtml(memo)}</p>
+    `;
+}
+
+function getCurrentCustomerHistoryData() {
+    const list = getCustomerHistoryListElement();
+    if (!list) return [];
+
+    return Array.from(list.querySelectorAll('[data-history-entry="1"]'))
+        .map((row) => {
+            const time = String(
+                row.querySelector(".h_time")?.textContent
+                || row.querySelector('[data-role="history-time"]')?.textContent
+                || row.dataset.historyTime
+                || ""
+            ).trim();
+            const writer = String(
+                row.querySelector('input[placeholder="작성자"]')?.value
+                || row.querySelector(".h_writer")?.textContent
+                || getDefaultCustomerHistoryWriter()
+                || "작성자"
+            ).trim();
+            const memoEl = row.querySelector("textarea") || row.querySelector(".h_memo");
+            const memo = memoEl
+                ? String("value" in memoEl ? memoEl.value : memoEl.textContent || "")
+                : "";
+
+            if (!String(memo).trim()) return null;
+            return {
+                writer,
+                write_time: time,
+                memo,
+            };
+        })
+        .filter(Boolean);
+}
+
+async function saveCustomerHistoryOnly() {
+    const customerNumber = getMatchHistoryCustomerNumber();
+    if (!customerNumber) return false;
+
+    const res = await fetch(`/api/customer/${customerNumber}/history`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            history_data: getCurrentCustomerHistoryData()
+        })
+    });
+    if (!res.ok) throw new Error("customer history save failed");
+    return true;
+}
+
+function addCustomerHistoryRow() {
+    const list = getCustomerHistoryListElement();
+    if (!list) return;
+
+    const time = formatCustomerHistoryWriteTime(new Date());
+    const newRow = document.createElement("div");
+    newRow.dataset.historyEntry = "1";
+    newRow.dataset.historyTime = time;
+    newRow.className = "customer-history-edit-row py-3 border-b border-emerald-100 bg-emerald-50/30 px-2 animate-in fade-in duration-300";
+    newRow.innerHTML = getCustomerHistoryEditHTML({ time });
+
+    const emptyEl = list.querySelector('[data-history-empty="1"]');
+    if (emptyEl) emptyEl.remove();
+    list.insertBefore(newRow, list.firstChild);
+}
+
+async function confirmCustomerHistory(btn) {
+    const row = btn.closest('[data-history-entry="1"]');
+    if (!row) return;
+
+    const time = String(
+        row.querySelector('[data-role="history-time"]')?.textContent
+        || row.dataset.historyTime
+        || ""
+    ).trim();
+    const writer = String(
+        row.querySelector('input[placeholder="작성자"]')?.value
+        || getDefaultCustomerHistoryWriter()
+        || "작성자"
+    ).trim();
+    const memo = String(row.querySelector("textarea")?.value || "");
+
+    if (!memo.trim()) {
+        alert("내용을 입력하세요.");
+        return;
+    }
+
+    row.dataset.historyTime = time;
+    row.className = "customer-history-row history-row py-2 border-b border-slate-200 group";
+    row.innerHTML = getCustomerHistoryViewHTML({ time, writer, memo });
+    syncCustomerHistoryEmptyState();
+
+    try {
+        await saveCustomerHistoryOnly();
+    } catch (err) {
+        console.error(err);
+        alert("진행내역 저장에 실패했습니다. 정보 저장하기로 다시 저장해 주세요.");
+    }
+}
+
+function editCustomerHistory(btn) {
+    const row = btn.closest('[data-history-entry="1"]');
+    if (!row) return;
+
+    const time = String(row.querySelector(".h_time")?.textContent || "").trim();
+    const writer = String(row.querySelector(".h_writer")?.textContent || "").trim();
+    const memo = String(row.querySelector(".h_memo")?.textContent || "");
+
+    row._backupHTML = row.innerHTML;
+    row.dataset.historyTime = time;
+    row.className = "customer-history-edit-row py-3 border-b border-emerald-100 bg-emerald-50/30 px-2";
+    row.innerHTML = getCustomerHistoryEditHTML({
+        time,
+        writer,
+        content: memo,
+    });
+}
+
+async function deleteCustomerHistory(btn) {
+    if (!confirm("이 히스토리 기록을 정말로 삭제하시겠습니까?")) return;
+
+    const row = btn.closest('[data-history-entry="1"]');
+    if (!row) return;
+
+    row.remove();
+    syncCustomerHistoryEmptyState();
+
+    try {
+        await saveCustomerHistoryOnly();
+    } catch (err) {
+        console.error(err);
+        alert("진행내역 삭제에 실패했습니다. 정보 저장하기로 다시 저장해 주세요.");
+    }
+}
+
+function cancelCustomerHistoryEdit(btn) {
+    const row = btn.closest('[data-history-entry="1"]');
+    if (!row) return;
+
+    if (row._backupHTML) {
+        row.className = "customer-history-row history-row py-2 border-b border-slate-200 group";
+        row.innerHTML = row._backupHTML;
+        delete row._backupHTML;
+    } else {
+        row.remove();
+        syncCustomerHistoryEmptyState();
+    }
+}
+
+function renderCustomerHistoryItem(data) {
+    const list = getCustomerHistoryListElement();
+    if (!list) return;
+
+    const row = document.createElement("div");
+    row.dataset.historyEntry = "1";
+    row.dataset.historyTime = String(data?.write_time || "").trim();
+    row.className = "customer-history-row history-row py-2 border-b border-slate-200 group";
+    row.innerHTML = getCustomerHistoryViewHTML({
+        time: data?.write_time || "",
+        writer: data?.writer || "작성자",
+        memo: data?.memo || "",
+    });
+    list.appendChild(row);
+}
+
+function bindCustomerHistoryRows(historyList) {
+    const list = getCustomerHistoryListElement();
+    if (!list) return;
+
+    list.innerHTML = "";
+    if (Array.isArray(historyList)) {
+        historyList.forEach((item) => renderCustomerHistoryItem(item));
+    }
+    syncCustomerHistoryEmptyState();
 }
 
 function normalizeDateTimeLocal(value) {
@@ -2138,7 +2430,11 @@ function buildSavePayload() {
             }))
     );
 
-    return { data_detail, intro_properties };
+    return {
+        data_detail,
+        intro_properties,
+        history_data: getCurrentCustomerHistoryData(),
+    };
 }
 
 // save button
@@ -2282,6 +2578,7 @@ async function loadCustomerDetail() {
         ownedRows = [];
         renderIntroRows();
         renderOwnedRows();
+        bindCustomerHistoryRows([]);
         await loadCustomerImages(null);
         return;
     }
@@ -2302,6 +2599,7 @@ async function loadCustomerDetail() {
         }
         bindIntroRows(payload.intro_properties || []);
         bindOwnedRows(payload?.data_detail?.owned_properties_json || "[]");
+        bindCustomerHistoryRows(payload.history_data || []);
         await loadCustomerImages(customerNumber);
     } catch (err) {
         console.error(err);
@@ -3070,6 +3368,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadCurrentIntroManagerName();
     await loadCustomerDetail();
     initializeIntroMatchDropZone();
+    setCustomerSidebarTab("intro");
 
     const customerForm = document.getElementById("customerForm");
     if (customerForm) {
@@ -3083,6 +3382,18 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const addBtn = document.getElementById("addIntroRowBtn");
     if (addBtn) addBtn.addEventListener("click", addIntroRow);
+    const customerSidebarIntroTabBtn = document.getElementById("customerSidebarIntroTabBtn");
+    if (customerSidebarIntroTabBtn) {
+        customerSidebarIntroTabBtn.addEventListener("click", () => setCustomerSidebarTab("intro"));
+    }
+    const customerSidebarHistoryTabBtn = document.getElementById("customerSidebarHistoryTabBtn");
+    if (customerSidebarHistoryTabBtn) {
+        customerSidebarHistoryTabBtn.addEventListener("click", () => setCustomerSidebarTab("history"));
+    }
+    const addCustomerHistoryBtn = document.getElementById("addCustomerHistoryBtn");
+    if (addCustomerHistoryBtn) {
+        addCustomerHistoryBtn.addEventListener("click", addCustomerHistoryRow);
+    }
     const introSearchBtn = document.getElementById("introSearchBtn");
     if (introSearchBtn) introSearchBtn.addEventListener("click", runIntroSearch);
     const introSearchInput = document.getElementById("introSearchInput");

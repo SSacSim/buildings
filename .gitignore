@@ -20,6 +20,8 @@ API_test
 # Local runtime config
 settings.yaml
 
+# agent.md 
+AGENTS.md
 
 __pycache__/
 *.pyc

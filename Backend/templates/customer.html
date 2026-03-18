@@ -464,37 +464,59 @@
         <div id="customerSidebarResizer" class="sidebar-resizer shrink-0" aria-label="소개매물 폭 조절" title="드래그해서 소개매물 영역 폭 조절"></div>
 
         <aside class="w-[560px] flex flex-col gap-2 overflow-y-auto shrink-0 relative" id="rightSidebar">
-            <div class="section-card">
-                <div class="bg-slate-700 text-white text-[13px] px-2 py-1.5 font-bold flex justify-between items-center">
-                    <div class="flex items-center gap-2">
-                        <span>소개 매물(히스토리 내역 정리)</span>
+            <div class="section-card overflow-hidden">
+                <div class="bg-slate-700 text-white text-[13px] px-2 py-1.5 font-bold flex flex-wrap justify-between items-center gap-2">
+                    <div class="flex items-center gap-1">
+                        <button id="customerSidebarIntroTabBtn" type="button"
+                            class="px-3 py-1 rounded bg-white text-slate-900 text-[12px] font-bold">
+                            소개 매물
+                        </button>
+                        <button id="customerSidebarHistoryTabBtn" type="button"
+                            class="px-3 py-1 rounded bg-slate-600 text-slate-200 text-[12px] font-bold hover:bg-slate-500">
+                            진행 내역
+                        </button>
+                    </div>
+                    <div id="customerIntroToolbar" class="flex items-center gap-2">
                         <button id="openCustomerKakaoMapBtn" type="button"
                             class="bg-yellow-400 text-slate-900 px-2.5 py-0.5 rounded text-[11px] font-bold hover:bg-yellow-300 transition-all">
                             카카오
                         </button>
-                    </div>
-                    <div class="flex gap-2">
                         <input id="introSearchInput" type="text" class="w-44 px-2 py-0.5 rounded text-[11px] text-slate-800 font-normal outline-none" placeholder="주소/건물명 검색">
                         <button id="introSearchBtn" type="button" class="hover:underline">[검색]</button>
                         <button id="addIntroRowBtn" type="button" class="hover:underline">[+ 추가]</button>
                     </div>
                 </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-[10px] border-collapse">
-                        <thead>
-                            <tr class="bg-slate-100 border-b border-slate-300 text-slate-600">
-                                <th class="p-1 border-r font-normal whitespace-nowrap w-[44px]">검색</th>
-                                <th class="p-1 border-r font-normal whitespace-nowrap w-[44px]">제거</th>
-                                <th class="p-1 border-r font-normal">주소</th>
-                                <th class="p-1 border-r font-normal whitespace-nowrap w-[104px]">건물명</th>
-                                <th class="p-1 border-r font-normal whitespace-nowrap w-[80px]">매매가</th>
-                                <th class="p-1 border-r font-normal whitespace-nowrap w-[104px]">최근 진행</th>
-                                <th class="p-1 font-normal whitespace-nowrap w-[44px]">+</th>
-                            </tr>
-                        </thead>
-                        <tbody id="introPropertyBody" class="text-center divide-y divide-slate-200">
-                        </tbody>
-                    </table>
+                <div id="customerIntroPanel">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-[10px] border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 border-b border-slate-300 text-slate-600">
+                                    <th class="p-1 border-r font-normal whitespace-nowrap w-[44px]">검색</th>
+                                    <th class="p-1 border-r font-normal whitespace-nowrap w-[44px]">제거</th>
+                                    <th class="p-1 border-r font-normal">주소</th>
+                                    <th class="p-1 border-r font-normal whitespace-nowrap w-[104px]">건물명</th>
+                                    <th class="p-1 border-r font-normal whitespace-nowrap w-[80px]">매매가</th>
+                                    <th class="p-1 border-r font-normal whitespace-nowrap w-[104px]">최근 진행</th>
+                                    <th class="p-1 font-normal whitespace-nowrap w-[44px]">+</th>
+                                </tr>
+                            </thead>
+                            <tbody id="introPropertyBody" class="text-center divide-y divide-slate-200">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="customerHistoryPanel" class="hidden flex flex-col min-h-[520px] bg-white">
+                    <div class="bg-emerald-700 text-white text-[12px] px-2 py-1 font-bold flex justify-between items-center italic shrink-0">
+                        <span>진행 내역 (History)</span>
+                        <button id="addCustomerHistoryBtn" type="button" class="bg-white/20 hover:bg-white/40 text-white px-2 py-0.5 rounded text-[11px] transition-all">
+                            + 추가
+                        </button>
+                    </div>
+                    <div id="customerHistoryContainer" class="flex-1 overflow-y-auto bg-slate-50 text-[11px]">
+                        <div id="customerHistoryList" class="divide-y divide-slate-200 px-2 pb-2">
+                            <div class="py-8 text-slate-400 text-center">진행 내역이 없습니다.</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </aside>

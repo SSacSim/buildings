@@ -77,6 +77,29 @@ def _ensure_customer_match_history_table(cur):
     )
 
 
+def _ensure_customer_working_history_table(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_working_history (
+            wh_number BIGSERIAL PRIMARY KEY,
+            customer_number INTEGER NOT NULL,
+            writer VARCHAR(50),
+            write_time VARCHAR(50),
+            memo TEXT,
+            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            delete_flag BOOLEAN DEFAULT FALSE
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customer_working_history_lookup
+        ON customer_working_history (customer_number, delete_flag, wh_number DESC);
+        """
+    )
+
+
 def _customer_photo_dir(customer_number: int) -> Path:
     return CUSTOMER_PHOTO_BASE_DIR / str(customer_number)
 
@@ -351,6 +374,7 @@ def ensure_customer_intro_table(conn, cur):
         )
         _ensure_customer_image_table(cur)
         _ensure_customer_match_history_table(cur)
+        _ensure_customer_working_history_table(cur)
         conn.commit()
         _customer_schema_ready = True
 
@@ -419,9 +443,22 @@ def get_customer_detail(customer_number: int):
         intro_cols = [desc[0] for desc in cur.description]
         intro_rows = [dict(zip(intro_cols, r)) for r in cur.fetchall()]
 
+        cur.execute(
+            """
+            SELECT writer, write_time, memo
+            FROM customer_working_history
+            WHERE customer_number = %s AND delete_flag = FALSE
+            ORDER BY wh_number ASC
+            """,
+            (customer_number,)
+        )
+        history_cols = [desc[0] for desc in cur.description]
+        history_rows = [dict(zip(history_cols, r)) for r in cur.fetchall()]
+
         return {
             "data_detail": data_detail,
-            "intro_properties": intro_rows
+            "intro_properties": intro_rows,
+            "history_data": history_rows,
         }
     except HTTPException:
         raise
@@ -1636,9 +1673,20 @@ class CustomerIntroProperty(BaseModel):
     intro_note: Optional[str] = None
 
 
+class CustomerHistoryDetail(BaseModel):
+    writer: Optional[str] = ""
+    write_time: Optional[str] = ""
+    memo: Optional[str] = ""
+
+
+class CustomerHistoryUpdate(BaseModel):
+    history_data: List[CustomerHistoryDetail] = Field(default_factory=list)
+
+
 class CustomerCreate(BaseModel):
     data_detail: CustomerInfo
     intro_properties: List[CustomerIntroProperty] = Field(default_factory=list)
+    history_data: List[CustomerHistoryDetail] = Field(default_factory=list)
 
 
 class CustomerDeleteRequest(BaseModel):
@@ -1667,6 +1715,24 @@ def insert_intro_properties(cur, customer_number: int, intro_properties: List[Cu
                 item.sale_price,
                 item.price_per_pyeong,
                 item.intro_note,
+            )
+        )
+
+
+def insert_customer_history(cur, customer_number: int, history_data: List[CustomerHistoryDetail]):
+    for item in history_data:
+        cur.execute(
+            """
+            INSERT INTO customer_working_history (
+                customer_number, writer, write_time, memo, delete_flag
+            )
+            VALUES (%s, %s, %s, %s, FALSE)
+            """,
+            (
+                customer_number,
+                item.writer or "",
+                item.write_time or "",
+                item.memo or "",
             )
         )
 
@@ -1710,6 +1776,7 @@ async def create_customer(data: CustomerCreate):
         cur.execute(sql, params)
 
         insert_intro_properties(cur, new_customer_number, data.intro_properties)
+        insert_customer_history(cur, new_customer_number, data.history_data)
 
         conn.commit()
         return {"status": "created", "customer_number": new_customer_number}
@@ -1774,6 +1841,15 @@ def delete_customer(req: CustomerDeleteRequest):
             (customer_number,)
         )
 
+        cur.execute(
+            """
+            UPDATE customer_working_history
+            SET delete_flag = TRUE, update_time = CURRENT_TIMESTAMP
+            WHERE customer_number = %s AND delete_flag = FALSE
+            """,
+            (customer_number,)
+        )
+
         conn.commit()
         return {"status": "deleted", "customer_number": customer_number}
     except Exception as e:
@@ -1819,7 +1895,16 @@ async def update_customer(customer_number: int, data: CustomerCreate):
             (customer_number,)
         )
 
+        cur.execute(
+            """
+            DELETE FROM customer_working_history
+            WHERE customer_number = %s
+            """,
+            (customer_number,)
+        )
+
         insert_intro_properties(cur, customer_number, data.intro_properties)
+        insert_customer_history(cur, customer_number, data.history_data)
 
         conn.commit()
 
@@ -1828,6 +1913,37 @@ async def update_customer(customer_number: int, data: CustomerCreate):
         if conn:
             conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.put("/api/customer/{customer_number:int}/history")
+async def update_customer_history(customer_number: int, data: CustomerHistoryUpdate):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        cur.execute(
+            """
+            DELETE FROM customer_working_history
+            WHERE customer_number = %s
+            """,
+            (customer_number,)
+        )
+        insert_customer_history(cur, customer_number, data.history_data)
+
+        conn.commit()
+        return {"status": "updated", "customer_number": customer_number}
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=f"history update error: {str(e)}")
     finally:
         if cur:
             cur.close()
