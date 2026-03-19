@@ -62,6 +62,18 @@
             <p id="signupControlMessage" class="hidden text-sm"></p>
         </div>
 
+        <div id="adminBugReportEntrySection"
+             class="hidden mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+            <div>
+                <p class="text-sm font-bold text-slate-800">버그 신고 관리</p>
+                <p class="text-xs text-slate-500">접수된 버그 목록, 본문, 스크린샷, 해결 여부를 확인합니다.</p>
+            </div>
+            <a href="/admin/bug-reports"
+               class="inline-flex w-full items-center justify-center rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-amber-600">
+                버그 신고 관리 열기
+            </a>
+        </div>
+
         <div id="adminNoticeSection"
              class="hidden mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
             <div>
@@ -109,6 +121,7 @@
         const saveBtn = document.getElementById("saveBtn");
 
         const adminSignupControlSection = document.getElementById("adminSignupControlSection");
+        const adminBugReportEntrySection = document.getElementById("adminBugReportEntrySection");
         const signupEnabledToggle = document.getElementById("signupEnabledToggle");
         const signupControlSaveBtn = document.getElementById("signupControlSaveBtn");
         const signupControlMessage = document.getElementById("signupControlMessage");
@@ -278,6 +291,9 @@
             if (adminSignupControlSection) {
                 adminSignupControlSection.classList.toggle("hidden", !isAdmin);
             }
+            if (adminBugReportEntrySection) {
+                adminBugReportEntrySection.classList.toggle("hidden", !isAdmin);
+            }
             if (adminNoticeSection) {
                 adminNoticeSection.classList.toggle("hidden", !isAdmin);
             }
@@ -425,5 +441,6 @@
             setMessage(error.message || "Failed to load account info.", "error");
         });
     </script>
+    <script src="/statics/js/bug-report-widget.js"></script>
 </body>
 </html>

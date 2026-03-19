@@ -43,10 +43,18 @@ mount_BASE_UPLOAD_DIR = BASE_DIR / "save_file"
 mount_BASE_PHOTO_DIR = BASE_DIR / "photo"
 NOTICE_IMAGE_UPLOAD_DIR = mount_BASE_PHOTO_DIR / "notice"
 NOTICE_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+BUG_REPORT_IMAGE_UPLOAD_DIR = mount_BASE_PHOTO_DIR / "bug-report"
+BUG_REPORT_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+BUG_REPORT_MAX_IMAGES = 5
+BUG_REPORT_CONTENT_MAX_LENGTH = 5000
+BUG_REPORT_PAGE_PATH_MAX_LENGTH = 500
+BUG_REPORT_PAGE_URL_MAX_LENGTH = 2000
+BUG_REPORT_PAGE_TITLE_MAX_LENGTH = 200
 # 📁 폴더 없으면 자동 생성
 mount_BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 mount_BASE_PHOTO_DIR.mkdir(parents=True, exist_ok=True)
 NOTICE_IMAGE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+BUG_REPORT_IMAGE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # 정적 파일 등록
 app.mount("/statics", StaticFiles(directory="statics"), name="statics")
@@ -346,6 +354,192 @@ def _get_notice_payload(cur) -> dict:
         "enabled": bool(enabled),
         "update_time": update_time.isoformat() if update_time else None,
         "updated_by": updated_by,
+    }
+
+
+def _ensure_bug_report_tables(cur):
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_bug_report (
+            bug_report_id BIGSERIAL PRIMARY KEY,
+            user_number BIGINT,
+            username VARCHAR(80),
+            display_name VARCHAR(80),
+            page_path VARCHAR(500) NOT NULL DEFAULT '',
+            page_url TEXT NOT NULL DEFAULT '',
+            page_title VARCHAR(200) NOT NULL DEFAULT '',
+            content TEXT NOT NULL DEFAULT '',
+            resolved BOOLEAN NOT NULL DEFAULT FALSE,
+            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_time TIMESTAMP,
+            resolved_by BIGINT
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_bug_report_image (
+            image_id BIGSERIAL PRIMARY KEY,
+            bug_report_id BIGINT NOT NULL REFERENCES app_bug_report (bug_report_id) ON DELETE CASCADE,
+            image_url TEXT NOT NULL,
+            sort_order INTEGER NOT NULL DEFAULT 0,
+            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_app_bug_report_create_time
+        ON app_bug_report (create_time DESC);
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_app_bug_report_resolved_create_time
+        ON app_bug_report (resolved, create_time DESC);
+        """
+    )
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_app_bug_report_image_report_sort
+        ON app_bug_report_image (bug_report_id, sort_order, image_id);
+        """
+    )
+
+
+def _normalize_bug_report_image_url(raw_url: Any) -> str:
+    value = _to_clean_text(raw_url)
+    if not value:
+        return ""
+
+    normalized = value.split("?", 1)[0].split("#", 1)[0]
+    if not normalized.startswith("/photo/bug-report/"):
+        return ""
+
+    file_name = normalized.rsplit("/", 1)[-1]
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", file_name):
+        return ""
+
+    return f"/photo/bug-report/{file_name}"
+
+
+def _fetch_bug_report_image_map(cur, bug_report_ids: List[int]) -> Dict[int, List[str]]:
+    if not bug_report_ids:
+        return {}
+
+    cur.execute(
+        """
+        SELECT bug_report_id, image_url
+        FROM app_bug_report_image
+        WHERE bug_report_id = ANY(%s)
+        ORDER BY bug_report_id ASC, sort_order ASC, image_id ASC
+        """,
+        (bug_report_ids,),
+    )
+
+    image_map: Dict[int, List[str]] = {}
+    for bug_report_id, image_url in cur.fetchall():
+        image_map.setdefault(int(bug_report_id), []).append(_to_clean_text(image_url))
+    return image_map
+
+
+def _serialize_bug_report_row(row, image_urls: Optional[List[str]] = None) -> dict:
+    (
+        bug_report_id,
+        user_number,
+        username,
+        display_name,
+        page_path,
+        page_url,
+        page_title,
+        content,
+        resolved,
+        create_time,
+        update_time,
+        resolved_time,
+        resolved_by,
+    ) = row
+
+    reporter_name = _to_clean_text(display_name) or _to_clean_text(username)
+    if not reporter_name:
+        reporter_name = f"User #{user_number}" if user_number is not None else "Unknown"
+
+    normalized_images = [
+        image_url
+        for image_url in (image_urls or [])
+        if _to_clean_text(image_url)
+    ]
+
+    return {
+        "bug_report_id": int(bug_report_id),
+        "user_number": user_number,
+        "username": _to_clean_text(username),
+        "display_name": _to_clean_text(display_name),
+        "reporter_name": reporter_name,
+        "page_path": _to_clean_text(page_path),
+        "page_url": _to_clean_text(page_url),
+        "page_title": _to_clean_text(page_title),
+        "content": content or "",
+        "resolved": bool(resolved),
+        "status": "resolved" if resolved else "open",
+        "image_urls": normalized_images,
+        "image_count": len(normalized_images),
+        "create_time": create_time.isoformat() if create_time else None,
+        "update_time": update_time.isoformat() if update_time else None,
+        "resolved_time": resolved_time.isoformat() if resolved_time else None,
+        "resolved_by": resolved_by,
+    }
+
+
+def _get_bug_report_payload(cur, bug_report_id: int) -> Optional[dict]:
+    _ensure_bug_report_tables(cur)
+    cur.execute(
+        """
+        SELECT
+            bug_report_id,
+            user_number,
+            username,
+            display_name,
+            page_path,
+            page_url,
+            page_title,
+            content,
+            resolved,
+            create_time,
+            update_time,
+            resolved_time,
+            resolved_by
+        FROM app_bug_report
+        WHERE bug_report_id = %s
+        LIMIT 1
+        """,
+        (bug_report_id,),
+    )
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    image_map = _fetch_bug_report_image_map(cur, [int(bug_report_id)])
+    return _serialize_bug_report_row(row, image_map.get(int(bug_report_id), []))
+
+
+def _get_bug_report_counts(cur) -> dict:
+    _ensure_bug_report_tables(cur)
+
+    cur.execute("SELECT COUNT(*) FROM app_bug_report")
+    total_count = int(cur.fetchone()[0] or 0)
+
+    cur.execute("SELECT COUNT(*) FROM app_bug_report WHERE resolved = FALSE")
+    open_count = int(cur.fetchone()[0] or 0)
+
+    cur.execute("SELECT COUNT(*) FROM app_bug_report WHERE resolved = TRUE")
+    resolved_count = int(cur.fetchone()[0] or 0)
+
+    return {
+        "total": total_count,
+        "open": open_count,
+        "resolved": resolved_count,
     }
 
 
@@ -986,6 +1180,18 @@ class AdminNoticeUpdatePayload(BaseModel):
     enabled: bool = True
 
 
+class BugReportCreatePayload(BaseModel):
+    content: str
+    page_path: Optional[str] = ""
+    page_url: Optional[str] = ""
+    page_title: Optional[str] = ""
+    image_urls: Optional[List[str]] = None
+
+
+class AdminBugReportStatusUpdatePayload(BaseModel):
+    resolved: bool
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, next: str = "/"):
     if request.session.get(AUTH_SESSION_KEY):
@@ -1033,6 +1239,15 @@ def signup_page(request: Request, next: str = "/"):
 def account_page(request: Request):
     return templates.TemplateResponse(
         "account.html",
+        {"request": request},
+    )
+
+
+@app.get("/admin/bug-reports", response_class=HTMLResponse)
+def admin_bug_reports_page(request: Request):
+    _assert_admin_session_user(request)
+    return templates.TemplateResponse(
+        "admin_bug_reports.html",
         {"request": request},
     )
 
@@ -1277,6 +1492,337 @@ def admin_update_notice(payload: AdminNoticeUpdatePayload, request: Request):
         notice = _get_notice_payload(cur)
         request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
         return {"status": "ok", "notice": notice}
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.post("/api/bug-reports/image")
+async def upload_bug_report_image(request: Request, file: UploadFile = File(...)):
+    user = request.session.get(AUTH_SESSION_KEY)
+    if not user:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    if file is None:
+        raise HTTPException(status_code=400, detail="image file is required")
+
+    content_type = _to_clean_text(file.content_type).lower()
+    if content_type and not content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="only image files are allowed")
+
+    extension = _resolve_notice_image_extension(file.filename or "", content_type)
+    if not extension:
+        raise HTTPException(status_code=400, detail="unsupported image format")
+
+    try:
+        raw_bytes = await file.read()
+    finally:
+        await file.close()
+
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="empty image file")
+    if len(raw_bytes) > BUG_REPORT_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"image size must be {BUG_REPORT_IMAGE_MAX_BYTES // (1024 * 1024)}MB or less",
+        )
+
+    saved_name = f"bug_report_{int(time.time())}_{secrets.token_hex(8)}{extension}"
+    saved_path = BUG_REPORT_IMAGE_UPLOAD_DIR / saved_name
+    try:
+        with open(saved_path, "wb") as writer:
+            writer.write(raw_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"failed to save image: {exc}")
+
+    request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+    return {
+        "status": "ok",
+        "url": f"/photo/bug-report/{saved_name}",
+    }
+
+
+@app.post("/api/bug-reports")
+def create_bug_report(payload: BugReportCreatePayload, request: Request):
+    user = request.session.get(AUTH_SESSION_KEY)
+    if not user:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="content is required")
+    if len(content) > BUG_REPORT_CONTENT_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"content must be {BUG_REPORT_CONTENT_MAX_LENGTH} characters or fewer",
+        )
+
+    page_path = _to_clean_text(payload.page_path)
+    page_url = _to_clean_text(payload.page_url)
+    page_title = _to_clean_text(payload.page_title)
+
+    if len(page_path) > BUG_REPORT_PAGE_PATH_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"page_path must be {BUG_REPORT_PAGE_PATH_MAX_LENGTH} characters or fewer",
+        )
+    if len(page_url) > BUG_REPORT_PAGE_URL_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"page_url must be {BUG_REPORT_PAGE_URL_MAX_LENGTH} characters or fewer",
+        )
+    if len(page_title) > BUG_REPORT_PAGE_TITLE_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"page_title must be {BUG_REPORT_PAGE_TITLE_MAX_LENGTH} characters or fewer",
+        )
+
+    normalized_image_urls: List[str] = []
+    for raw_image_url in payload.image_urls or []:
+        normalized_image_url = _normalize_bug_report_image_url(raw_image_url)
+        if not normalized_image_url:
+            raise HTTPException(status_code=400, detail="invalid screenshot reference")
+        if normalized_image_url in normalized_image_urls:
+            continue
+
+        file_name = normalized_image_url.rsplit("/", 1)[-1]
+        image_path = BUG_REPORT_IMAGE_UPLOAD_DIR / file_name
+        if not image_path.is_file():
+            raise HTTPException(status_code=400, detail="uploaded screenshot not found")
+
+        normalized_image_urls.append(normalized_image_url)
+
+    if len(normalized_image_urls) > BUG_REPORT_MAX_IMAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"no more than {BUG_REPORT_MAX_IMAGES} screenshots can be attached",
+        )
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        _ensure_bug_report_tables(cur)
+
+        cur.execute(
+            """
+            INSERT INTO app_bug_report (
+                user_number,
+                username,
+                display_name,
+                page_path,
+                page_url,
+                page_title,
+                content
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING bug_report_id
+            """,
+            (
+                user.get("user_number"),
+                _to_clean_text(user.get("username")),
+                _to_clean_text(user.get("display_name")),
+                page_path,
+                page_url,
+                page_title,
+                content,
+            ),
+        )
+        bug_report_id = int(cur.fetchone()[0])
+
+        for index, image_url in enumerate(normalized_image_urls):
+            cur.execute(
+                """
+                INSERT INTO app_bug_report_image (
+                    bug_report_id,
+                    image_url,
+                    sort_order
+                )
+                VALUES (%s, %s, %s)
+                """,
+                (bug_report_id, image_url, index),
+            )
+
+        bug_report = _get_bug_report_payload(cur, bug_report_id)
+        conn.commit()
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {
+            "status": "ok",
+            "report": bug_report,
+        }
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.get("/api/admin/bug-reports")
+def admin_list_bug_reports(request: Request, status: str = Query("open")):
+    _assert_admin_session_user(request)
+
+    requested_status = _to_clean_text(status).lower() or "open"
+    resolved_filter: Optional[bool]
+    if requested_status in {"open", "unresolved"}:
+        requested_status = "open"
+        resolved_filter = False
+    elif requested_status == "resolved":
+        resolved_filter = True
+    elif requested_status == "all":
+        resolved_filter = None
+    else:
+        raise HTTPException(status_code=400, detail="status must be one of: open, resolved, all")
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        _ensure_bug_report_tables(cur)
+
+        base_query = """
+            SELECT
+                bug_report_id,
+                user_number,
+                username,
+                display_name,
+                page_path,
+                page_url,
+                page_title,
+                content,
+                resolved,
+                create_time,
+                update_time,
+                resolved_time,
+                resolved_by
+            FROM app_bug_report
+        """
+        if resolved_filter is None:
+            cur.execute(
+                base_query
+                + """
+                ORDER BY create_time DESC, bug_report_id DESC
+                LIMIT 200
+                """
+            )
+        else:
+            cur.execute(
+                base_query
+                + """
+                WHERE resolved = %s
+                ORDER BY create_time DESC, bug_report_id DESC
+                LIMIT 200
+                """,
+                (resolved_filter,),
+            )
+
+        rows = cur.fetchall()
+        bug_report_ids = [int(row[0]) for row in rows]
+        image_map = _fetch_bug_report_image_map(cur, bug_report_ids)
+        counts = _get_bug_report_counts(cur)
+        reports = [
+            _serialize_bug_report_row(row, image_map.get(int(row[0]), []))
+            for row in rows
+        ]
+
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {
+            "status": requested_status,
+            "counts": counts,
+            "reports": reports,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.patch("/api/admin/bug-reports/{bug_report_id}")
+def admin_update_bug_report_status(
+    bug_report_id: int,
+    payload: AdminBugReportStatusUpdatePayload,
+    request: Request,
+):
+    user = _assert_admin_session_user(request)
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        _ensure_bug_report_tables(cur)
+
+        cur.execute(
+            """
+            UPDATE app_bug_report
+            SET resolved = %s,
+                resolved_by = CASE WHEN %s THEN %s ELSE NULL END,
+                resolved_time = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE NULL END,
+                update_time = CURRENT_TIMESTAMP
+            WHERE bug_report_id = %s
+            RETURNING
+                bug_report_id,
+                user_number,
+                username,
+                display_name,
+                page_path,
+                page_url,
+                page_title,
+                content,
+                resolved,
+                create_time,
+                update_time,
+                resolved_time,
+                resolved_by
+            """,
+            (
+                payload.resolved,
+                payload.resolved,
+                user.get("user_number"),
+                payload.resolved,
+                bug_report_id,
+            ),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="bug report not found")
+
+        image_map = _fetch_bug_report_image_map(cur, [int(bug_report_id)])
+        report = _serialize_bug_report_row(row, image_map.get(int(bug_report_id), []))
+
+        conn.commit()
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {
+            "status": "ok",
+            "report": report,
+        }
     except HTTPException:
         if conn:
             conn.rollback()
