@@ -463,8 +463,8 @@
 
         <div id="customerSidebarResizer" class="sidebar-resizer shrink-0" aria-label="소개매물 폭 조절" title="드래그해서 소개매물 영역 폭 조절"></div>
 
-        <aside class="w-[560px] flex flex-col gap-2 overflow-y-auto shrink-0 relative" id="rightSidebar">
-            <div class="section-card overflow-hidden">
+        <aside class="w-[560px] flex flex-col gap-2 min-h-0 overflow-hidden shrink-0 relative" id="rightSidebar">
+            <div class="section-card flex-1 min-h-0 flex flex-col overflow-hidden">
                 <div class="bg-slate-700 text-white text-[13px] px-2 py-1.5 font-bold flex flex-wrap justify-between items-center gap-2">
                     <div class="flex items-center gap-1">
                         <button id="customerSidebarIntroTabBtn" type="button"
@@ -486,8 +486,8 @@
                         <button id="addIntroRowBtn" type="button" class="hover:underline">[+ 추가]</button>
                     </div>
                 </div>
-                <div id="customerIntroPanel">
-                    <div class="overflow-x-auto">
+                <div id="customerIntroPanel" class="flex-1 min-h-0 overflow-hidden">
+                    <div class="h-full overflow-auto">
                         <table class="w-full text-[10px] border-collapse">
                             <thead>
                                 <tr class="bg-slate-100 border-b border-slate-300 text-slate-600">
@@ -505,7 +505,7 @@
                         </table>
                     </div>
                 </div>
-                <div id="customerHistoryPanel" class="hidden flex flex-col min-h-[520px] bg-white">
+                <div id="customerHistoryPanel" class="hidden flex-1 min-h-0 flex-col bg-white overflow-hidden">
                     <div class="bg-emerald-700 text-white text-[12px] px-2 py-1 font-bold flex justify-between items-center italic shrink-0">
                         <span>진행 내역 (History)</span>
                         <button id="addCustomerHistoryBtn" type="button" class="bg-white/20 hover:bg-white/40 text-white px-2 py-0.5 rounded text-[11px] transition-all">
