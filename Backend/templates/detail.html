@@ -29,6 +29,40 @@
         .detail-panel-resizer.dragging {
             background: #dbeafe;
         }
+        .status-chip {
+            min-width: 88px;
+            padding: 0.55rem 0.75rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: -0.01em;
+        }
+        .status-chip:focus {
+            outline: none;
+            border-color: #94a3b8;
+            box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.18);
+        }
+        .status-chip--ready {
+            color: #9a6700;
+            border-color: #f7d778;
+            background-color: #fef3c7;
+        }
+        .status-chip--done {
+            color: #1d4ed8;
+            border-color: #9ec5fe;
+            background-color: #dbeafe;
+        }
+        .status-chip--sold {
+            color: #475569;
+            border-color: #cbd5e1;
+            background-color: #e2e8f0;
+        }
+        .status-chip--hold {
+            color: #b42318;
+            border-color: #f4a3a3;
+            background-color: #fee2e2;
+        }
     </style>
 </head>
 <body class="h-screen overflow-hidden flex flex-col">
@@ -41,7 +75,7 @@
 
             <div class="flex items-center ml-2">
                 <span class="text-[10px] text-slate-400 font-bold mr-1 uppercase">상태</span>
-                <select id="status" name="status" form="buildingForm" class="bg-blue-50 text-blue-700 font-bold rounded-2xl px-5 py-3 border-none appearance-none w-20 text-center">
+                <select id="status" name="status" form="buildingForm" class="status-chip status-chip--ready">
                                 <option value="준비">준비</option>
                                 <option value="완료">완료</option>
                                 <option value="매각">매각</option>
@@ -2132,6 +2166,11 @@
                         const displayValue = normalizeTextValue(rawDisplayValue);
                         element.value = displayValue;
 
+                        if (element.id === "status") {
+                            applyStatusSelectTheme();
+                            return;
+                        }
+
                         // 스타일 로직
                         element.style.border = "1px solid #3b82f6";
                         element.style.borderRadius = "8px";
@@ -3720,6 +3759,24 @@
         sidebarLocked = !sidebarLocked;
         sidebarLocked ? applySidebarLock() : removeSidebarLock();
     }
+    const STATUS_SELECT_THEME_CLASS = {
+        "준비": "status-chip--ready",
+        "완료": "status-chip--done",
+        "매각": "status-chip--sold",
+        "보류": "status-chip--hold",
+    };
+
+    function applyStatusSelectTheme() {
+        const statusSelect = document.getElementById("status");
+        if (!statusSelect) return;
+
+        Object.values(STATUS_SELECT_THEME_CLASS).forEach((className) => {
+            statusSelect.classList.remove(className);
+        });
+
+        statusSelect.classList.add(STATUS_SELECT_THEME_CLASS[statusSelect.value] || "status-chip--ready");
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
         // 2. 부모 창(opener)의 변수를 직접 참조
         if (window.opener && typeof window.opener.isLocked !== 'undefined') {
@@ -3745,6 +3802,12 @@
                     runIntroCustomerSearch();
                 }
             });
+        }
+
+        const statusSelect = document.getElementById("status");
+        if (statusSelect) {
+            applyStatusSelectTheme();
+            statusSelect.addEventListener("change", applyStatusSelectTheme);
         }
 
         initLeaseRowDnD();
