@@ -32,6 +32,12 @@
                     gap: 0.5rem;
                     flex-wrap: wrap;
                 }
+                .bug-report-menu {
+                    position: relative;
+                    display: inline-flex;
+                    flex-direction: column;
+                    align-items: flex-end;
+                }
                 .bug-report-trigger {
                     display: inline-flex;
                     align-items: center;
@@ -60,7 +66,7 @@
                     outline: none;
                     box-shadow: 0 0 0 4px rgba(251, 146, 60, 0.18);
                 }
-                .bug-report-trigger.is-floating {
+                .bug-report-menu.is-floating {
                     position: fixed;
                     top: 1rem;
                     right: 1rem;
@@ -72,6 +78,43 @@
                     justify-content: center;
                     width: 1rem;
                     height: 1rem;
+                }
+                .bug-report-dropdown {
+                    position: absolute;
+                    top: calc(100% + 0.55rem);
+                    right: 0;
+                    z-index: 85;
+                    display: none;
+                    min-width: 11rem;
+                    padding: 0.45rem;
+                    border: 1px solid #fed7aa;
+                    border-radius: 1rem;
+                    background: #ffffff;
+                    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.16);
+                }
+                .bug-report-dropdown.is-open {
+                    display: block;
+                }
+                .bug-report-dropdown-item {
+                    display: flex;
+                    width: 100%;
+                    align-items: center;
+                    justify-content: flex-start;
+                    border: 0;
+                    border-radius: 0.75rem;
+                    background: transparent;
+                    color: #334155;
+                    padding: 0.75rem 0.85rem;
+                    font-size: 0.88rem;
+                    font-weight: 700;
+                    line-height: 1.2;
+                    text-decoration: none;
+                    cursor: pointer;
+                    transition: background-color 0.15s ease, color 0.15s ease;
+                }
+                .bug-report-dropdown-item:hover {
+                    background: #fff7ed;
+                    color: #c2410c;
                 }
                 .bug-report-modal {
                     position: fixed;
@@ -143,25 +186,28 @@
                         font-size: 0.88rem;
                         border-radius: 0.8rem;
                     }
-                    .bug-report-trigger.is-floating {
+                    .bug-report-menu.is-floating {
                         top: 0.75rem;
                         right: 0.75rem;
                     }
-                    .bug-report-trigger-label {
-                        display: none;
-                    }
                 }
             </style>
-            <button type="button" class="bug-report-trigger" id="bugReportTriggerBtn" aria-label="버그 신고 열기">
-                <span class="bug-report-trigger-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M9.75 3.75h4.5l.75 1.5H18a2.25 2.25 0 0 1 2.25 2.25v8.25A2.25 2.25 0 0 1 18 18H6a2.25 2.25 0 0 1-2.25-2.25V7.5A2.25 2.25 0 0 1 6 5.25h3l.75-1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                        <path d="M12 9v3.75" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
-                        <circle cx="12" cy="15.75" r=".75" fill="currentColor"/>
-                    </svg>
-                </span>
-                <span class="bug-report-trigger-label">버그 신고</span>
-            </button>
+            <div class="bug-report-menu" id="bugReportMenu">
+                <button type="button" class="bug-report-trigger" id="bugReportTriggerBtn" aria-haspopup="true" aria-expanded="false" aria-label="신고 메뉴 열기">
+                    <span class="bug-report-trigger-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M9.75 3.75h4.5l.75 1.5H18a2.25 2.25 0 0 1 2.25 2.25v8.25A2.25 2.25 0 0 1 18 18H6a2.25 2.25 0 0 1-2.25-2.25V7.5A2.25 2.25 0 0 1 6 5.25h3l.75-1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                            <path d="M12 9v3.75" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                            <circle cx="12" cy="15.75" r=".75" fill="currentColor"/>
+                        </svg>
+                    </span>
+                    <span class="bug-report-trigger-label">신고</span>
+                </button>
+                <div class="bug-report-dropdown" id="bugReportDropdown">
+                    <button type="button" id="bugReportOpenFormBtn" class="bug-report-dropdown-item">버그 신고</button>
+                    <a href="/bug-reports" id="bugReportListLink" class="bug-report-dropdown-item">신고 목록</a>
+                </div>
+            </div>
 
             <div class="bug-report-modal" id="bugReportModal" aria-hidden="true">
                 <div class="bug-report-panel">
@@ -229,7 +275,10 @@
 
         document.body.appendChild(wrapper);
 
+        const menuRoot = document.getElementById("bugReportMenu");
         const triggerBtn = document.getElementById("bugReportTriggerBtn");
+        const dropdown = document.getElementById("bugReportDropdown");
+        const openFormBtn = document.getElementById("bugReportOpenFormBtn");
         const modal = document.getElementById("bugReportModal");
         const closeBtn = document.getElementById("bugReportCloseBtn");
         const cancelBtn = document.getElementById("bugReportCancelBtn");
@@ -287,6 +336,15 @@
                 };
             }
 
+            if (path === "/bug-reports") {
+                return {
+                    mode: "prepend",
+                    element: document.querySelector('a[href="/account"]')?.parentElement
+                        || document.querySelector('a[href="/"]')?.parentElement
+                        || null,
+                };
+            }
+
             if (path.startsWith("/detail/")) {
                 return {
                     mode: "prepend",
@@ -307,20 +365,20 @@
         function mountTriggerButton() {
             const placement = resolveTriggerPlacement();
             if (placement?.mode === "prepend" && placement.element) {
-                placement.element.prepend(triggerBtn);
+                placement.element.prepend(menuRoot);
                 return;
             }
 
             if (placement?.mode === "wrap-target" && placement.element) {
                 const group = ensureActionGroup(placement.element);
                 if (group) {
-                    group.prepend(triggerBtn);
+                    group.prepend(menuRoot);
                     return;
                 }
             }
 
-            triggerBtn?.classList.add("is-floating");
-            document.body.appendChild(triggerBtn);
+            menuRoot?.classList.add("is-floating");
+            document.body.appendChild(menuRoot);
         }
 
         function setMessage(text, type) {
@@ -388,7 +446,27 @@
             });
         }
 
+        function closeMenu() {
+            dropdown?.classList.remove("is-open");
+            triggerBtn?.setAttribute("aria-expanded", "false");
+        }
+
+        function openMenu() {
+            dropdown?.classList.add("is-open");
+            triggerBtn?.setAttribute("aria-expanded", "true");
+        }
+
+        function toggleMenu() {
+            if (!dropdown) return;
+            if (dropdown.classList.contains("is-open")) {
+                closeMenu();
+                return;
+            }
+            openMenu();
+        }
+
         function openModal() {
+            closeMenu();
             updateContext();
             modal.classList.add("is-open");
             modal.setAttribute("aria-hidden", "false");
@@ -520,7 +598,12 @@
 
         mountTriggerButton();
 
-        triggerBtn?.addEventListener("click", openModal);
+        triggerBtn?.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleMenu();
+        });
+        openFormBtn?.addEventListener("click", openModal);
         closeBtn?.addEventListener("click", closeModal);
         cancelBtn?.addEventListener("click", closeModal);
         pickImagesBtn?.addEventListener("click", () => fileInput?.click());
@@ -549,9 +632,19 @@
             }
         });
 
+        document.addEventListener("click", (event) => {
+            if (!menuRoot?.contains(event.target)) {
+                closeMenu();
+            }
+        });
+
         document.addEventListener("keydown", (event) => {
             if (event.key === "Escape" && modal?.classList.contains("is-open")) {
                 closeModal();
+                return;
+            }
+            if (event.key === "Escape" && dropdown?.classList.contains("is-open")) {
+                closeMenu();
             }
         });
 

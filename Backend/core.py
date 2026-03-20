@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.responses import FileResponse
@@ -543,6 +543,75 @@ def _get_bug_report_counts(cur) -> dict:
     }
 
 
+def _normalize_bug_report_status_filter(status: str, default_status: str = "open") -> Tuple[str, Optional[bool]]:
+    requested_status = _to_clean_text(status).lower() or default_status
+    if requested_status in {"open", "unresolved"}:
+        return "open", False
+    if requested_status == "resolved":
+        return "resolved", True
+    if requested_status == "all":
+        return "all", None
+    raise HTTPException(status_code=400, detail="status must be one of: open, resolved, all")
+
+
+def _get_bug_report_list_payload(cur, status: str, default_status: str = "open") -> Dict[str, Any]:
+    requested_status, resolved_filter = _normalize_bug_report_status_filter(status, default_status=default_status)
+
+    _ensure_auth_user_table(cur)
+    _ensure_bug_report_tables(cur)
+
+    base_query = """
+        SELECT
+            bug_report_id,
+            user_number,
+            username,
+            display_name,
+            page_path,
+            page_url,
+            page_title,
+            content,
+            resolved,
+            create_time,
+            update_time,
+            resolved_time,
+            resolved_by
+        FROM app_bug_report
+    """
+    if resolved_filter is None:
+        cur.execute(
+            base_query
+            + """
+            ORDER BY create_time DESC, bug_report_id DESC
+            LIMIT 200
+            """
+        )
+    else:
+        cur.execute(
+            base_query
+            + """
+            WHERE resolved = %s
+            ORDER BY create_time DESC, bug_report_id DESC
+            LIMIT 200
+            """,
+            (resolved_filter,),
+        )
+
+    rows = cur.fetchall()
+    bug_report_ids = [int(row[0]) for row in rows]
+    image_map = _fetch_bug_report_image_map(cur, bug_report_ids)
+    counts = _get_bug_report_counts(cur)
+    reports = [
+        _serialize_bug_report_row(row, image_map.get(int(row[0]), []))
+        for row in rows
+    ]
+
+    return {
+        "status": requested_status,
+        "counts": counts,
+        "reports": reports,
+    }
+
+
 def _is_signup_enabled(cur) -> bool:
     _ensure_auth_config_table(cur)
     cur.execute(
@@ -560,10 +629,15 @@ def _is_admin_session_user(user: Optional[dict]) -> bool:
     return bool(user and user.get("admin_flag"))
 
 
-def _assert_admin_session_user(request: Request) -> dict:
+def _assert_session_user(request: Request) -> dict:
     user = request.session.get(AUTH_SESSION_KEY)
     if not user:
         raise HTTPException(status_code=401, detail="authentication required")
+    return user
+
+
+def _assert_admin_session_user(request: Request) -> dict:
+    user = _assert_session_user(request)
     if not _is_admin_session_user(user):
         raise HTTPException(status_code=403, detail="admin permission required")
     return user
@@ -1243,12 +1317,45 @@ def account_page(request: Request):
     )
 
 
+@app.get("/bug-reports", response_class=HTMLResponse)
+def bug_reports_page(request: Request) -> HTMLResponse:
+    _assert_session_user(request)
+    return templates.TemplateResponse(
+        "admin_bug_reports.html",
+        {
+            "request": request,
+            "bug_report_page_title": "버그 신고 목록",
+            "bug_report_heading": "버그 신고 목록",
+            "bug_report_description": "모든 사용자가 접수된 신고를 읽기 전용으로 확인할 수 있습니다.",
+            "bug_report_api_path": "/api/bug-reports",
+            "bug_report_allow_resolve": False,
+            "bug_report_initial_status": "all",
+            "bug_report_secondary_href": "/account",
+            "bug_report_secondary_label": "계정으로",
+            "bug_report_primary_href": "/",
+            "bug_report_primary_label": "메인으로",
+        },
+    )
+
+
 @app.get("/admin/bug-reports", response_class=HTMLResponse)
-def admin_bug_reports_page(request: Request):
+def admin_bug_reports_page(request: Request) -> HTMLResponse:
     _assert_admin_session_user(request)
     return templates.TemplateResponse(
         "admin_bug_reports.html",
-        {"request": request},
+        {
+            "request": request,
+            "bug_report_page_title": "버그 신고 관리",
+            "bug_report_heading": "버그 신고 관리",
+            "bug_report_description": "접수된 버그 내용을 확인하고 해결 여부를 변경합니다.",
+            "bug_report_api_path": "/api/admin/bug-reports",
+            "bug_report_allow_resolve": True,
+            "bug_report_initial_status": "open",
+            "bug_report_secondary_href": "/account",
+            "bug_report_secondary_label": "설정으로",
+            "bug_report_primary_href": "/",
+            "bug_report_primary_label": "메인으로",
+        },
     )
 
 
@@ -1677,81 +1784,41 @@ def create_bug_report(payload: BugReportCreatePayload, request: Request):
             conn.close()
 
 
-@app.get("/api/admin/bug-reports")
-def admin_list_bug_reports(request: Request, status: str = Query("open")):
-    _assert_admin_session_user(request)
-
-    requested_status = _to_clean_text(status).lower() or "open"
-    resolved_filter: Optional[bool]
-    if requested_status in {"open", "unresolved"}:
-        requested_status = "open"
-        resolved_filter = False
-    elif requested_status == "resolved":
-        resolved_filter = True
-    elif requested_status == "all":
-        resolved_filter = None
-    else:
-        raise HTTPException(status_code=400, detail="status must be one of: open, resolved, all")
+@app.get("/api/bug-reports")
+def list_bug_reports(request: Request, status: str = Query("all")) -> Dict[str, Any]:
+    _assert_session_user(request)
 
     conn = None
     cur = None
     try:
         conn = DB_utils.join_db()
         cur = conn.cursor()
-        _ensure_auth_user_table(cur)
-        _ensure_bug_report_tables(cur)
-
-        base_query = """
-            SELECT
-                bug_report_id,
-                user_number,
-                username,
-                display_name,
-                page_path,
-                page_url,
-                page_title,
-                content,
-                resolved,
-                create_time,
-                update_time,
-                resolved_time,
-                resolved_by
-            FROM app_bug_report
-        """
-        if resolved_filter is None:
-            cur.execute(
-                base_query
-                + """
-                ORDER BY create_time DESC, bug_report_id DESC
-                LIMIT 200
-                """
-            )
-        else:
-            cur.execute(
-                base_query
-                + """
-                WHERE resolved = %s
-                ORDER BY create_time DESC, bug_report_id DESC
-                LIMIT 200
-                """,
-                (resolved_filter,),
-            )
-
-        rows = cur.fetchall()
-        bug_report_ids = [int(row[0]) for row in rows]
-        image_map = _fetch_bug_report_image_map(cur, bug_report_ids)
-        counts = _get_bug_report_counts(cur)
-        reports = [
-            _serialize_bug_report_row(row, image_map.get(int(row[0]), []))
-            for row in rows
-        ]
-
+        payload = _get_bug_report_list_payload(cur, status, default_status="all")
         request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
-        return {
-            "status": requested_status,
-            "counts": counts,
-            "reports": reports,
-        }
+        return payload
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.get("/api/admin/bug-reports")
+def admin_list_bug_reports(request: Request, status: str = Query("open")) -> Dict[str, Any]:
+    _assert_admin_session_user(request)
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        payload = _get_bug_report_list_payload(cur, status, default_status="open")
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return payload
     except HTTPException:
         raise
     except Exception as e:

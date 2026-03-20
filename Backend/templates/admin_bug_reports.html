@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>버그 신고 관리</title>
+    <title>{{ bug_report_page_title or "버그 신고 목록" }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
@@ -14,17 +14,19 @@
     <div class="border-b border-slate-200 bg-white/90 backdrop-blur">
         <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-5 py-4 sm:px-6">
             <div>
-                <h1 class="text-2xl font-bold">버그 신고 관리</h1>
-                <p class="mt-1 text-sm text-slate-500">접수된 버그 내용을 확인하고 해결 여부를 변경합니다.</p>
+                <h1 class="text-2xl font-bold">{{ bug_report_heading or "버그 신고 목록" }}</h1>
+                <p class="mt-1 text-sm text-slate-500">{{ bug_report_description or "접수된 버그 내용을 확인합니다." }}</p>
             </div>
             <div class="flex items-center gap-2">
-                <a href="/account"
+                {% if bug_report_secondary_href %}
+                <a href="{{ bug_report_secondary_href }}"
                    class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-                    설정으로
+                    {{ bug_report_secondary_label or "계정으로" }}
                 </a>
-                <a href="/"
+                {% endif %}
+                <a href="{{ bug_report_primary_href or '/' }}"
                    class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
-                    메인으로
+                    {{ bug_report_primary_label or "메인으로" }}
                 </a>
             </div>
         </div>
@@ -92,7 +94,9 @@
         const listEl = document.getElementById("bugReportList");
         const filterButtons = Array.from(document.querySelectorAll("[data-status-filter]"));
 
-        let activeStatus = "open";
+        const bugReportListEndpoint = "{{ bug_report_api_path or '/api/bug-reports' }}";
+        const allowBugReportResolve = {{ "true" if bug_report_allow_resolve else "false" }};
+        let activeStatus = "{{ bug_report_initial_status or 'all' }}";
         let loadInFlight = false;
 
         function escapeHtml(value) {
@@ -190,6 +194,17 @@
                     </a>
                 `
                 : "";
+            const toggleButtonHtml = allowBugReportResolve
+                ? `
+                    <button type="button"
+                            data-toggle-report="true"
+                            data-id="${report.bug_report_id}"
+                            data-resolved="${resolved ? "true" : "false"}"
+                            class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-bold text-white ${resolved ? "bg-slate-700 hover:bg-slate-800" : "bg-emerald-600 hover:bg-emerald-700"}">
+                        ${toggleLabel}
+                    </button>
+                `
+                : "";
 
             return `
                 <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-report-card="${report.bug_report_id}">
@@ -224,13 +239,7 @@
                         </div>
                         <div class="flex shrink-0 flex-wrap items-center gap-2">
                             ${pageLinkHtml}
-                            <button type="button"
-                                    data-toggle-report="true"
-                                    data-id="${report.bug_report_id}"
-                                    data-resolved="${resolved ? "true" : "false"}"
-                                    class="inline-flex items-center rounded-lg px-4 py-2 text-sm font-bold text-white ${resolved ? "bg-slate-700 hover:bg-slate-800" : "bg-emerald-600 hover:bg-emerald-700"}">
-                                ${toggleLabel}
-                            </button>
+                            ${toggleButtonHtml}
                         </div>
                     </div>
 
@@ -264,7 +273,7 @@
             loadInFlight = true;
 
             try {
-                const res = await fetch(`/api/admin/bug-reports?status=${encodeURIComponent(activeStatus)}`);
+                const res = await fetch(`${bugReportListEndpoint}?status=${encodeURIComponent(activeStatus)}`);
                 const payload = await res.json().catch(() => ({}));
                 if (!res.ok) {
                     throw new Error(payload.detail || "버그 신고 목록을 불러오지 못했습니다.");
@@ -291,6 +300,7 @@
         });
 
         listEl.addEventListener("click", async (event) => {
+            if (!allowBugReportResolve) return;
             const toggleButton = event.target.closest("[data-toggle-report]");
             if (!toggleButton) return;
 
