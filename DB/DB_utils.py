@@ -137,7 +137,7 @@ def extract_simple_info(conn, address :str ,page : int , category : str) -> dict
                 bi.deposit_price, bi.sale_price, bm.status,
                 bi.location_decide, bi.price_decide, bi.yield_decide,
                 bi.vacancy_decide, bi.limit_decide, bi.loan_decide,
-                bi.yield_rate, bi.land_area_pyeong, bi.land_area_sqm,
+                bi.yield_rate, bi.land_area_pyeong, bi.land_area_sqm, bi.gross_area_pyeong,
                 bi.zoning_type, bi.approval_date, bi.elevator,
                 bi.parking_capacity, bi.building_usage, bi.building_structure , bm.memo, bm.etc_memo,
                 bi.update_time
