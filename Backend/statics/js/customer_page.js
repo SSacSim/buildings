@@ -1092,7 +1092,7 @@ function bindCustomerHistoryRows(historyList) {
 
 function normalizeDateTimeLocal(value) {
     if (!value) return nowLocalDateTimeMinute();
-    const str = String(value).trim();
+    const str = clampDateTimeLocalYearText(String(value).trim());
     if (!str) return nowLocalDateTimeMinute();
 
     const parsed = new Date(str);
@@ -1113,6 +1113,12 @@ function normalizeDateTimeLocal(value) {
     }
 
     return nowLocalDateTimeMinute();
+}
+
+function clampDateTimeLocalYearText(value) {
+    const str = String(value ?? "").trim();
+    if (!str) return "";
+    return str.replace(/^(\d{4})\d+/, "$1");
 }
 
 function formatDateTimeForDisplay(value) {
@@ -1394,7 +1400,7 @@ function renderIntroRows() {
     tbody.innerHTML = filteredRows.map(row => `
         <tr class="border-b border-slate-200">
             <td class="p-1">
-                <button type="button" onclick="openBuildingSearchModal('intro','${row.row_id}')"
+                <button type="button" onclick="openIntroBuildingSearchFromRow('${row.row_id}')"
                     class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
             </td>
             <td class="p-1">
@@ -1402,11 +1408,13 @@ function renderIntroRows() {
                     class="px-2 py-1 text-[10px] whitespace-nowrap rounded bg-red-500 text-white hover:bg-red-600">제거</button>
             </td>
             <td class="p-1 text-left">
-                <input type="text" value="${row.address || ""}" readonly
-                    onclick="openIntroBuildingFromRow('${row.row_id}')"
-                    class="w-full min-w-0 bg-slate-50 px-1.5 py-1 border border-slate-200 rounded text-[11px]"
+                <input type="text" value="${row.address || ""}" ${row.bd_number ? "readonly" : ""}
+                    ${row.bd_number
+                        ? `onclick="openIntroBuildingFromRow('${row.row_id}')"`
+                        : `oninput="updateIntroField('${row.row_id}','address', this.value)" onkeydown="handleIntroAddressKeydown(event, '${row.row_id}')"`}
+                    class="w-full min-w-0 ${row.bd_number ? "bg-slate-50 cursor-pointer" : "bg-white"} px-1.5 py-1 border border-slate-200 rounded text-[11px]"
                     style="min-width: 180px;"
-                    placeholder="주소">
+                    placeholder="${row.bd_number ? "주소" : "주소 입력 후 Enter"}">
             </td>
             <td class="p-1 text-left">
                 <input type="text" value="${row.bd_name || ""}" readonly
@@ -1446,8 +1454,8 @@ function renderIntroRows() {
                             <div class="grid grid-cols-[1.5fr_1fr] gap-2 items-center mb-2">
                                 <div class="flex items-center gap-2">
                                     <span class="text-[11px] font-bold text-slate-600 shrink-0">날짜</span>
-                                    <input type="datetime-local" value="${normalizeDateTimeLocal(detail.intro_date)}"
-                                        oninput="updateIntroDetailField('${row.row_id}','${detail.detail_id}','intro_date', this.value)"
+                                    <input type="datetime-local" value="${normalizeDateTimeLocal(detail.intro_date)}" max="9999-12-31T23:59"
+                                        oninput="updateIntroDetailDateField('${row.row_id}','${detail.detail_id}', this)"
                                         class="w-full px-1.5 py-1 border border-slate-200 rounded text-[11px] bg-white text-slate-700">
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -1592,6 +1600,15 @@ function updateIntroDetailField(rowId, detailId, key, value) {
     detail[key] = value;
 }
 
+function updateIntroDetailDateField(rowId, detailId, inputEl) {
+    if (!inputEl) return;
+    const sanitized = clampDateTimeLocalYearText(inputEl.value);
+    if (sanitized !== inputEl.value) {
+        inputEl.value = sanitized;
+    }
+    updateIntroDetailField(rowId, detailId, "intro_date", sanitized);
+}
+
 function updateIntroDetailCostField(rowId, detailId, inputEl) {
     if (!inputEl) return;
     const formatted = formatThousandsInputValue(inputEl.value);
@@ -1618,25 +1635,36 @@ function removeOwnedRow(rowId) {
     renderOwnedRows();
 }
 
+function updateIntroField(rowId, key, value) {
+    const row = introRows.find(r => r.row_id === rowId);
+    if (!row) return;
+    row[key] = value;
+}
+
 function updateOwnedField(rowId, key, value) {
     const row = ownedRows.find(r => r.row_id === rowId);
     if (!row) return;
     row[key] = value;
 }
 
-function openBuildingSearchModal(kind, rowId) {
+function openBuildingSearchModal(kind, rowId, initialKeyword = "", autoSearch = false) {
     pickingContext = { kind, rowId };
     const modalEl = document.getElementById("buildingSearchModal");
     modalEl.classList.remove("hidden");
     modalEl.classList.add("flex");
 
     const keywordEl = document.getElementById("buildingSearchInput");
-    keywordEl.value = "";
+    keywordEl.value = String(initialKeyword || "");
     keywordEl.focus();
+    keywordEl.select();
 
     const resultBody = document.getElementById("buildingSearchResultBody");
     resultBody.innerHTML = "";
     renderBuildingSearchPagination(0, 1, 0);
+
+    if (autoSearch && keywordEl.value.trim()) {
+        searchBuildingsForIntro(1);
+    }
 }
 
 function closeBuildingSearchModal() {
@@ -1767,6 +1795,18 @@ async function searchBuildingsForIntro(page = 1) {
 
 function openBuildingDetailFromSearch(bdNumber) {
     window.open(`/detail/${bdNumber}`, "_blank");
+}
+
+function openIntroBuildingSearchFromRow(rowId) {
+    const row = introRows.find(r => r.row_id === rowId);
+    openBuildingSearchModal("intro", rowId, row?.address || "", false);
+}
+
+function handleIntroAddressKeydown(event, rowId) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const keyword = String(event.currentTarget?.value || "").trim();
+    openBuildingSearchModal("intro", rowId, keyword, Boolean(keyword));
 }
 
 function openIntroBuildingFromRow(rowId) {
