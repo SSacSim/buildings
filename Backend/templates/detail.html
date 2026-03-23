@@ -1769,15 +1769,8 @@
         return normalized === "" || normalized === "0" || normalized === "0.0" || normalized === "-" || normalized === "NaN";
     }
 
-    function setFieldValueByMode(fieldId, value, mode = "empty_only") {
-        const el = document.getElementById(fieldId);
-        if (!el || el.type === "checkbox") return;
-        if (mode === "empty_only" && !isAutofillTargetEmpty(el.value)) return;
-
-        const normalized = normalizeTextValue(String(value ?? "").trim());
-        if (isAutofillTargetEmpty(normalized)) return;
-
-        el.value = normalized;
+    function applyAutofillFieldStyle(el) {
+        if (!el) return;
         el.style.border = "1px solid #3b82f6";
         el.style.borderRadius = "8px";
         el.style.paddingLeft = "8px";
@@ -1785,6 +1778,55 @@
         el.style.fontWeight = "800";
         el.style.color = "#1e40af";
         el.classList.add("bg-yellow-50");
+    }
+
+    function clearAutofillFieldStyle(el) {
+        if (!el) return;
+        el.style.border = "";
+        el.style.borderRadius = "";
+        el.style.paddingLeft = "";
+        el.style.paddingRight = "";
+        el.style.fontWeight = "";
+        el.style.color = "";
+        el.classList.remove("bg-yellow-50");
+    }
+
+    function formatAutofillDisplayValue(fieldId, value) {
+        const normalized = normalizeTextValue(String(value ?? "").trim());
+        if (isAutofillTargetEmpty(normalized)) return "";
+
+        if (fieldId === "official_price_per_sqm_won") {
+            return formatNumberWithComma(normalized);
+        }
+
+        return normalized;
+    }
+
+    function setFieldValueByMode(fieldId, value, mode = "empty_only") {
+        const el = document.getElementById(fieldId);
+        if (!el || el.type === "checkbox") return;
+        if (mode === "empty_only" && !isAutofillTargetEmpty(el.value)) return;
+
+        const displayValue = formatAutofillDisplayValue(fieldId, value);
+        if (isAutofillTargetEmpty(displayValue)) return;
+
+        el.value = displayValue;
+        applyAutofillFieldStyle(el);
+    }
+
+    function replaceFieldValue(fieldId, value) {
+        const el = document.getElementById(fieldId);
+        if (!el || el.type === "checkbox") return;
+
+        const displayValue = formatAutofillDisplayValue(fieldId, value);
+        if (isAutofillTargetEmpty(displayValue)) {
+            el.value = "";
+            clearAutofillFieldStyle(el);
+            return;
+        }
+
+        el.value = displayValue;
+        applyAutofillFieldStyle(el);
     }
 
     function applyMultiSelectAutofill(groupId, hiddenInputId, rawValue, defaultText, mode = "empty_only") {
@@ -1834,9 +1876,14 @@
         setFieldValueByMode("address", normalizeAutofillAddress(data.address), "overwrite_all");
 
         [
-            "land_category",
             "official_price_per_sqm_won",
             "official_price_per_pyeong_million_date",
+        ].forEach((fieldId) => {
+            replaceFieldValue(fieldId, data[fieldId]);
+        });
+
+        [
+            "land_category",
             "approval_date",
             "land_area_sqm",
             "gross_area_sqm",
@@ -1864,21 +1911,20 @@
             if (el) convertMappedSqm(el);
         });
 
+        calculateOfficialTotalPrice();
+        calculatetotalPrice();
+
         applyLeaseDetailsAutofill(data.lease_details, mode);
         calcParkingTotal();
         if (mode === "overwrite_all") {
             calculatePricePerPyeong();
             calculateLandPricePerPyeong();
-            calculateOfficialTotalPrice();
-            calculatetotalPrice();
             return;
         }
 
         [
             { fieldId: "price_per_total_floor_area", run: calculatePricePerPyeong },
             { fieldId: "price_per_pyeong", run: calculateLandPricePerPyeong },
-            { fieldId: "official_price_per_pyeong_million", run: calculateOfficialTotalPrice },
-            { fieldId: "official_price_total_million", run: calculatetotalPrice },
         ].forEach(({ fieldId, run }) => {
             const el = document.getElementById(fieldId);
             if (!el) return;
@@ -4102,7 +4148,7 @@
 
     }
 
-    ['official_price_per_sqm_won' , 'land_area_sqm'].forEach(id => {
+    ['land_area_sqm'].forEach(id => {
         const el = document.getElementById(id);
         if (!el) return;
 
@@ -4144,23 +4190,36 @@
 
     }
 
-    ['official_price_per_sqm_won'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
+    const officialPricePerSqmEl = document.getElementById('official_price_per_sqm_won');
+    if (officialPricePerSqmEl) {
+        let officialPricePerSqmRaf = 0;
 
-        el.addEventListener('input', function () {
-            const cursor = this.selectionStart;
-            const before = this.value.length;
+        const syncOfficialPricePerSqm = () => {
+            if (officialPricePerSqmRaf) cancelAnimationFrame(officialPricePerSqmRaf);
 
-            this.value = formatNumberWithComma(this.value);
+            officialPricePerSqmRaf = requestAnimationFrame(() => {
+                officialPricePerSqmRaf = 0;
 
-            const after = this.value.length;
-            this.selectionStart = this.selectionEnd =
-                cursor + (after - before);
+                const cursor = officialPricePerSqmEl.selectionStart;
+                const before = officialPricePerSqmEl.value.length;
 
-            calculateOfficialTotalPrice();
+                officialPricePerSqmEl.value = formatNumberWithComma(officialPricePerSqmEl.value);
+
+                const after = officialPricePerSqmEl.value.length;
+                if (typeof cursor === 'number') {
+                    const nextCursor = Math.max(0, cursor + (after - before));
+                    officialPricePerSqmEl.selectionStart = officialPricePerSqmEl.selectionEnd = nextCursor;
+                }
+
+                calculateOfficialTotalPrice();
+                calculatetotalPrice();
+            });
+        };
+
+        ['input', 'keyup', 'compositionend', 'change'].forEach((eventName) => {
+            officialPricePerSqmEl.addEventListener(eventName, syncOfficialPricePerSqm);
         });
-    });
+    }
    
 
     
