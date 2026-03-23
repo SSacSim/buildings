@@ -424,6 +424,32 @@ def _normalize_bug_report_image_url(raw_url: Any) -> str:
     return f"/photo/bug-report/{file_name}"
 
 
+def _normalize_bug_report_image_urls(image_urls: Optional[List[str]]) -> List[str]:
+    normalized_image_urls: List[str] = []
+
+    for raw_image_url in image_urls or []:
+        normalized_image_url = _normalize_bug_report_image_url(raw_image_url)
+        if not normalized_image_url:
+            raise HTTPException(status_code=400, detail="invalid screenshot reference")
+        if normalized_image_url in normalized_image_urls:
+            continue
+
+        file_name = normalized_image_url.rsplit("/", 1)[-1]
+        image_path = BUG_REPORT_IMAGE_UPLOAD_DIR / file_name
+        if not image_path.is_file():
+            raise HTTPException(status_code=400, detail="uploaded screenshot not found")
+
+        normalized_image_urls.append(normalized_image_url)
+
+    if len(normalized_image_urls) > BUG_REPORT_MAX_IMAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"no more than {BUG_REPORT_MAX_IMAGES} screenshots can be attached",
+        )
+
+    return normalized_image_urls
+
+
 def _fetch_bug_report_image_map(cur, bug_report_ids: List[int]) -> Dict[int, List[str]]:
     if not bug_report_ids:
         return {}
@@ -1262,6 +1288,11 @@ class BugReportCreatePayload(BaseModel):
     image_urls: Optional[List[str]] = None
 
 
+class BugReportUpdatePayload(BaseModel):
+    content: str
+    image_urls: Optional[List[str]] = None
+
+
 class AdminBugReportStatusUpdatePayload(BaseModel):
     resolved: bool
 
@@ -1319,7 +1350,7 @@ def account_page(request: Request):
 
 @app.get("/bug-reports", response_class=HTMLResponse)
 def bug_reports_page(request: Request) -> HTMLResponse:
-    _assert_session_user(request)
+    user = _assert_session_user(request)
     return templates.TemplateResponse(
         "admin_bug_reports.html",
         {
@@ -1330,6 +1361,8 @@ def bug_reports_page(request: Request) -> HTMLResponse:
             "bug_report_api_path": "/api/bug-reports",
             "bug_report_allow_resolve": False,
             "bug_report_initial_status": "all",
+            "bug_report_allow_edit_own": True,
+            "bug_report_current_user_number": user.get("user_number"),
             "bug_report_secondary_href": "/account",
             "bug_report_secondary_label": "계정으로",
             "bug_report_primary_href": "/",
@@ -1340,7 +1373,7 @@ def bug_reports_page(request: Request) -> HTMLResponse:
 
 @app.get("/admin/bug-reports", response_class=HTMLResponse)
 def admin_bug_reports_page(request: Request) -> HTMLResponse:
-    _assert_admin_session_user(request)
+    user = _assert_admin_session_user(request)
     return templates.TemplateResponse(
         "admin_bug_reports.html",
         {
@@ -1351,6 +1384,8 @@ def admin_bug_reports_page(request: Request) -> HTMLResponse:
             "bug_report_api_path": "/api/admin/bug-reports",
             "bug_report_allow_resolve": True,
             "bug_report_initial_status": "open",
+            "bug_report_allow_edit_own": True,
+            "bug_report_current_user_number": user.get("user_number"),
             "bug_report_secondary_href": "/account",
             "bug_report_secondary_label": "설정으로",
             "bug_report_primary_href": "/",
@@ -1694,26 +1729,7 @@ def create_bug_report(payload: BugReportCreatePayload, request: Request):
             detail=f"page_title must be {BUG_REPORT_PAGE_TITLE_MAX_LENGTH} characters or fewer",
         )
 
-    normalized_image_urls: List[str] = []
-    for raw_image_url in payload.image_urls or []:
-        normalized_image_url = _normalize_bug_report_image_url(raw_image_url)
-        if not normalized_image_url:
-            raise HTTPException(status_code=400, detail="invalid screenshot reference")
-        if normalized_image_url in normalized_image_urls:
-            continue
-
-        file_name = normalized_image_url.rsplit("/", 1)[-1]
-        image_path = BUG_REPORT_IMAGE_UPLOAD_DIR / file_name
-        if not image_path.is_file():
-            raise HTTPException(status_code=400, detail="uploaded screenshot not found")
-
-        normalized_image_urls.append(normalized_image_url)
-
-    if len(normalized_image_urls) > BUG_REPORT_MAX_IMAGES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"no more than {BUG_REPORT_MAX_IMAGES} screenshots can be attached",
-        )
+    normalized_image_urls = _normalize_bug_report_image_urls(payload.image_urls)
 
     conn = None
     cur = None
@@ -1768,6 +1784,115 @@ def create_bug_report(payload: BugReportCreatePayload, request: Request):
         return {
             "status": "ok",
             "report": bug_report,
+        }
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.patch("/api/bug-reports/{bug_report_id}")
+def update_bug_report(
+    bug_report_id: int,
+    payload: BugReportUpdatePayload,
+    request: Request,
+):
+    user = _assert_session_user(request)
+
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="content is required")
+    if len(content) > BUG_REPORT_CONTENT_MAX_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"content must be {BUG_REPORT_CONTENT_MAX_LENGTH} characters or fewer",
+        )
+
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        _ensure_auth_user_table(cur)
+        _ensure_bug_report_tables(cur)
+
+        cur.execute(
+            """
+            SELECT user_number
+            FROM app_bug_report
+            WHERE bug_report_id = %s
+            LIMIT 1
+            """,
+            (bug_report_id,),
+        )
+        owner_row = cur.fetchone()
+        if not owner_row:
+            raise HTTPException(status_code=404, detail="bug report not found")
+
+        owner_user_number = owner_row[0]
+        if str(owner_user_number) != str(user.get("user_number")):
+            raise HTTPException(
+                status_code=403,
+                detail="only the bug report author can update this report",
+            )
+
+        normalized_image_urls = (
+            _normalize_bug_report_image_urls(payload.image_urls)
+            if payload.image_urls is not None
+            else None
+        )
+
+        cur.execute(
+            """
+            UPDATE app_bug_report
+            SET content = %s,
+                update_time = CURRENT_TIMESTAMP
+            WHERE bug_report_id = %s
+            RETURNING bug_report_id
+            """,
+            (
+                content,
+                bug_report_id,
+            ),
+        )
+        cur.fetchone()
+
+        if normalized_image_urls is not None:
+            cur.execute(
+                """
+                DELETE FROM app_bug_report_image
+                WHERE bug_report_id = %s
+                """,
+                (bug_report_id,),
+            )
+            for index, image_url in enumerate(normalized_image_urls):
+                cur.execute(
+                    """
+                    INSERT INTO app_bug_report_image (
+                        bug_report_id,
+                        image_url,
+                        sort_order
+                    )
+                    VALUES (%s, %s, %s)
+                    """,
+                    (bug_report_id, image_url, index),
+                )
+
+        report = _get_bug_report_payload(cur, bug_report_id)
+        conn.commit()
+        request.session[AUTH_SESSION_LAST_ACTIVITY_KEY] = int(time.time())
+        return {
+            "status": "ok",
+            "report": report,
         }
     except HTTPException:
         if conn:

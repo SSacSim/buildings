@@ -95,7 +95,11 @@
         const filterButtons = Array.from(document.querySelectorAll("[data-status-filter]"));
 
         const bugReportListEndpoint = "{{ bug_report_api_path or '/api/bug-reports' }}";
-        const allowBugReportResolve = {{ "true" if bug_report_allow_resolve else "false" }};
+        const allowBugReportResolve = "{{ 'true' if bug_report_allow_resolve else 'false' }}" === "true";
+        const allowBugReportEditOwn = "{{ 'true' if bug_report_allow_edit_own else 'false' }}" === "true";
+        const currentBugReportUserNumber = JSON.parse('{{ bug_report_current_user_number|tojson }}');
+
+        const bugReportMaxImages = 5;
         let activeStatus = "{{ bug_report_initial_status or 'all' }}";
         let loadInFlight = false;
 
@@ -123,9 +127,205 @@
                 return;
             }
 
-            messageEl.classList.remove("hidden", "text-red-600", "text-emerald-600");
-            messageEl.classList.add(type === "success" ? "text-emerald-600" : "text-red-600");
+            messageEl.classList.remove("hidden", "text-red-600", "text-emerald-600", "text-slate-500");
+            if (type === "success") {
+                messageEl.classList.add("text-emerald-600");
+            } else if (type === "info") {
+                messageEl.classList.add("text-slate-500");
+            } else {
+                messageEl.classList.add("text-red-600");
+            }
             messageEl.textContent = text;
+        }
+
+        async function uploadBugReportImage(file) {
+            if (!file) {
+                throw new Error("이미지 파일이 없습니다.");
+            }
+            if (!String(file.type || "").toLowerCase().startsWith("image/")) {
+                throw new Error("이미지 파일만 첨부할 수 있습니다.");
+            }
+
+            const formData = new FormData();
+            formData.append("file", file, file.name || "bug-report-image.png");
+
+            const res = await fetch("/api/bug-reports/image", {
+                method: "POST",
+                body: formData,
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(payload.detail || "스크린샷 업로드에 실패했습니다.");
+            }
+
+            const imageUrl = String(payload?.url || "").trim();
+            if (!imageUrl.startsWith("/photo/bug-report/")) {
+                throw new Error("업로드된 이미지 주소가 올바르지 않습니다.");
+            }
+
+            return imageUrl;
+        }
+
+        function parseReportImageUrls(rawValue) {
+            try {
+                const parsed = JSON.parse(String(rawValue || "[]"));
+                return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string" && item.trim()) : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function getReportOriginalImageUrls(cardEl) {
+            if (!cardEl) return [];
+            return parseReportImageUrls(cardEl.dataset.originalImageUrls);
+        }
+
+        function getReportEditImageUrls(cardEl) {
+            if (!cardEl) return [];
+            return parseReportImageUrls(cardEl.dataset.editImageUrls);
+        }
+
+        function setReportEditImageUrls(cardEl, imageUrls) {
+            if (!cardEl) return;
+            const safeUrls = Array.isArray(imageUrls)
+                ? imageUrls.filter((item) => typeof item === "string" && item.trim())
+                : [];
+            cardEl.dataset.editImageUrls = JSON.stringify(safeUrls);
+        }
+
+        function renderReportEditorImages(cardEl) {
+            if (!cardEl) return;
+            const previewEl = cardEl.querySelector("[data-report-image-preview]");
+            if (!previewEl) return;
+
+            const imageUrls = getReportEditImageUrls(cardEl);
+            previewEl.innerHTML = "";
+
+            if (!imageUrls.length) {
+                previewEl.innerHTML = `
+                    <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
+                        첨부된 이미지가 없습니다.
+                    </div>
+                `;
+                return;
+            }
+
+            previewEl.innerHTML = imageUrls.map((rawUrl, index) => {
+                const safeUrl = escapeHtml(rawUrl);
+                return `
+                    <div class="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                        <img src="${safeUrl}" alt="신고 첨부 이미지 ${index + 1}" class="h-28 w-full object-cover">
+                        <button type="button"
+                                data-remove-report-image="true"
+                                data-image-index="${index}"
+                                class="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-sm font-bold text-slate-700 shadow hover:bg-white">
+                            ×
+                        </button>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function canEditOwnReport(report) {
+            if (!allowBugReportEditOwn) return false;
+            if (currentBugReportUserNumber === null || currentBugReportUserNumber === undefined) return false;
+
+            const reportUserNumber = report?.user_number;
+            if (reportUserNumber === null || reportUserNumber === undefined || reportUserNumber === "") return false;
+
+            return String(reportUserNumber) === String(currentBugReportUserNumber);
+        }
+
+        function setReportEditMode(cardEl, editing) {
+            if (!cardEl) return;
+
+            const contentViewEl = cardEl.querySelector("[data-report-content-view]");
+            const editorEl = cardEl.querySelector("[data-report-editor]");
+            const editButtonEl = cardEl.querySelector("[data-edit-report]");
+            const editorInputEl = cardEl.querySelector("[data-report-editor-input]");
+            const imagesViewEl = cardEl.querySelector("[data-report-images-view]");
+            const imagesEditorEl = cardEl.querySelector("[data-report-images-editor]");
+
+            if (contentViewEl) contentViewEl.classList.toggle("hidden", Boolean(editing));
+            if (editorEl) editorEl.classList.toggle("hidden", !editing);
+            if (imagesViewEl) imagesViewEl.classList.toggle("hidden", Boolean(editing));
+            if (imagesEditorEl) imagesEditorEl.classList.toggle("hidden", !editing);
+            if (editButtonEl) {
+                editButtonEl.disabled = Boolean(editing);
+                editButtonEl.classList.toggle("opacity-60", Boolean(editing));
+                editButtonEl.classList.toggle("cursor-not-allowed", Boolean(editing));
+            }
+
+            if (editing && editorInputEl) {
+                renderReportEditorImages(cardEl);
+                editorInputEl.focus();
+                const valueLength = editorInputEl.value.length;
+                editorInputEl.setSelectionRange(valueLength, valueLength);
+            }
+        }
+
+        function setReportEditUploadBusy(cardEl, busy) {
+            if (!cardEl) return;
+
+            const nextBusy = Boolean(busy);
+            cardEl.dataset.uploadInFlight = nextBusy ? "true" : "false";
+
+            const imageInputEl = cardEl.querySelector("[data-report-image-input]");
+            const pickImagesButton = cardEl.querySelector("[data-pick-report-images]");
+            const saveButton = cardEl.querySelector("[data-save-report]");
+            const cancelButton = cardEl.querySelector("[data-cancel-report-edit]");
+
+            if (imageInputEl) imageInputEl.disabled = nextBusy;
+            if (pickImagesButton) pickImagesButton.disabled = nextBusy;
+            if (saveButton) saveButton.disabled = nextBusy;
+            if (cancelButton) cancelButton.disabled = nextBusy;
+        }
+
+        function isReportEditUploadBusy(cardEl) {
+            return Boolean(cardEl && cardEl.dataset.uploadInFlight === "true");
+        }
+
+        async function appendReportEditFiles(cardEl, fileList) {
+            const files = Array.from(fileList || []).filter(Boolean);
+            if (!cardEl || !files.length) return;
+            if (isReportEditUploadBusy(cardEl)) {
+                setMessage("첨부 이미지 업로드가 끝난 뒤 다시 시도해 주세요.", "error");
+                return;
+            }
+
+            const currentImageUrls = getReportEditImageUrls(cardEl);
+            if (currentImageUrls.length >= bugReportMaxImages) {
+                setMessage(`첨부 이미지는 최대 ${bugReportMaxImages}장까지 등록할 수 있습니다.`, "error");
+                return;
+            }
+
+            const availableSlots = Math.max(bugReportMaxImages - currentImageUrls.length, 0);
+            const filesToUpload = files.slice(0, availableSlots);
+            if (!filesToUpload.length) return;
+
+            setReportEditUploadBusy(cardEl, true);
+            setMessage("첨부 이미지를 업로드하는 중입니다.", "info");
+
+            try {
+                const nextImageUrls = [...currentImageUrls];
+                for (const file of filesToUpload) {
+                    const uploadedImageUrl = await uploadBugReportImage(file);
+                    nextImageUrls.push(uploadedImageUrl);
+                }
+
+                setReportEditImageUrls(cardEl, nextImageUrls);
+                renderReportEditorImages(cardEl);
+
+                if (files.length > filesToUpload.length) {
+                    setMessage(`첨부 이미지는 최대 ${bugReportMaxImages}장까지 등록할 수 있습니다.`, "error");
+                } else {
+                    setMessage(`첨부 이미지 ${filesToUpload.length}장을 반영했습니다. 저장하면 최종 적용됩니다.`, "success");
+                }
+            } catch (error) {
+                setMessage(error.message || "첨부 이미지 업로드에 실패했습니다.", "error");
+            } finally {
+                setReportEditUploadBusy(cardEl, false);
+            }
         }
 
         function renderCounts(counts) {
@@ -149,13 +349,17 @@
 
         function renderReportCard(report) {
             const resolved = Boolean(report?.resolved);
+            const canEditReport = canEditOwnReport(report);
             const statusClass = resolved
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                 : "border-amber-200 bg-amber-50 text-amber-700";
             const statusLabel = resolved ? "해결" : "미해결";
             const toggleLabel = resolved ? "미해결로 변경" : "해결로 변경";
+            const rawPageTitle = String(report?.page_title || "").trim();
             const pagePath = escapeHtml(report?.page_path || "-");
-            const pageTitle = escapeHtml(report?.page_title || "");
+            const pageTitle = rawPageTitle && rawPageTitle.toLowerCase() !== "building dashboard"
+                ? escapeHtml(rawPageTitle)
+                : "";
             const pageUrl = String(report?.page_url || "").trim();
             const escapedPageUrl = escapeHtml(pageUrl);
             const contentHtml = escapeHtml(report?.content || "");
@@ -164,6 +368,7 @@
             const createTime = escapeHtml(formatDate(report?.create_time));
             const resolvedTime = escapeHtml(formatDate(report?.resolved_time));
             const images = Array.isArray(report?.image_urls) ? report.image_urls : [];
+            const imageUrlsJson = escapeHtml(JSON.stringify(images));
 
             const imagesHtml = images.length
                 ? `
@@ -194,6 +399,16 @@
                     </a>
                 `
                 : "";
+            const editButtonHtml = canEditReport
+                ? `
+                    <button type="button"
+                            data-edit-report="true"
+                            data-id="${report.bug_report_id}"
+                            class="inline-flex items-center rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-bold text-blue-700 hover:bg-blue-100">
+                        수정
+                    </button>
+                `
+                : "";
             const toggleButtonHtml = allowBugReportResolve
                 ? `
                     <button type="button"
@@ -205,9 +420,49 @@
                     </button>
                 `
                 : "";
+            const editFormHtml = canEditReport
+                ? `
+                    <div data-report-editor class="mt-3 hidden">
+                        <textarea data-report-editor-input="true"
+                                  class="h-36 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200">${contentHtml}</textarea>
+                        <div data-report-images-editor class="mt-4 hidden">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">첨부 이미지 편집</p>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <input type="file" data-report-image-input="true" accept="image/*" multiple class="hidden">
+                                    <button type="button"
+                                            data-pick-report-images="true"
+                                            class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                                        이미지 추가
+                                    </button>
+                                    <span class="text-xs text-slate-400">최대 ${bugReportMaxImages}장 · Ctrl+V 붙여넣기 지원</span>
+                                </div>
+                            </div>
+                            <div data-report-image-preview class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+                        </div>
+                        <div class="mt-3 flex flex-wrap items-center gap-2">
+                            <button type="button"
+                                    data-save-report="true"
+                                    data-id="${report.bug_report_id}"
+                                    class="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+                                저장
+                            </button>
+                            <button type="button"
+                                    data-cancel-report-edit="true"
+                                    class="inline-flex items-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">
+                                취소
+                            </button>
+                            <span class="text-xs text-slate-400">신고 내용과 첨부 이미지를 수정할 수 있습니다.</span>
+                        </div>
+                    </div>
+                `
+                : "";
 
             return `
-                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-report-card="${report.bug_report_id}">
+                <article class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                         data-report-card="${report.bug_report_id}"
+                         data-original-image-urls="${imageUrlsJson}"
+                         data-edit-image-urls="${imageUrlsJson}">
                     <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
@@ -239,16 +494,18 @@
                         </div>
                         <div class="flex shrink-0 flex-wrap items-center gap-2">
                             ${pageLinkHtml}
+                            ${editButtonHtml}
                             ${toggleButtonHtml}
                         </div>
                     </div>
 
                     <div class="mt-5 rounded-2xl bg-slate-50 px-4 py-4">
                         <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">신고 내용</p>
-                        <p class="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">${contentHtml}</p>
+                        <p data-report-content-view class="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">${contentHtml}</p>
+                        ${editFormHtml}
                     </div>
 
-                    <div class="mt-5">
+                    <div data-report-images-view class="mt-5">
                         <p class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">첨부 이미지</p>
                         ${imagesHtml}
                     </div>
@@ -300,6 +557,107 @@
         });
 
         listEl.addEventListener("click", async (event) => {
+            const editButton = event.target.closest("[data-edit-report]");
+            if (editButton) {
+                const cardEl = editButton.closest("[data-report-card]");
+                const inputEl = cardEl?.querySelector("[data-report-editor-input]");
+                setMessage("", "error");
+                if (cardEl) {
+                    setReportEditImageUrls(cardEl, getReportOriginalImageUrls(cardEl));
+                }
+                if (inputEl) {
+                    inputEl.value = inputEl.defaultValue;
+                }
+                setReportEditMode(cardEl, true);
+                return;
+            }
+
+            const cancelEditButton = event.target.closest("[data-cancel-report-edit]");
+            if (cancelEditButton) {
+                const cardEl = cancelEditButton.closest("[data-report-card]");
+                const inputEl = cardEl?.querySelector("[data-report-editor-input]");
+                setMessage("", "error");
+                if (cardEl) {
+                    setReportEditImageUrls(cardEl, getReportOriginalImageUrls(cardEl));
+                    renderReportEditorImages(cardEl);
+                }
+                if (inputEl) {
+                    inputEl.value = inputEl.defaultValue;
+                }
+                setReportEditMode(cardEl, false);
+                return;
+            }
+
+            const removeImageButton = event.target.closest("[data-remove-report-image]");
+            if (removeImageButton) {
+                const cardEl = removeImageButton.closest("[data-report-card]");
+                const imageIndex = Number(removeImageButton.dataset.imageIndex);
+                const imageUrls = getReportEditImageUrls(cardEl);
+
+                if (!cardEl || !Number.isInteger(imageIndex) || imageIndex < 0 || imageIndex >= imageUrls.length) {
+                    return;
+                }
+
+                imageUrls.splice(imageIndex, 1);
+                setReportEditImageUrls(cardEl, imageUrls);
+                renderReportEditorImages(cardEl);
+                return;
+            }
+
+            const pickImagesButton = event.target.closest("[data-pick-report-images]");
+            if (pickImagesButton) {
+                const cardEl = pickImagesButton.closest("[data-report-card]");
+                const imageInputEl = cardEl?.querySelector("[data-report-image-input]");
+                if (!imageInputEl) return;
+                imageInputEl.click();
+                return;
+            }
+
+            const saveButton = event.target.closest("[data-save-report]");
+            if (saveButton) {
+                const cardEl = saveButton.closest("[data-report-card]");
+                const inputEl = cardEl?.querySelector("[data-report-editor-input]");
+                const cancelButtonEl = cardEl?.querySelector("[data-cancel-report-edit]");
+                const bugReportId = String(saveButton.dataset.id || "").trim();
+                const nextContent = String(inputEl?.value || "").trim();
+                const nextImageUrls = getReportEditImageUrls(cardEl);
+
+                if (!cardEl || !inputEl || !bugReportId) return;
+                if (!nextContent) {
+                    setMessage("신고 내용은 비워둘 수 없습니다.", "error");
+                    inputEl.focus();
+                    return;
+                }
+                if (isReportEditUploadBusy(cardEl)) {
+                    setMessage("첨부 이미지 업로드가 끝난 뒤 저장해 주세요.", "error");
+                    return;
+                }
+
+                saveButton.disabled = true;
+                if (cancelButtonEl) cancelButtonEl.disabled = true;
+                setMessage("", "error");
+
+                try {
+                    const res = await fetch(`/api/bug-reports/${encodeURIComponent(bugReportId)}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ content: nextContent, image_urls: nextImageUrls }),
+                    });
+                    const payload = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        throw new Error(payload.detail || "신고 내용 수정에 실패했습니다.");
+                    }
+
+                    setMessage("신고 내용과 첨부 이미지를 수정했습니다.", "success");
+                    await loadReports(activeStatus);
+                } catch (error) {
+                    setMessage(error.message || "신고 내용 수정에 실패했습니다.", "error");
+                    saveButton.disabled = false;
+                    if (cancelButtonEl) cancelButtonEl.disabled = false;
+                }
+                return;
+            }
+
             if (!allowBugReportResolve) return;
             const toggleButton = event.target.closest("[data-toggle-report]");
             if (!toggleButton) return;
@@ -328,6 +686,34 @@
                 setMessage(error.message || "상태 변경에 실패했습니다.", "error");
                 toggleButton.disabled = false;
             }
+        });
+
+        listEl.addEventListener("change", async (event) => {
+            const imageInputEl = event.target.closest("[data-report-image-input]");
+            if (!imageInputEl) return;
+
+            const cardEl = imageInputEl.closest("[data-report-card]");
+            const selectedFiles = Array.from(imageInputEl.files || []);
+
+            imageInputEl.value = "";
+            await appendReportEditFiles(cardEl, selectedFiles);
+        });
+
+        listEl.addEventListener("paste", async (event) => {
+            const inputEl = event.target.closest("[data-report-editor-input]");
+            if (!inputEl) return;
+
+            const clipboardItems = Array.from(event.clipboardData?.items || []);
+            const imageFiles = clipboardItems
+                .filter((item) => String(item?.type || "").toLowerCase().startsWith("image/"))
+                .map((item) => item.getAsFile())
+                .filter(Boolean);
+
+            if (!imageFiles.length) return;
+            event.preventDefault();
+
+            const cardEl = inputEl.closest("[data-report-card]");
+            await appendReportEditFiles(cardEl, imageFiles);
         });
 
         syncFilterButtons();
