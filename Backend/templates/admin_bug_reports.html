@@ -101,7 +101,7 @@
 
         const bugReportMaxImages = 5;
         let activeStatus = "{{ bug_report_initial_status or 'all' }}";
-        let loadInFlight = false;
+        let loadRequestSequence = 0;
 
         function escapeHtml(value) {
             return String(value || "")
@@ -520,18 +520,18 @@
         }
 
         async function loadReports(nextStatus) {
-            if (loadInFlight) return;
             activeStatus = nextStatus || activeStatus;
             syncFilterButtons();
             setMessage("", "error");
             loadingEl.classList.remove("hidden");
             emptyStateEl.classList.add("hidden");
             listEl.innerHTML = "";
-            loadInFlight = true;
+            const requestSequence = ++loadRequestSequence;
 
             try {
                 const res = await fetch(`${bugReportListEndpoint}?status=${encodeURIComponent(activeStatus)}`);
                 const payload = await res.json().catch(() => ({}));
+                if (requestSequence !== loadRequestSequence) return;
                 if (!res.ok) {
                     throw new Error(payload.detail || "버그 신고 목록을 불러오지 못했습니다.");
                 }
@@ -539,12 +539,14 @@
                 renderCounts(payload?.counts || {});
                 renderReports(payload?.reports || []);
             } catch (error) {
+                if (requestSequence !== loadRequestSequence) return;
                 renderCounts({ total: 0, open: 0, resolved: 0 });
                 renderReports([]);
                 setMessage(error.message || "버그 신고 목록을 불러오지 못했습니다.", "error");
             } finally {
-                loadingEl.classList.add("hidden");
-                loadInFlight = false;
+                if (requestSequence === loadRequestSequence) {
+                    loadingEl.classList.add("hidden");
+                }
             }
         }
 

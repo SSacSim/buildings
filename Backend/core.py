@@ -1359,7 +1359,7 @@ def bug_reports_page(request: Request) -> HTMLResponse:
             "bug_report_heading": "버그 신고 목록",
             "bug_report_description": "모든 사용자가 접수된 신고를 읽기 전용으로 확인할 수 있습니다.",
             "bug_report_api_path": "/api/bug-reports",
-            "bug_report_allow_resolve": False,
+            "bug_report_allow_resolve": bool(user.get("admin_flag")),
             "bug_report_initial_status": "open",
             "bug_report_allow_edit_own": True,
             "bug_report_current_user_number": user.get("user_number"),
