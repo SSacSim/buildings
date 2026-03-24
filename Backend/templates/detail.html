@@ -417,7 +417,16 @@
 
                 <!-- 토지관련 -->
                 <div class="p-1 bg-slate-200">
-                    <div class="flex border-t border-x border-slate-400 bg-[#2d3748] text-white px-2 py-0.5 mt-2 font-bold italic text-[11px]">토지</div>
+                    <div class="flex items-center gap-2 border-t border-x border-slate-400 bg-[#2d3748] text-white px-2 py-0.5 mt-2 font-bold italic text-[11px]">
+                        <span>토지</span>
+                        <button
+                            type="button"
+                            id="landUsePlanBtn"
+                            onclick="handleOpenLandUsePlan()"
+                            class="px-2 py-0.5 bg-white text-blue-700 text-[10px] font-bold not-italic border border-blue-200 rounded hover:bg-blue-50 whitespace-nowrap shrink-0">
+                            토지이용계획
+                        </button>
+                    </div>
                     <div class="flex border-b border-slate-200 h-[32px] items-stretch">
                         <div class="w-16 bg-slate-50 px-2 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 whitespace-nowrap shrink-0">
                             토지
@@ -1757,6 +1766,7 @@
     }
 
     let structInfoCallInFlight = null;
+    let landUsePlanCallInFlight = null;
     let structInfoPendingData = null;
 
     function getCurrentBdNumber() {
@@ -2154,6 +2164,75 @@
             return;
         }
         openStructInfoApplyModal(data);
+    }
+
+    async function fetchLandUsePlanUrlByAddress() {
+        const address = String(document.getElementById("address")?.value || "").trim();
+        const addressDetail = String(document.getElementById("address_detail")?.value || "").trim();
+
+        if (!address) {
+            alert("주소를 먼저 입력해 주세요.");
+            document.getElementById("address")?.focus();
+            return null;
+        }
+        if (landUsePlanCallInFlight) return landUsePlanCallInFlight;
+
+        const openBtn = document.getElementById("landUsePlanBtn");
+        const originalBtnText = openBtn ? openBtn.innerText : "";
+
+        landUsePlanCallInFlight = (async () => {
+            try {
+                if (openBtn) {
+                    openBtn.disabled = true;
+                    openBtn.innerText = "조회중...";
+                    openBtn.classList.add("opacity-60", "cursor-not-allowed");
+                }
+
+                const res = await fetch("/api/building/land-use-plan-url", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        address,
+                        address_detail: addressDetail,
+                    }),
+                });
+                if (!res.ok) return null;
+
+                const payload = await res.json();
+                const data = payload?.data;
+                const landUsePlanUrl = String(data?.land_use_plan_url || "").trim();
+                if (!landUsePlanUrl) {
+                    return null;
+                }
+
+                return {
+                    ...data,
+                    land_use_plan_url: landUsePlanUrl,
+                };
+            } catch (err) {
+                console.warn("land_use_plan_url failed", err);
+                return null;
+            } finally {
+                if (openBtn) {
+                    openBtn.disabled = false;
+                    openBtn.innerText = originalBtnText || "토지이용계획";
+                    openBtn.classList.remove("opacity-60", "cursor-not-allowed");
+                }
+                landUsePlanCallInFlight = null;
+            }
+        })();
+
+        return landUsePlanCallInFlight;
+    }
+
+    async function handleOpenLandUsePlan() {
+        const data = await fetchLandUsePlanUrlByAddress();
+        const landUsePlanUrl = String(data?.land_use_plan_url || "").trim();
+        if (!landUsePlanUrl) {
+            alert("토지이용계획 링크를 만들 수 없습니다. 주소를 확인해 주세요.");
+            return;
+        }
+        window.open(landUsePlanUrl, "_blank", "noopener");
     }
 
     // 1. 페이지 로드 시 데이터 불러오기 (기존 로직 유지하되 value에 할당)

@@ -121,6 +121,7 @@ BLDRGST_SERVICE_KEY = (
     or app_settings.get("bldrgst_service_key")
     or ""
 )
+EUM_LAND_USE_PLAN_BASE_URL = "https://www.eum.go.kr/web/ar/lu/luLandDet.jsp"
 SESSION_SECRET = (
     os.getenv("APP_SESSION_SECRET")
     or app_settings.get("session_secret")
@@ -735,6 +736,17 @@ def _build_pnu_from_juso_parts(adm_cd: str, lnbr_mnnm: Any, lnbr_slno: Any) -> s
     return f"{adm_digits}1{_to_4digit_code(lnbr_mnnm)}{_to_4digit_code(lnbr_slno)}"
 
 
+def _build_eum_land_use_plan_url(pnu_code: Any) -> str:
+    pnu_digits = re.sub(r"[^0-9]", "", _to_clean_text(pnu_code))
+    if len(pnu_digits) != 19:
+        return ""
+    return (
+        f"{EUM_LAND_USE_PLAN_BASE_URL}"
+        f"?isNoScr=script&mode=search&selGbn=umd&s_type=1&add=land"
+        f"&pnu={quote(pnu_digits, safe='')}"
+    )
+
+
 def _find_first_nested_key_value(payload: Any, key_name: str) -> str:
     if isinstance(payload, dict):
         direct = _to_clean_text(payload.get(key_name))
@@ -852,6 +864,43 @@ def _select_best_juso_item(keyword: str, juso_items: List[Dict[str, Any]]) -> Op
                 return item
 
     return juso_items[0]
+
+
+def _fetch_best_juso_item_for_address(address: str) -> Optional[Dict[str, Any]]:
+    if not JUSO_ADDRLINK_URL or not JUSO_CONFM_KEY:
+        return None
+
+    keyword = _to_clean_text(address)
+    if not keyword:
+        return None
+
+    try:
+        juso_response = requests.get(
+            JUSO_ADDRLINK_URL,
+            params={
+                "currentPage": "1",
+                "countPerPage": "10",
+                "keyword": keyword,
+                "confmKey": JUSO_CONFM_KEY,
+                "hstryYn": "Y",
+                "resultType": "json",
+            },
+            timeout=8,
+        )
+        juso_response.raise_for_status()
+        juso_payload = juso_response.json()
+    except Exception as exc:
+        print(f"[juso] request failed: {exc}")
+        return None
+
+    juso_results = juso_payload.get("results", {})
+    juso_common = juso_results.get("common", {})
+    if _to_clean_text(juso_common.get("errorCode")) != "0":
+        return None
+
+    raw_juso_items = juso_results.get("juso") or []
+    juso_items = raw_juso_items if isinstance(raw_juso_items, list) else []
+    return _select_best_juso_item(keyword, juso_items)
 
 
 def _parse_bldrgst_xml_response(xml_text: str) -> Optional[Dict[str, Any]]:
@@ -979,33 +1028,7 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
     if not keyword:
         return {}
 
-    try:
-        juso_response = requests.get(
-            JUSO_ADDRLINK_URL,
-            params={
-                "currentPage": "1",
-                "countPerPage": "10",
-                "keyword": keyword,
-                "confmKey": JUSO_CONFM_KEY,
-                "hstryYn": "Y",
-                "resultType": "json",
-            },
-            timeout=8,
-        )
-        juso_response.raise_for_status()
-        juso_payload = juso_response.json()
-    except Exception as exc:
-        print(f"[struct_info_call] juso request failed: {exc}")
-        return {}
-
-    juso_results = juso_payload.get("results", {})
-    juso_common = juso_results.get("common", {})
-    if _to_clean_text(juso_common.get("errorCode")) != "0":
-        return {}
-
-    raw_juso_items = juso_results.get("juso") or []
-    juso_items = raw_juso_items if isinstance(raw_juso_items, list) else []
-    juso_item = _select_best_juso_item(keyword, juso_items)
+    juso_item = _fetch_best_juso_item_for_address(keyword)
     if not juso_item:
         return {}
 
@@ -1020,6 +1043,7 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
         juso_item.get("lnbrMnnm"),
         juso_item.get("lnbrSlno"),
     )
+    land_use_plan_url = _build_eum_land_use_plan_url(pnu_code)
 
     bld_common_params = {
         "serviceKey": BLDRGST_SERVICE_KEY,
@@ -1163,6 +1187,8 @@ def _fetch_struct_info_call_data(address: str, address_detail: str = "") -> Dict
         "parking_indoor_mechanical": _to_clean_text(item_data.get("indrMechUtcnt")),
         "parking_indoor_self": _to_clean_text(item_data.get("indrAutoUtcnt")),
         "land_area_sqm": _to_clean_text(item_data.get("platArea")),
+        "pnu": pnu_code,
+        "land_use_plan_url": land_use_plan_url,
     }
 
     parking_total = 0
@@ -3075,6 +3101,30 @@ class StructInfoCallRequest(BaseModel):
 def struct_info_call(req: StructInfoCallRequest):
     data = _fetch_struct_info_call_data(req.address, req.address_detail or "")
     return {"status": "ok", "data": data}
+
+
+@app.post("/api/building/land-use-plan-url")
+def get_land_use_plan_url(req: StructInfoCallRequest):
+    juso_item = _fetch_best_juso_item_for_address(req.address)
+    if not juso_item:
+        return {"status": "ok", "data": {}}
+
+    pnu_code = _build_pnu_from_juso_parts(
+        juso_item.get("admCd"),
+        juso_item.get("lnbrMnnm"),
+        juso_item.get("lnbrSlno"),
+    )
+    land_use_plan_url = _build_eum_land_use_plan_url(pnu_code)
+    if not land_use_plan_url:
+        return {"status": "ok", "data": {}}
+
+    return {
+        "status": "ok",
+        "data": {
+            "pnu": pnu_code,
+            "land_use_plan_url": land_use_plan_url,
+        },
+    }
 
 
 class BuildingCreate(BaseModel):
