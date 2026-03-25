@@ -36,6 +36,22 @@ let currentcategory = '';
 let currentSearchMode = 'building';
 let currentBuildingTotalPages = null;
 let currentCustomerTotalPages = null;
+const SEARCH_TYPE_SELECT_THEME = {
+    building: {
+        selectBg: '#ecfdf5',
+        selectBorder: '#86efac',
+        selectText: '#166534',
+        optionBg: '#dcfce7',
+        optionText: '#166534',
+    },
+    customer: {
+        selectBg: '#fff7ed',
+        selectBorder: '#fb923c',
+        selectText: '#9a3412',
+        optionBg: '#ffedd5',
+        optionText: '#9a3412',
+    },
+};
 const BUILDING_PAGE_SIZE = 15;
 const CUSTOMER_PAGE_SIZE = 20;
 const pageGroupSize = 5;
@@ -283,6 +299,22 @@ function setStatusOptions(mode) {
         <option value="매각">매각</option>
         <option value="보류">보류</option>
     `;
+}
+
+function applySearchTypeSelectTheme(selectEl) {
+    if (!selectEl) return;
+
+    const mode = selectEl.value === 'customer' ? 'customer' : 'building';
+    const theme = SEARCH_TYPE_SELECT_THEME[mode];
+    selectEl.style.backgroundColor = theme.selectBg;
+    selectEl.style.borderColor = theme.selectBorder;
+    selectEl.style.color = theme.selectText;
+
+    Array.from(selectEl.options).forEach((option) => {
+        const optionTheme = SEARCH_TYPE_SELECT_THEME[option.value === 'customer' ? 'customer' : 'building'];
+        option.style.backgroundColor = optionTheme.optionBg;
+        option.style.color = optionTheme.optionText;
+    });
 }
 
 function filterByStatus() {
@@ -1038,6 +1070,7 @@ function syncMainSearchLockState() {
 
     if (searchTypeSelect) {
         searchTypeSelect.classList.toggle('hidden', window.isLocked);
+        applySearchTypeSelectTheme(searchTypeSelect);
     }
 
     if (insightBtn) {
@@ -1048,6 +1081,7 @@ function syncMainSearchLockState() {
         currentSearchMode = 'building';
         if (searchTypeSelect) searchTypeSelect.value = 'building';
         setStatusOptions('building');
+        applySearchTypeSelectTheme(searchTypeSelect);
     }
 }
 
@@ -1077,7 +1111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchBar && buildingBtn && customerBtn) {
         const searchTypeSelect = document.createElement('select');
         searchTypeSelect.id = 'searchTypeSelect';
-        searchTypeSelect.className = 'px-3 py-3 border border-slate-300 rounded-xl bg-white text-slate-700 font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none';
+        searchTypeSelect.className = 'px-3 py-3 border rounded-xl font-semibold focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors';
 
         const buildingOption = document.createElement('option');
         buildingOption.value = 'building';
@@ -1095,7 +1129,9 @@ document.addEventListener('DOMContentLoaded', () => {
         searchTypeSelect.addEventListener('change', (e) => {
             currentSearchMode = e.target.value;
             setStatusOptions(currentSearchMode);
+            applySearchTypeSelectTheme(e.target);
         });
+        applySearchTypeSelectTheme(searchTypeSelect);
         buildingBtn.setAttribute('onclick', 'unifiedSearch()');
         buildingBtn.textContent = '검색';
         customerBtn.classList.add('hidden');
