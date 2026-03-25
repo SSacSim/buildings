@@ -1,4 +1,4 @@
-﻿const INTRO_STATUS_OPTIONS = ["예비", "소개", "답사", "계약진행", "계약완료", "보류"];
+const INTRO_STATUS_OPTIONS = ["예비", "소개", "답사", "계약진행", "계약완료", "보류"];
 
 let introRows = [];
 let ownedRows = [];
@@ -15,6 +15,7 @@ const CUSTOMER_MATCH_HISTORY_MAX_ITEMS = 50;
 let customerMatchHistoryItems = [];
 let currentMatchHistoryConditions = null;
 let selectedHistoryCompareId = "";
+let editingMatchHistoryId = "";
 let customerSidebarTab = "intro";
 let activeMatchSectors = new Set();
 let matchSectorToggleInitialized = false;
@@ -2122,6 +2123,19 @@ async function createMatchHistoryItem(name, conditions) {
     if (!res.ok) throw new Error("failed to save match history");
 }
 
+async function updateMatchHistoryItemName(historyId, name) {
+    const customerNumber = getMatchHistoryCustomerNumber();
+    if (!customerNumber) throw new Error("customer not saved");
+
+    const encodedId = encodeURIComponent(String(historyId || "").trim());
+    const res = await fetch(`/api/customer/${customerNumber}/match-histories/${encodedId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error("failed to update match history name");
+}
+
 async function deleteMatchHistoryItem(historyId) {
     const customerNumber = getMatchHistoryCustomerNumber();
     if (!customerNumber) throw new Error("customer not saved");
@@ -2131,6 +2145,70 @@ async function deleteMatchHistoryItem(historyId) {
         method: "DELETE",
     });
     if (!res.ok) throw new Error("failed to delete match history");
+}
+
+function focusMatchHistoryRenameInput(historyId) {
+    const id = String(historyId || "").trim();
+    if (!id) return;
+    requestAnimationFrame(() => {
+        const input = document.querySelector(`#customerMatchHistoryList input[data-role="rename-input"][data-id="${id}"]`);
+        if (!input) return;
+        input.focus();
+        input.select();
+    });
+}
+
+function startMatchHistoryRename(historyId) {
+    editingMatchHistoryId = String(historyId || "").trim();
+    renderMatchHistoryList();
+    focusMatchHistoryRenameInput(editingMatchHistoryId);
+}
+
+function cancelMatchHistoryRename() {
+    if (!editingMatchHistoryId) return;
+    editingMatchHistoryId = "";
+    renderMatchHistoryList();
+}
+
+async function submitMatchHistoryRename(historyId) {
+    const id = String(historyId || "").trim();
+    if (!id) return;
+
+    const input = document.querySelector(`#customerMatchHistoryList input[data-role="rename-input"][data-id="${id}"]`);
+    const nextName = String(input?.value || "").trim();
+    if (!nextName) {
+        alert("기록 이름을 입력해 주세요.");
+        input?.focus();
+        return;
+    }
+    if (nextName.length > 120) {
+        alert("기록 이름은 120자 이하로 입력해 주세요.");
+        input?.focus();
+        return;
+    }
+
+    const found = customerMatchHistoryItems.find((item) => item.id === id);
+    if (found && nextName === String(found.name || "").trim()) {
+        editingMatchHistoryId = "";
+        renderMatchHistoryList();
+        return;
+    }
+
+    try {
+        await updateMatchHistoryItemName(id, nextName);
+        await loadMatchHistoryItems();
+        editingMatchHistoryId = "";
+        renderMatchHistoryList();
+
+        if (selectedHistoryCompareId === id) {
+            const updated = customerMatchHistoryItems.find((item) => item.id === id);
+            renderMatchHistoryComparePanel(updated || null);
+        }
+    } catch (err) {
+        console.error(err);
+        alert("기록 이름 수정 중 오류가 발생했습니다.");
+        input?.focus();
+    }
 }
 
 function hasAnyMatchConditionValue(conditions) {
@@ -2338,28 +2416,50 @@ function renderMatchHistoryList() {
         return;
     }
 
-    container.innerHTML = customerMatchHistoryItems.map((item) => `
-        <div class="border rounded-lg bg-white ${selectedHistoryCompareId === item.id ? "border-emerald-400 shadow-sm" : "border-slate-200"}">
-            <div class="px-3 py-2 flex items-center justify-between gap-2">
-                <button type="button" data-role="toggle" data-id="${escapeMatchHistoryHtml(item.id)}"
-                    class="flex-1 text-left text-[13px] text-slate-700 hover:text-blue-700">
-                    <span class="font-bold">${escapeMatchHistoryHtml(item.name || "저장한 조건")}</span>
-                    <span class="text-slate-400 ml-2">${escapeMatchHistoryHtml(formatMatchHistorySummary(item))}</span>
-                </button>
-                <div class="flex items-center gap-1 shrink-0">
-                    <button type="button" data-role="apply" data-id="${escapeMatchHistoryHtml(item.id)}"
-                        class="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700">적용</button>
-                    <button type="button" data-role="compare" data-id="${escapeMatchHistoryHtml(item.id)}"
-                        class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700">비교</button>
-                    <button type="button" data-role="delete" data-id="${escapeMatchHistoryHtml(item.id)}"
-                        class="px-2 py-1 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700">삭제</button>
+    container.innerHTML = customerMatchHistoryItems.map((item) => {
+        const isEditingName = editingMatchHistoryId === item.id;
+        return `
+            <div class="border rounded-lg bg-white ${selectedHistoryCompareId === item.id ? "border-emerald-400 shadow-sm" : "border-slate-200"}">
+                <div class="px-3 py-2 flex items-center justify-between gap-2">
+                    <button type="button" data-role="toggle" data-id="${escapeMatchHistoryHtml(item.id)}"
+                        class="flex-1 text-left text-[13px] text-slate-700 hover:text-blue-700">
+                        <span class="font-bold">${escapeMatchHistoryHtml(item.name || "저장한 조건")}</span>
+                        <span class="text-slate-400 ml-2">${escapeMatchHistoryHtml(formatMatchHistorySummary(item))}</span>
+                    </button>
+                    <div class="flex items-center gap-1 shrink-0">
+                        ${isEditingName ? `
+                            <button type="button" data-role="rename-save" data-id="${escapeMatchHistoryHtml(item.id)}"
+                                class="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700">저장</button>
+                            <button type="button" data-role="rename-cancel" data-id="${escapeMatchHistoryHtml(item.id)}"
+                                class="px-2 py-1 rounded bg-slate-100 text-slate-700 text-[11px] font-semibold hover:bg-slate-200">취소</button>
+                        ` : `
+                            <button type="button" data-role="rename" data-id="${escapeMatchHistoryHtml(item.id)}"
+                                class="px-2 py-1 rounded bg-slate-100 text-slate-700 text-[11px] font-semibold hover:bg-slate-200">수정</button>
+                            <button type="button" data-role="apply" data-id="${escapeMatchHistoryHtml(item.id)}"
+                                class="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-semibold hover:bg-blue-700">적용</button>
+                            <button type="button" data-role="compare" data-id="${escapeMatchHistoryHtml(item.id)}"
+                                class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700">비교</button>
+                            <button type="button" data-role="delete" data-id="${escapeMatchHistoryHtml(item.id)}"
+                                class="px-2 py-1 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-700">삭제</button>
+                        `}
+                    </div>
+                </div>
+                ${isEditingName ? `
+                    <div class="px-3 pb-3">
+                        <div class="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2">
+                            <input type="text" data-role="rename-input" data-id="${escapeMatchHistoryHtml(item.id)}"
+                                value="${escapeMatchHistoryHtml(item.name || "")}" maxlength="120"
+                                class="flex-1 min-w-0 bg-transparent text-[13px] text-slate-700 outline-none">
+                            <span class="text-[11px] text-slate-400 whitespace-nowrap">기록 이름만 수정</span>
+                        </div>
+                    </div>
+                ` : ""}
+                <div data-role="detail" data-id="${escapeMatchHistoryHtml(item.id)}" class="hidden border-t border-slate-100 px-3 py-2 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                    ${formatMatchHistoryDetailRows(item.conditions)}
                 </div>
             </div>
-            <div data-role="detail" data-id="${escapeMatchHistoryHtml(item.id)}" class="hidden border-t border-slate-100 px-3 py-2 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
-                ${formatMatchHistoryDetailRows(item.conditions)}
-            </div>
-        </div>
-    `).join("");
+        `;
+    }).join("");
 }
 
 async function openMatchHistoryModal() {
@@ -2369,6 +2469,7 @@ async function openMatchHistoryModal() {
     modalEl.classList.add("flex");
     currentMatchHistoryConditions = null;
     selectedHistoryCompareId = "";
+    editingMatchHistoryId = "";
     closeMatchHistoryCompareModal();
     const compareBody = document.getElementById("customerMatchHistoryCompareBody");
     if (compareBody) compareBody.innerHTML = "";
@@ -2404,6 +2505,7 @@ function closeMatchHistoryModal() {
     modalEl.classList.remove("flex");
     currentMatchHistoryConditions = null;
     selectedHistoryCompareId = "";
+    editingMatchHistoryId = "";
     closeMatchHistoryCompareModal();
     const compareBody = document.getElementById("customerMatchHistoryCompareBody");
     if (compareBody) compareBody.innerHTML = "";
@@ -3503,6 +3605,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     const customerMatchHistoryList = document.getElementById("customerMatchHistoryList");
     if (customerMatchHistoryList) {
+        customerMatchHistoryList.addEventListener("keydown", async (e) => {
+            const renameInput = e.target?.closest('input[data-role="rename-input"]');
+            if (!renameInput) return;
+            const id = renameInput.dataset.id;
+            if (!id) return;
+
+            if (e.key === "Enter") {
+                e.preventDefault();
+                await submitMatchHistoryRename(id);
+                return;
+            }
+            if (e.key === "Escape") {
+                e.preventDefault();
+                cancelMatchHistoryRename();
+            }
+        });
         customerMatchHistoryList.addEventListener("click", async (e) => {
             const target = e.target?.closest("button[data-role]");
             if (!target) return;
@@ -3510,8 +3628,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             const id = target.dataset.id;
             if (!id) return;
             const found = customerMatchHistoryItems.find((item) => item.id === id);
-            if (!found) return;
+            if (role !== "rename-cancel" && !found) return;
 
+            if (role === "rename") {
+                startMatchHistoryRename(id);
+                return;
+            }
+            if (role === "rename-save") {
+                await submitMatchHistoryRename(id);
+                return;
+            }
+            if (role === "rename-cancel") {
+                cancelMatchHistoryRename();
+                return;
+            }
             if (role === "toggle") {
                 const detailEl = customerMatchHistoryList.querySelector(`[data-role="detail"][data-id="${id}"]`);
                 if (detailEl) detailEl.classList.toggle("hidden");
@@ -3536,6 +3666,9 @@ document.addEventListener("DOMContentLoaded", async () => {
                     if (selectedHistoryCompareId === id) {
                         selectedHistoryCompareId = "";
                         renderMatchHistoryComparePanel(null);
+                    }
+                    if (editingMatchHistoryId === id) {
+                        editingMatchHistoryId = "";
                     }
                     renderMatchHistoryList();
                 } catch (err) {

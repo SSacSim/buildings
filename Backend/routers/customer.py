@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Request, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Request, HTTPException, Query, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional, List, Dict, Any
@@ -476,6 +476,10 @@ class CustomerMatchHistoryCreatePayload(BaseModel):
     conditions: Dict[str, Any] = Field(default_factory=dict)
 
 
+class CustomerMatchHistoryRenamePayload(BaseModel):
+    name: Optional[str] = ""
+
+
 @router.get("/api/customer/{customer_number:int}/match-histories")
 def get_customer_match_histories(customer_number: int):
     conn = None
@@ -593,6 +597,70 @@ def create_customer_match_history(customer_number: int, payload: CustomerMatchHi
                 "name": name,
                 "saved_at": create_time.isoformat() if create_time else None,
                 "conditions": conditions,
+            },
+        }
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@router.put("/api/customer/{customer_number:int}/match-histories/{history_id}")
+def update_customer_match_history_name(
+    customer_number: int,
+    history_id: str,
+    payload: CustomerMatchHistoryRenamePayload,
+):
+    conn = None
+    cur = None
+    try:
+        history_id_int = int(str(history_id).strip())
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid history id")
+
+    name = str(payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    if len(name) > 120:
+        raise HTTPException(status_code=400, detail="name must be 120 characters or fewer")
+
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        cur.execute(
+            """
+            UPDATE customer_match_history
+            SET history_name = %s,
+                update_time = CURRENT_TIMESTAMP
+            WHERE customer_number = %s
+              AND history_id = %s
+              AND delete_flag = FALSE
+            RETURNING create_time
+            """,
+            (name, customer_number, history_id_int),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="history not found")
+        conn.commit()
+        create_time = row[0]
+        return {
+            "status": "updated",
+            "item": {
+                "id": str(history_id_int),
+                "name": name,
+                "saved_at": create_time.isoformat() if create_time else None,
             },
         }
     except HTTPException:
