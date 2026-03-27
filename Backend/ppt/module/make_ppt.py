@@ -489,6 +489,8 @@ def make_detail_table(datas , save_path):
         df_with_total[col] = df_with_total[col].apply(format_with_commas)
 
     df_with_total = df_with_total.fillna("-").replace("", "-")
+    if "업종" in df_with_total.columns:
+        df_with_total["업종"] = df_with_total["업종"].map(lambda value: f" {str(value).strip()} ")
 
     # =========================
     # 3. 스타일 및 여백 제거 설정

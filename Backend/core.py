@@ -71,6 +71,23 @@ templates = Jinja2Templates(directory="./templates")
 
 @app.on_event("startup")
 async def startup_background_jobs():
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            ALTER TABLE building_memo
+            ADD COLUMN IF NOT EXISTS owned_properties_json TEXT;
+            """
+        )
+        conn.commit()
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
     start_backup_scheduler(
         settings_loader=DB_utils._load_settings,
         base_dir=BASE_DIR,
@@ -3211,6 +3228,7 @@ class BuildingCreate(BaseModel):
 
     memo :str 
     etc_memo :str 
+    owned_properties_json: Optional[str] = "[]"
     bd_feature :str 
     etc_feature :str 
     status :str
@@ -3307,6 +3325,7 @@ async def create_building(data: BuildingCreate):
     insert_data_memo = {
         'memo' :data.memo,
         'etc_memo' :data.etc_memo,
+        'owned_properties_json': data.owned_properties_json,
         'bd_feature' :data.bd_feature,
         'etc_feature' :data.etc_feature,
         'status' :data.status,
@@ -3534,6 +3553,7 @@ async def update_building(bd_id: int, data: BuildingCreate):
     update_data_memo = {
         'memo' :data.memo,
         'etc_memo' :data.etc_memo,
+        'owned_properties_json': data.owned_properties_json,
         'bd_feature' :data.bd_feature,
         'etc_feature' :data.etc_feature,
         'status' :data.status,

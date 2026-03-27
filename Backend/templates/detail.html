@@ -1243,13 +1243,22 @@
 
         <!-- 우측 사이드 정보 -->
         <aside class="w-[500px] flex flex-col gap-1 min-h-0 overflow-hidden relative" id="rightSidebar">
-            <div class="section-card border border-slate-400 bg-white">
-                <div class="bg-blue-900 text-white text-[13px] px-2 py-1 font-bold italic border-b border-slate-400">
-                    고객 정보 상세
+            <div class="section-card border border-slate-400 bg-white overflow-hidden">
+                <div class="bg-blue-900 text-white text-[13px] px-2 py-1 font-bold italic border-b border-slate-400 flex items-center justify-between gap-2">
+                    <span>고객 정보 상세</span>
+                    <div class="flex items-center gap-1 not-italic">
+                        <button type="button" id="detailCustomerInfoTabBtn" data-tab="customer"
+                            class="detail-customer-tab-btn px-2 py-0.5 rounded bg-white/20 text-white text-[11px] font-semibold hover:bg-white/30 transition-colors">
+                            고객정보
+                        </button>
+                        <button type="button" id="detailOwnedPropertyTabBtn" data-tab="owned"
+                            class="detail-customer-tab-btn px-2 py-0.5 rounded bg-white/10 text-white/80 text-[11px] font-semibold hover:bg-white/20 transition-colors">
+                            보유 부동산
+                        </button>
+                    </div>
                 </div>
 
-                <div class="flex items-stretch overflow-hidden">
-                    
+                <div id="detailCustomerInfoPanel" class="detail-customer-tab-panel flex items-stretch overflow-hidden min-h-[224px]">
                     <div class="w-[60%] flex flex-col border-r border-slate-200">
                         <div class="flex border-b border-slate-200 h-[32px] items-stretch">
                             <div class="w-20 bg-slate-50 border-r text-[11px] flex items-center justify-center font-bold text-slate-600 shrink-0">고객명</div>
@@ -1293,6 +1302,25 @@
                         </div>
                         <textarea id="memo" name="memo" placeholder="상세 내용을 입력하세요..."
                                 class="flex-1 p-3 bg-white outline-none text-[12px] resize-none leading-relaxed"></textarea>
+                    </div>
+                </div>
+
+                <div id="detailOwnedPropertyPanel" class="detail-customer-tab-panel hidden p-3 bg-white space-y-3">
+                    <input id="owned_properties_json" name="owned_properties_json" type="hidden" value="[]">
+                    <div id="detailOwnedMappingStatus" class="text-[11px] text-slate-500">
+                        고객명 기준 매핑 대기 중
+                    </div>
+                    <div class="overflow-x-auto overflow-y-auto max-h-[232px] border border-slate-200 rounded">
+                        <table class="w-full text-[12px] border-collapse">
+                            <thead class="bg-slate-50 text-slate-600">
+                                <tr>
+                                    <th class="p-2 border-b w-[96px]">검색</th>
+                                    <th class="p-2 border-b">주소</th>
+                                    <th class="p-2 border-b w-[160px]">건물명</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detailOwnedPropertyBody" class="text-center divide-y divide-slate-100"></tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -1442,6 +1470,53 @@
         </div>
     </div>
 
+    <div id="detailBuildingSearchModal"
+        class="fixed inset-0 bg-black/40 hidden items-center justify-center z-[72]"
+        onclick="if (event.target === this) closeDetailBuildingSearchModal();">
+        <div class="bg-white w-[min(960px,92vw)] max-h-[82vh] rounded-xl shadow-xl flex flex-col overflow-hidden">
+            <div class="bg-slate-800 text-white px-4 py-3 flex items-center justify-between">
+                <div>
+                    <p class="text-sm font-bold">보유 부동산 검색</p>
+                    <p class="text-[11px] text-slate-300">주소 또는 건물명으로 검색해서 행에 바로 연결합니다.</p>
+                </div>
+                <button type="button" onclick="closeDetailBuildingSearchModal()" class="text-white/70 hover:text-white text-xl leading-none">&times;</button>
+            </div>
+            <div class="p-4 space-y-3">
+                <div class="flex items-center gap-2">
+                    <input id="detailBuildingSearchInput" type="text" placeholder="주소 또는 건물명 입력"
+                        class="flex-1 px-3 py-2 border border-slate-300 rounded text-[13px] outline-none focus:border-blue-500">
+                    <button type="button" onclick="searchDetailOwnedBuildings(1)"
+                        class="px-4 py-2 rounded bg-blue-600 text-white text-[12px] font-semibold hover:bg-blue-700">
+                        검색
+                    </button>
+                </div>
+                <div class="overflow-auto border border-slate-200 rounded max-h-[48vh]">
+                    <table class="w-full text-[12px] border-collapse">
+                        <thead class="bg-slate-50 text-slate-600 sticky top-0">
+                            <tr>
+                                <th class="p-2 border-b w-[80px]">번호</th>
+                                <th class="p-2 border-b">주소</th>
+                                <th class="p-2 border-b w-[180px]">건물명</th>
+                                <th class="p-2 border-b w-[110px]">매매가</th>
+                                <th class="p-2 border-b w-[110px]">평당가</th>
+                                <th class="p-2 border-b w-[70px]">선택</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailBuildingSearchResultBody">
+                            <tr>
+                                <td colspan="6" class="p-4 text-center text-slate-400">검색어를 입력하세요.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="flex items-center justify-between gap-3 text-[11px] text-slate-500">
+                    <div id="detailBuildingSearchPageInfo">총 0건</div>
+                    <div id="detailBuildingSearchPageButtons" class="flex items-center gap-1"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 삭제 확인 모달 -->
     <div id="deleteModal"
         class="fixed inset-0 bg-black/40 hidden items-center justify-center z-50">
@@ -1515,6 +1590,428 @@
         } catch (e) {
             return value;
         }
+    }
+
+    const DETAIL_OWNED_BUILDING_SEARCH_PAGE_SIZE = 30;
+    const DETAIL_OWNED_BUILDING_SEARCH_PAGE_GROUP_SIZE = 5;
+    let detailCustomerInfoTab = "customer";
+    let detailOwnedRows = [];
+    let detailOwnedPickingRowId = null;
+    let detailMappedCustomerInfo = null;
+
+    function escapeDetailOwnedHtml(value) {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    function generateDetailOwnedRowId() {
+        if (window.crypto && typeof window.crypto.randomUUID === "function") {
+            return window.crypto.randomUUID();
+        }
+        return `detail-owned-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function createEmptyDetailOwnedRow() {
+        return {
+            row_id: generateDetailOwnedRowId(),
+            bd_number: "",
+            address: "",
+            bd_name: ""
+        };
+    }
+
+    function serializeDetailOwnedRows() {
+        return JSON.stringify(
+            detailOwnedRows
+                .filter(row => row.bd_number || row.address || row.bd_name)
+                .map(row => ({
+                    bd_number: row.bd_number ? Number(row.bd_number) : null,
+                    address: row.address || "",
+                    bd_name: row.bd_name || ""
+                }))
+        );
+    }
+
+    function syncDetailOwnedPropertiesInput() {
+        const inputEl = document.getElementById("owned_properties_json");
+        if (inputEl) {
+            inputEl.value = serializeDetailOwnedRows();
+        }
+    }
+
+    function renderDetailOwnedMappingStatus(message, tone = "neutral") {
+        const statusEl = document.getElementById("detailOwnedMappingStatus");
+        if (!statusEl) return;
+        statusEl.textContent = message || "대표자 기준 매핑 대기 중";
+        statusEl.className = "text-[11px]";
+        if (tone === "success") {
+            statusEl.classList.add("text-emerald-700", "font-semibold");
+            return;
+        }
+        if (tone === "error") {
+            statusEl.classList.add("text-red-600", "font-semibold");
+            return;
+        }
+        statusEl.classList.add("text-slate-500");
+    }
+
+    function extractDetailCustomerLookupToken(clientName) {
+        const normalized = normalizeTextValue(String(clientName || "")).trim();
+        if (!normalized) return "";
+        const [firstToken = ""] = normalized.split(/\s+/);
+        return firstToken;
+    }
+
+    async function loadMappedOwnedPropertiesFromClientName(clientName) {
+        const token = extractDetailCustomerLookupToken(clientName);
+        if (!token) {
+            detailMappedCustomerInfo = null;
+            bindDetailOwnedRows([]);
+            renderDetailOwnedMappingStatus("대표자명 첫 단어가 없어 매핑하지 못했습니다.", "error");
+            return;
+        }
+
+        renderDetailOwnedMappingStatus(`대표자 '${token}' 기준으로 매핑 중...`);
+
+        try {
+            const params = new URLSearchParams();
+            params.set("client_name", String(clientName || ""));
+            const res = await fetch(`/api/customer/owned-properties-lookup?${params.toString()}`);
+            if (!res.ok) throw new Error("customer owned properties lookup failed");
+            const payload = await res.json();
+            if (!payload?.matched || !payload?.customer) {
+                detailMappedCustomerInfo = null;
+                bindDetailOwnedRows([]);
+                renderDetailOwnedMappingStatus(`대표자 '${token}' 기준으로 매핑된 고객이 없습니다.`, "error");
+                return;
+            }
+
+            detailMappedCustomerInfo = payload.customer;
+            bindDetailOwnedRows(payload.customer.owned_properties_json || "[]");
+            renderDetailOwnedMappingStatus(
+                `매핑 고객: 대표자 ${payload.customer.ceo_name || "-"} / 회사명 ${payload.customer.buyer_name || "-"} (${payload.customer.customer_number || "-"})`,
+                "success"
+            );
+        } catch (error) {
+            console.error(error);
+            detailMappedCustomerInfo = null;
+            bindDetailOwnedRows([]);
+            renderDetailOwnedMappingStatus("고객 보유 부동산 매핑 중 오류가 발생했습니다.", "error");
+        }
+    }
+
+    function setDetailCustomerInfoTab(tab) {
+        detailCustomerInfoTab = tab === "owned" ? "owned" : "customer";
+        const customerBtn = document.getElementById("detailCustomerInfoTabBtn");
+        const ownedBtn = document.getElementById("detailOwnedPropertyTabBtn");
+        const customerPanel = document.getElementById("detailCustomerInfoPanel");
+        const ownedPanel = document.getElementById("detailOwnedPropertyPanel");
+        const isOwned = detailCustomerInfoTab === "owned";
+
+        if (customerPanel) customerPanel.classList.toggle("hidden", isOwned);
+        if (ownedPanel) ownedPanel.classList.toggle("hidden", !isOwned);
+
+        [customerBtn, ownedBtn].forEach(btn => {
+            if (!btn) return;
+            const active = btn.dataset.tab === detailCustomerInfoTab;
+            btn.classList.toggle("bg-white/20", active);
+            btn.classList.toggle("text-white", active);
+            btn.classList.toggle("bg-white/10", !active);
+            btn.classList.toggle("text-white/80", !active);
+        });
+    }
+
+    function renderDetailOwnedRows() {
+        const tbody = document.getElementById("detailOwnedPropertyBody");
+        if (!tbody) return;
+
+        if (!detailOwnedRows.length) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="3" class="p-3 text-slate-400 text-center">보유 부동산이 없습니다.</td>
+                </tr>
+            `;
+            syncDetailOwnedPropertiesInput();
+            return;
+        }
+
+        tbody.innerHTML = detailOwnedRows.map(row => `
+            <tr>
+                <td class="p-1.5">
+                    <div class="flex items-center justify-center gap-1">
+                        <button type="button" onclick="openDetailBuildingSearchFromRow('${row.row_id}')"
+                            class="px-2 py-1 text-[11px] rounded bg-blue-600 text-white hover:bg-blue-700">검색</button>
+                        <button type="button" onclick="openDetailOwnedBuildingFromRow('${row.row_id}')"
+                            class="px-2 py-1 text-[11px] rounded bg-emerald-600 text-white hover:bg-emerald-700">열기</button>
+                    </div>
+                </td>
+                <td class="p-2 text-left">
+                    <input type="text" value="${escapeDetailOwnedHtml(row.address)}"
+                        oninput="updateDetailOwnedField('${row.row_id}','address', this.value)"
+                        onkeydown="handleDetailOwnedAddressKeydown(event, '${row.row_id}')"
+                        class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px]"
+                        placeholder="주소">
+                </td>
+                <td class="p-2 text-left">
+                    <input type="text" value="${escapeDetailOwnedHtml(row.bd_name)}"
+                        oninput="updateDetailOwnedField('${row.row_id}','bd_name', this.value)"
+                        class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px]"
+                        placeholder="건물명">
+                </td>
+            </tr>
+        `).join("");
+
+        syncDetailOwnedPropertiesInput();
+    }
+
+    function bindDetailOwnedRows(rawOwned) {
+        if (!rawOwned) {
+            detailOwnedRows = [];
+            renderDetailOwnedRows();
+            return;
+        }
+
+        let parsed = rawOwned;
+        if (typeof rawOwned === "string") {
+            try {
+                parsed = JSON.parse(rawOwned);
+            } catch (e) {
+                console.error("detail owned properties parse failed", e);
+                parsed = [];
+            }
+        }
+
+        if (!Array.isArray(parsed)) {
+            detailOwnedRows = [];
+            renderDetailOwnedRows();
+            return;
+        }
+
+        detailOwnedRows = parsed.map(item => ({
+            row_id: generateDetailOwnedRowId(),
+            bd_number: item?.bd_number !== null && item?.bd_number !== undefined ? String(item.bd_number) : "",
+            address: item?.address || "",
+            bd_name: item?.bd_name || ""
+        }));
+
+        renderDetailOwnedRows();
+    }
+
+    function addDetailOwnedRow() {
+        detailOwnedRows.push(createEmptyDetailOwnedRow());
+        renderDetailOwnedRows();
+    }
+
+    function updateDetailOwnedField(rowId, key, value) {
+        const row = detailOwnedRows.find(item => item.row_id === rowId);
+        if (!row) return;
+        row[key] = value;
+        syncDetailOwnedPropertiesInput();
+    }
+
+    function removeDetailOwnedRow(rowId) {
+        detailOwnedRows = detailOwnedRows.filter(item => item.row_id !== rowId);
+        renderDetailOwnedRows();
+    }
+
+    function openDetailBuildingSearchModal(rowId, initialKeyword = "", autoSearch = false) {
+        detailOwnedPickingRowId = rowId;
+        const modalEl = document.getElementById("detailBuildingSearchModal");
+        const inputEl = document.getElementById("detailBuildingSearchInput");
+        const resultBody = document.getElementById("detailBuildingSearchResultBody");
+
+        if (!modalEl || !inputEl || !resultBody) return;
+
+        modalEl.classList.remove("hidden");
+        modalEl.classList.add("flex");
+        inputEl.value = String(initialKeyword || "");
+        inputEl.focus();
+        inputEl.select();
+        resultBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">검색어를 입력하세요.</td></tr>`;
+        renderDetailBuildingSearchPagination(0, 1, 0);
+
+        if (autoSearch && inputEl.value.trim()) {
+            searchDetailOwnedBuildings(1);
+        }
+    }
+
+    function closeDetailBuildingSearchModal() {
+        const modalEl = document.getElementById("detailBuildingSearchModal");
+        if (modalEl) {
+            modalEl.classList.add("hidden");
+            modalEl.classList.remove("flex");
+        }
+        detailOwnedPickingRowId = null;
+        renderDetailBuildingSearchPagination(0, 1, 0);
+    }
+
+    function renderDetailBuildingSearchPagination(totalCount = 0, currentPage = 1, totalPages = 0) {
+        const infoEl = document.getElementById("detailBuildingSearchPageInfo");
+        const buttonsEl = document.getElementById("detailBuildingSearchPageButtons");
+        if (!infoEl || !buttonsEl) return;
+
+        const safeCount = Math.max(0, Number(totalCount) || 0);
+        const safeTotalPages = Math.max(0, Number(totalPages) || 0);
+        const safeCurrentPage = safeTotalPages > 0
+            ? Math.min(Math.max(1, Number(currentPage) || 1), safeTotalPages)
+            : 1;
+
+        infoEl.textContent = safeCount > 0
+            ? `총 ${safeCount.toLocaleString()}건 · ${safeCurrentPage}/${safeTotalPages} 페이지`
+            : "총 0건";
+
+        if (safeTotalPages <= 1) {
+            buttonsEl.innerHTML = "";
+            return;
+        }
+
+        const groupStart = Math.floor((safeCurrentPage - 1) / DETAIL_OWNED_BUILDING_SEARCH_PAGE_GROUP_SIZE) * DETAIL_OWNED_BUILDING_SEARCH_PAGE_GROUP_SIZE + 1;
+        const groupEnd = Math.min(groupStart + DETAIL_OWNED_BUILDING_SEARCH_PAGE_GROUP_SIZE - 1, safeTotalPages);
+        const prevPage = groupStart - 1;
+        const nextPage = groupStart + DETAIL_OWNED_BUILDING_SEARCH_PAGE_GROUP_SIZE;
+
+        let html = `
+            <button type="button"
+                ${prevPage < 1 ? "disabled" : `onclick="searchDetailOwnedBuildings(${prevPage})"`}
+                class="px-2 py-1 rounded border text-[11px] ${prevPage < 1 ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+                이전
+            </button>
+        `;
+
+        for (let page = groupStart; page <= groupEnd; page += 1) {
+            const active = page === safeCurrentPage;
+            html += `
+                <button type="button"
+                    ${active ? "disabled" : `onclick="searchDetailOwnedBuildings(${page})"`}
+                    class="min-w-[28px] px-2 py-1 rounded border text-[11px] ${active ? "border-blue-600 bg-blue-600 text-white cursor-default" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+                    ${page}
+                </button>
+            `;
+        }
+
+        html += `
+            <button type="button"
+                ${nextPage > safeTotalPages ? "disabled" : `onclick="searchDetailOwnedBuildings(${nextPage})"`}
+                class="px-2 py-1 rounded border text-[11px] ${nextPage > safeTotalPages ? "border-slate-200 text-slate-300 cursor-not-allowed" : "border-slate-300 text-slate-700 hover:bg-slate-50"}">
+                다음
+            </button>
+        `;
+
+        buttonsEl.innerHTML = html;
+    }
+
+    async function searchDetailOwnedBuildings(page = 1) {
+        const inputEl = document.getElementById("detailBuildingSearchInput");
+        const resultBody = document.getElementById("detailBuildingSearchResultBody");
+        const keyword = String(inputEl?.value || "").trim();
+        const safePage = Math.max(1, Number(page) || 1);
+
+        if (!resultBody) return;
+
+        if (!keyword) {
+            resultBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">검색어를 입력하세요.</td></tr>`;
+            renderDetailBuildingSearchPagination(0, 1, 0);
+            return;
+        }
+
+        resultBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">검색 중...</td></tr>`;
+
+        try {
+            const params = new URLSearchParams();
+            params.set("q", keyword);
+            params.set("page", String(safePage));
+            params.set("page_size", String(DETAIL_OWNED_BUILDING_SEARCH_PAGE_SIZE));
+
+            const res = await fetch(`/api/building/quick-search?${params.toString()}`);
+            if (!res.ok) throw new Error("owned building quick search failed");
+            const payload = await res.json();
+            const items = Array.isArray(payload) ? payload : (Array.isArray(payload?.items) ? payload.items : []);
+            const totalCount = Array.isArray(payload) ? items.length : Number(payload?.total_count || 0);
+            const totalPages = Array.isArray(payload) ? (items.length > 0 ? 1 : 0) : Number(payload?.total_pages || 0);
+            const currentPage = Array.isArray(payload) ? 1 : Number(payload?.page || safePage);
+
+            if (!items.length) {
+                resultBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">검색 결과가 없습니다.</td></tr>`;
+                renderDetailBuildingSearchPagination(totalCount, currentPage, totalPages);
+                return;
+            }
+
+            resultBody.innerHTML = items.map(item => {
+                const bdNumber = Number(item.bd_number || 0);
+                const address = escapeDetailOwnedHtml(item.address || "");
+                const bdName = escapeDetailOwnedHtml(item.bd_name || "");
+                const salePrice = escapeDetailOwnedHtml(item.sale_price || "");
+                const pricePerPyeong = escapeDetailOwnedHtml(item.price_per_pyeong || "");
+                const rawAddressJs = JSON.stringify(String(item.address || ""));
+                const rawBdNameJs = JSON.stringify(String(item.bd_name || ""));
+                return `
+                    <tr class="border-t border-slate-100 hover:bg-slate-50">
+                        <td class="p-2 text-center">
+                            <button type="button"
+                                onclick="openDetailOwnedSearchResult(${bdNumber})"
+                                class="text-blue-600 hover:text-blue-800 hover:underline font-semibold">
+                                ${bdNumber}
+                            </button>
+                        </td>
+                        <td class="p-2">${address || "-"}</td>
+                        <td class="p-2">${bdName || "-"}</td>
+                        <td class="p-2 text-right">${salePrice || "-"}</td>
+                        <td class="p-2 text-right">${pricePerPyeong || "-"}</td>
+                        <td class="p-2 text-center">
+                            <button type="button"
+                                onclick='selectDetailOwnedBuilding(${bdNumber}, ${rawAddressJs}, ${rawBdNameJs})'
+                                class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] hover:bg-emerald-700">
+                                선택
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+
+            renderDetailBuildingSearchPagination(totalCount, currentPage, totalPages);
+        } catch (error) {
+            console.error(error);
+            resultBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-400">검색 실패</td></tr>`;
+            renderDetailBuildingSearchPagination(0, 1, 0);
+        }
+    }
+
+    function openDetailOwnedSearchResult(bdNumber) {
+        if (!bdNumber) return;
+        window.open(`/detail/${bdNumber}`, "_blank");
+    }
+
+    function selectDetailOwnedBuilding(bdNumber, address, bdName) {
+        if (!detailOwnedPickingRowId) return;
+        const row = detailOwnedRows.find(item => item.row_id === detailOwnedPickingRowId);
+        if (!row) return;
+        row.bd_number = String(bdNumber || "");
+        row.address = address || "";
+        row.bd_name = bdName || "";
+        renderDetailOwnedRows();
+        closeDetailBuildingSearchModal();
+    }
+
+    function openDetailBuildingSearchFromRow(rowId) {
+        const row = detailOwnedRows.find(item => item.row_id === rowId);
+        openDetailBuildingSearchModal(rowId, row?.address || "", false);
+    }
+
+    function handleDetailOwnedAddressKeydown(event, rowId) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const keyword = String(event.currentTarget?.value || "").trim();
+        openDetailBuildingSearchModal(rowId, keyword, Boolean(keyword));
+    }
+
+    function openDetailOwnedBuildingFromRow(rowId) {
+        const row = detailOwnedRows.find(item => item.row_id === rowId);
+        if (!row || !row.bd_number) return;
+        openDetailOwnedSearchResult(row.bd_number);
     }
 
     function normalizeAutofillAddress(value) {
@@ -2311,6 +2808,8 @@
                 });
 
                 
+                await loadMappedOwnedPropertiesFromClientName(document.getElementById("client_name")?.value || "");
+
                 // 2. 상세 관리 테이블(lease_details) 세팅
                 if (item.lease_details && Array.from(item.lease_details).length > 0) {
                     console.log("lease_detatils")
@@ -2453,6 +2952,7 @@
         진행 이력
         =============================== */
         updatedData.history_data = getCurrentHistoryData();
+        updatedData.owned_properties_json = serializeDetailOwnedRows();
 
         /* ===============================
         이미지 메타 정보 (개수만)
@@ -4507,6 +5007,21 @@
     document.addEventListener('DOMContentLoaded', () => {
         setupMultiSelect('group-usage', '건축물용도 (선택)');
         setupMultiSelect('group-structure', '건물구조 (선택)');
+        document.getElementById('detailCustomerInfoTabBtn')?.addEventListener('click', () => setDetailCustomerInfoTab('customer'));
+        document.getElementById('detailOwnedPropertyTabBtn')?.addEventListener('click', () => setDetailCustomerInfoTab('owned'));
+        document.getElementById('detailBuildingSearchInput')?.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            searchDetailOwnedBuildings(1);
+        });
+        document.getElementById('client_name')?.addEventListener('change', (event) => {
+            loadMappedOwnedPropertiesFromClientName(event.currentTarget?.value || "");
+        });
+        document.getElementById('client_name')?.addEventListener('blur', (event) => {
+            loadMappedOwnedPropertiesFromClientName(event.currentTarget?.value || "");
+        });
+        renderDetailOwnedRows();
+        setDetailCustomerInfoTab('customer');
     });
     </script>
     <script src="/statics/js/bug-report-widget.js"></script>

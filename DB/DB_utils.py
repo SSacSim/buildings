@@ -236,6 +236,7 @@ def extract_detail_info(conn, bd_number :str ) -> dict:
             bi.*,
             bm.memo, 
             bm.etc_memo, 
+            bm.owned_properties_json,
             bm.bd_feature, 
             bm.etc_feature, 
             bm.status

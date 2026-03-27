@@ -722,6 +722,79 @@ def delete_customer_match_history(customer_number: int, history_id: str):
             conn.close()
 
 
+@router.get("/api/customer/owned-properties-lookup")
+def lookup_customer_owned_properties(client_name: str = Query("")):
+    conn = None
+    cur = None
+    try:
+        normalized = str(client_name or "").strip()
+        token = normalized.split()[0] if normalized else ""
+        compact_token = token.replace(" ", "")
+        if not compact_token:
+            return {
+                "matched": False,
+                "token": "",
+                "customer": None,
+            }
+
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        ensure_customer_intro_table(conn, cur)
+
+        cur.execute(
+            """
+            SELECT
+                customer_number,
+                buyer_name,
+                ceo_name,
+                owned_properties_json
+            FROM customer_info
+            WHERE delete_flag = FALSE
+              AND (
+                    REPLACE(COALESCE(ceo_name, ''), ' ', '') ILIKE %s
+                    OR COALESCE(ceo_name, '') ILIKE %s
+              )
+            ORDER BY
+                CASE
+                    WHEN LOWER(REPLACE(COALESCE(ceo_name, ''), ' ', '')) = LOWER(%s) THEN 0
+                    WHEN COALESCE(ceo_name, '') ILIKE %s THEN 1
+                    ELSE 2
+                END,
+                update_time DESC,
+                customer_number DESC
+            LIMIT 1
+            """,
+            (
+                f"%{compact_token}%",
+                f"%{token}%",
+                compact_token,
+                f"{token}%",
+            ),
+        )
+        row = cur.fetchone()
+        if not row:
+            return {
+                "matched": False,
+                "token": token,
+                "customer": None,
+            }
+
+        columns = [desc[0] for desc in cur.description]
+        customer = dict(zip(columns, row))
+        return {
+            "matched": True,
+            "token": token,
+            "customer": customer,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
 @router.get("/api/customer/search")
 def search_customer(
     q: str = Query(""),
@@ -2017,4 +2090,3 @@ async def update_customer_history(customer_number: int, data: CustomerHistoryUpd
             cur.close()
         if conn:
             conn.close()
-
