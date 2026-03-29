@@ -1685,6 +1685,7 @@
                 <td class="p-2 text-left">
                     <input type="text" value="${escapeDetailOwnedHtml(row.address)}"
                         oninput="updateDetailOwnedField('${row.row_id}','address', this.value)"
+                        onkeydown="handleDetailOwnedAddressKeydown(event, '${row.row_id}')"
                         class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px]"
                         placeholder="주소">
                 </td>
@@ -1935,6 +1936,13 @@
     function openDetailBuildingSearchFromRow(rowId) {
         const row = detailOwnedRows.find(item => item.row_id === rowId);
         openDetailBuildingSearchModal(rowId, row?.address || "", false);
+    }
+
+    function handleDetailOwnedAddressKeydown(event, rowId) {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const keyword = String(event.currentTarget?.value || "").trim();
+        openDetailBuildingSearchModal(rowId, keyword, Boolean(keyword));
     }
 
     function openDetailOwnedBuildingFromRow(rowId) {

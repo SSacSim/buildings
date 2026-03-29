@@ -1564,6 +1564,7 @@ function renderOwnedRows() {
             <td class="p-2 text-left">
                 <input type="text" value="${row.address || ""}"
                     oninput="updateOwnedField('${row.row_id}','address', this.value)"
+                    onkeydown="handleOwnedAddressKeydown(event, '${row.row_id}')"
                     class="w-full min-w-0 px-2 py-1 border border-slate-200 rounded text-[11px]"
                     placeholder="주소">
             </td>
@@ -1808,6 +1809,13 @@ function handleIntroAddressKeydown(event, rowId) {
     event.preventDefault();
     const keyword = String(event.currentTarget?.value || "").trim();
     openBuildingSearchModal("intro", rowId, keyword, Boolean(keyword));
+}
+
+function handleOwnedAddressKeydown(event, rowId) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const keyword = String(event.currentTarget?.value || "").trim();
+    openBuildingSearchModal("owned", rowId, keyword, Boolean(keyword));
 }
 
 function openIntroBuildingFromRow(rowId) {
@@ -3830,5 +3838,4 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     window.__authRedirectFetchGuardInstalled = true;
 })();
-
 
