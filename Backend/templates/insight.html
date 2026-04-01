@@ -689,6 +689,7 @@
                         bd_name: String(row?.bd_name || "").trim(),
                         address: address,
                         sale_price: String(row?.sale_price || "").trim(),
+                        status: String(row?.status || "").trim(),
                         detail_url: bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : "",
                     };
                 })

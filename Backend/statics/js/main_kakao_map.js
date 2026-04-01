@@ -37,6 +37,22 @@
             .replaceAll("'", "&#39;");
     }
 
+    function getStatusTheme(rawStatus) {
+        const status = String(rawStatus || "").trim();
+        const themeMap = {
+            "준비": { label: "준비", color: "#9a6700", border: "#f7d778", background: "#fef3c7" },
+            "완료": { label: "완료", color: "#1d4ed8", border: "#9ec5fe", background: "#dbeafe" },
+            "매각": { label: "매각", color: "#475569", border: "#cbd5e1", background: "#e2e8f0" },
+            "보류": { label: "보류", color: "#b42318", border: "#f4a3a3", background: "#fee2e2" },
+        };
+        return themeMap[status] || {
+            label: status || "-",
+            color: "#475569",
+            border: "#cbd5e1",
+            background: "#f8fafc",
+        };
+    }
+
     function setResult(text) {
         resultEl.textContent = text;
     }
@@ -320,6 +336,7 @@
                     bd_name: bdName,
                     address: address,
                     sale_price: salePrice,
+                    status: String(item?.status ?? item?.building_status ?? "").trim(),
                     detail_url: detailUrl
                 };
             })
@@ -378,6 +395,7 @@
         const safeAddress = escapeHtml(item?.address || "-");
         const safeSalePrice = escapeHtml(item?.sale_price || "-");
         const safeBuildingName = escapeHtml(item?.bd_name || "");
+        const statusTheme = getStatusTheme(item?.status);
         const hasBuildingName = safeBuildingName && safeBuildingName !== "-";
         const salePriceLabel = safeSalePrice && safeSalePrice !== "-" ? safeSalePrice : "정보 없음";
 
@@ -411,6 +429,25 @@
                         color: #1e293b;
                         word-break: break-all;
                     ">${safeAddress}</div>
+                    <div style="
+                        margin-top: 9px;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    ">
+                        <span style="font-size: 10px; font-weight: 800; color: #64748b;">상태</span>
+                        <span style="
+                            display: inline-flex;
+                            align-items: center;
+                            border-radius: 999px;
+                            padding: 2px 9px;
+                            font-size: 10px;
+                            font-weight: 800;
+                            color: ${statusTheme.color};
+                            border: 1px solid ${statusTheme.border};
+                            background: ${statusTheme.background};
+                        ">${escapeHtml(statusTheme.label)}</span>
+                    </div>
                     <div style="
                         margin-top: 11px;
                         display: flex;

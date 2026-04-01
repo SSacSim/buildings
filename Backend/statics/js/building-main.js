@@ -474,6 +474,7 @@ function buildMainSearchMapItems(items) {
                 address: address,
                 bd_name: bdName,
                 sale_price: salePrice,
+                status: String(item?.status || "").trim(),
                 detail_url: detailUrl
             };
         })
