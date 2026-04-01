@@ -2239,6 +2239,12 @@
         const normalized = normalizeTextValue(String(value ?? "").trim());
         if (isAutofillTargetEmpty(normalized)) return "";
 
+        const element = document.getElementById(fieldId);
+        if (element?.tagName === "SELECT") {
+            const hasMatchingOption = Array.from(element.options || []).some((option) => option.value === normalized);
+            if (!hasMatchingOption) return "";
+        }
+
         if (fieldId === "official_price_per_sqm_won") {
             return formatNumberWithComma(normalized);
         }
@@ -2722,7 +2728,10 @@
                         }
 
                         const rawDisplayValue = (value === "0" || value === "0.0" || value === null || value === "NaN") ? "" : value;
-                        const displayValue = normalizeTextValue(rawDisplayValue);
+                        const normalizedDisplayValue = normalizeTextValue(rawDisplayValue);
+                        const displayValue = element.tagName === "SELECT"
+                            ? formatAutofillDisplayValue(element.id, normalizedDisplayValue)
+                            : normalizedDisplayValue;
                         element.value = displayValue;
 
                         if (element.id === "status") {
