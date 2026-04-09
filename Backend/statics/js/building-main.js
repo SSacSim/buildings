@@ -64,6 +64,26 @@ let latestBuildingMapFetchPromise = null;
 let hasExecutedBuildingSearch = false;
 let isMainTitleRefreshing = false;
 
+const CUSTOMER_PROGRESS_BADGE_THEME = {
+    "-": { color: "#64748b", background: "#f8fafc", border: "#cbd5e1" },
+    "검토": { color: "#1d4ed8", background: "#dbeafe", border: "#93c5fd" },
+    "집중": { color: "#b45309", background: "#ffedd5", border: "#fdba74" },
+    "완료": { color: "#047857", background: "#d1fae5", border: "#86efac" },
+    "보류": { color: "#b42318", background: "#fee2e2", border: "#f4a3a3" },
+};
+
+const CUSTOMER_STATE_BADGE_THEME = {
+    A: { color: "#1d4ed8", background: "#dbeafe", border: "#93c5fd" },
+    B: { color: "#047857", background: "#d1fae5", border: "#86efac" },
+    C: { color: "#a16207", background: "#fef3c7", border: "#fde68a" },
+    X: { color: "#b42318", background: "#fee2e2", border: "#f4a3a3" },
+};
+
+function buildCustomerBadgeStyle(theme) {
+    const safeTheme = theme || CUSTOMER_PROGRESS_BADGE_THEME["-"];
+    return `color: ${safeTheme.color}; background-color: ${safeTheme.background}; border: 1px solid ${safeTheme.border};`;
+}
+
 function resolveDisplayName(user) {
     const displayName = String(user?.display_name || "").trim();
     if (displayName) return displayName;
@@ -693,13 +713,21 @@ function renderCustomerCards(data) {
         const desiredPrice = item.desired_price_manwon
             ? `${formatNumberWithComma(String(item.desired_price_manwon))}만원`
             : '-';
+        const customerProgress = String(item.status || '-').trim() || '-';
+        const customerStateCode = String(item.customer_state || '').trim().toUpperCase();
         const customerStateMap = {
             A: 'A(원활) : 최근 7일 이내 소통, 실행력 높은 매수자',
             B: 'B(보통) : 반응은 있으나 느림, 조건 제한 많음',
             C: 'C(어려움) : 응답 지연, 반복 제안에도 무반응',
             X: 'X(비활성) : 3개월 초과 미접촉, 제외 대상'
         };
-        const customerStateText = customerStateMap[item.customer_state] || '-';
+        const customerProgressBadgeStyle = buildCustomerBadgeStyle(
+            CUSTOMER_PROGRESS_BADGE_THEME[customerProgress] || CUSTOMER_PROGRESS_BADGE_THEME["-"]
+        );
+        const customerStateText = customerStateMap[customerStateCode] || '-';
+        const customerStateBadgeStyle = buildCustomerBadgeStyle(
+            CUSTOMER_STATE_BADGE_THEME[customerStateCode] || CUSTOMER_PROGRESS_BADGE_THEME["-"]
+        );
 
         return `
             <div onclick="goToCustomer(${item.customer_number})"
@@ -709,10 +737,10 @@ function renderCustomerCards(data) {
                         <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">
                             CUSTOMER: ${item.customer_number}
                         </span>
-                        <span class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                            진행상황: ${item.status || '-'}
+                        <span class="text-xs font-bold px-2 py-1 rounded" style="${customerProgressBadgeStyle}">
+                            진행상황: ${customerProgress}
                         </span>
-                        <span class="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded">
+                        <span class="text-xs font-bold px-2 py-1 rounded" style="${customerStateBadgeStyle}">
                             상태: ${customerStateText}
                         </span>
                     </div>
