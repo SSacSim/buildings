@@ -1091,6 +1091,40 @@ function formatNumberWithComma(value) {
     return number.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+function bindThousandsSeparatorInput(input) {
+    if (!input) return;
+
+    const applyFormattedValue = () => {
+        input.value = formatNumberWithComma(input.value);
+    };
+
+    input.addEventListener('input', applyFormattedValue);
+    if (input.value) applyFormattedValue();
+}
+
+function bindAdvancedFilterThousandsSeparators() {
+    [
+        'matchMinPrice',
+        'matchMaxPrice',
+        'matchCashHoldManwon',
+        'matchLandPyeongMin',
+        'matchLandPyeongMax',
+        'matchGrossPyeongMin',
+        'matchGrossPyeongMax',
+        'matchLandAreaMin',
+        'matchLandAreaMax',
+        'matchGrossAreaMin',
+        'matchGrossAreaMax',
+        'matchUsableAreaMin',
+        'matchUsableAreaMax',
+        'matchBuildingAreaMin',
+        'matchBuildingAreaMax',
+        'matchParkingMin',
+    ].forEach((id) => {
+        bindThousandsSeparatorInput(document.getElementById(id));
+    });
+}
+
 // 블러 여부 
 window.isLocked = false;
 function syncMainSearchLockState() {
@@ -1132,6 +1166,7 @@ function toggleSidebarLock() {
 document.addEventListener('DOMContentLoaded', () => {
     initializeAccountMenu();
     loadMainNoticePopup();
+    bindAdvancedFilterThousandsSeparators();
 
     const searchBar = document.getElementById('addressInput')?.parentElement;
     const buildingBtn = searchBar?.querySelector('button[onclick="search()"]');
