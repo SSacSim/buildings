@@ -507,6 +507,7 @@
         const selectedInsightBuildingIds = new Set();
         let insightLastSearchUsedIntroBase = false;
         let insightLatestBuildingMapItems = [];
+        let insightLatestBuildingMapTotalCount = 0;
         const INSIGHT_SECTOR_KEYS = [
             "types",
             "building_status",
@@ -678,7 +679,7 @@
             setActiveInsightSectors(INSIGHT_SECTOR_KEYS, { fallbackToAll: true });
         }
 
-        function syncInsightMapItems(items) {
+        function syncInsightMapItems(items, totalCount = null) {
             const normalized = (Array.isArray(items) ? items : [])
                 .map((row) => {
                     const address = String(row?.address || "").trim();
@@ -695,6 +696,10 @@
                 })
                 .filter(Boolean);
             insightLatestBuildingMapItems = normalized;
+            const numericTotalCount = Number(totalCount);
+            insightLatestBuildingMapTotalCount = Number.isFinite(numericTotalCount)
+                ? Math.max(0, numericTotalCount)
+                : normalized.length;
             window.dispatchEvent(new CustomEvent("main:searchResultsUpdated", {
                 detail: { results: insightLatestBuildingMapItems }
             }));
@@ -702,6 +707,9 @@
 
         window.getMainSearchMapItems = function getMainSearchMapItemsFromInsight() {
             return insightLatestBuildingMapItems;
+        };
+        window.getMainSearchMapItemCount = function getMainSearchMapItemCountFromInsight() {
+            return insightLatestBuildingMapTotalCount;
         };
 
         function normalizeNumber(value, allowDecimal = true) {
@@ -1416,9 +1424,9 @@
 
                 const customers = Array.isArray(payload.customers) ? payload.customers : [];
                 const buildings = Array.isArray(payload.buildings) ? payload.buildings : [];
-                syncInsightMapItems(buildings);
                 const customerTotalCount = Number(payload.customers_total_count ?? customers.length);
                 const buildingTotalCount = Number(payload.buildings_total_count ?? buildings.length);
+                syncInsightMapItems(buildings, buildingTotalCount);
                 const customerTotalPages = Number(payload.customers_total_pages ?? (customerTotalCount > 0 ? Math.ceil(customerTotalCount / INSIGHT_PAGE_SIZE) : 0));
                 const buildingTotalPages = Number(payload.buildings_total_pages ?? (buildingTotalCount > 0 ? Math.ceil(buildingTotalCount / INSIGHT_PAGE_SIZE) : 0));
                 const currentCustomerPage = Number(payload.customers_page ?? insightCustomerPage);

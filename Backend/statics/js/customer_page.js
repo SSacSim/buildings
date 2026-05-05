@@ -11,6 +11,7 @@ const selectedMatchBuildingIds = new Set();
 let introSearchKeyword = "";
 let currentIntroManagerName = "";
 let lastCustomerMatchQueryString = "";
+let lastCustomerMatchTotalCount = 0;
 const CUSTOMER_MATCH_HISTORY_MAX_ITEMS = 50;
 let customerMatchHistoryItems = [];
 let currentMatchHistoryConditions = null;
@@ -2818,9 +2819,10 @@ function normalizeCustomerMatchMapItems(items) {
         .filter(Boolean);
 }
 
-async function getCustomerMatchMapItems() {
+async function getCustomerMatchMapItems(options = {}) {
     if (!lastCustomerMatchQueryString) return [];
 
+    const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
     const baseParams = new URLSearchParams(lastCustomerMatchQueryString);
     baseParams.delete("page");
     baseParams.delete("page_size");
@@ -2838,12 +2840,19 @@ async function getCustomerMatchMapItems() {
 
     const firstPage = await loadPage(1);
     const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
+    const totalCount = Number(firstPage.totalCount) || 0;
     let allItems = Array.isArray(firstPage.items) ? [...firstPage.items] : [];
+    if (onProgress) {
+        onProgress({ loaded: allItems.length, total: totalCount, page: 1, totalPages });
+    }
 
     for (let page = 2; page <= totalPages; page += 1) {
         const current = await loadPage(page);
         if (Array.isArray(current.items) && current.items.length) {
             allItems = allItems.concat(current.items);
+        }
+        if (onProgress) {
+            onProgress({ loaded: allItems.length, total: totalCount, page, totalPages });
         }
     }
 
@@ -2858,6 +2867,13 @@ async function getCustomerMatchMapItems() {
 }
 
 window.getCustomerMatchMapItems = getCustomerMatchMapItems;
+window.getCustomerMatchMapItemCount = function getCustomerMatchMapItemCount() {
+    const count = Number(lastCustomerMatchTotalCount);
+    return Number.isFinite(count) ? Math.max(0, count) : 0;
+};
+window.getCustomerIntroMapItemCount = function getCustomerIntroMapItemCount() {
+    return getCustomerIntroMapItems().length;
+};
 
 function setCustomerMatchCount(count) {
     const el = document.getElementById("customerMatchCount");
@@ -3365,6 +3381,7 @@ async function searchCustomerMatchBuildings(page = 1) {
 
     if (!hasAnyCondition) {
         lastCustomerMatchQueryString = "";
+        lastCustomerMatchTotalCount = 0;
         tbody.innerHTML = '<div class="py-6 text-slate-400 text-center">최소 1개 이상 조건을 선택/입력해 주세요.</div>';
         setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
@@ -3372,6 +3389,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     }
 
     const params = new URLSearchParams();
+    lastCustomerMatchTotalCount = 0;
     if (hasAddress) params.set("address", address);
     if (hasBusinessArea) params.set("business_area", businessArea);
     if (hasStationKeyword) params.set("station_keyword", stationKeyword);
@@ -3426,6 +3444,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         const parsed = parseCustomerMatchPayload(payload, customerMatchCurrentPage);
 
         const totalCount = Number(parsed.totalCount) || 0;
+        lastCustomerMatchTotalCount = totalCount;
         const totalPages = Math.max(0, Number(parsed.totalPages) || 0);
         const safePage = Math.max(1, Number(parsed.currentPage) || customerMatchCurrentPage);
         customerMatchCurrentPage = safePage;
@@ -3498,6 +3517,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         renderCustomerMatchPagination(totalPages, safePage);
     } catch (err) {
         console.error(err);
+        lastCustomerMatchTotalCount = 0;
         tbody.innerHTML = '<div class="py-6 text-red-400 text-center">검색 중 오류가 발생했습니다.</div>';
         setCustomerMatchCount(0);
         renderCustomerMatchPagination(0, 1);
@@ -3838,4 +3858,3 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     window.__authRedirectFetchGuardInstalled = true;
 })();
-

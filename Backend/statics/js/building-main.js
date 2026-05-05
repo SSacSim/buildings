@@ -35,6 +35,7 @@ let currentAddress = '';
 let currentcategory = '';
 let currentSearchMode = 'building';
 let currentBuildingTotalPages = null;
+let currentBuildingTotalCount = 0;
 let currentCustomerTotalPages = null;
 const SEARCH_TYPE_SELECT_THEME = {
     building: {
@@ -581,7 +582,8 @@ function buildAdvancedOverviewParams(advanced, category, page = 1, pageSize = 10
     return params;
 }
 
-async function fetchAllSimpleSearchRows(address, category) {
+async function fetchAllSimpleSearchRows(address, category, options = {}) {
+    const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
     const res = await fetch("/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -599,6 +601,9 @@ async function fetchAllSimpleSearchRows(address, category) {
     const rows = Array.isArray(firstPayload.slice(1)) ? firstPayload.slice(1) : [];
     const totalCount = Number(firstPayload?.[0]?.total_count || 0);
     const totalPages = totalCount > 0 ? Math.ceil(totalCount / BUILDING_PAGE_SIZE) : 0;
+    if (onProgress) {
+        onProgress({ loaded: rows.length, total: totalCount, page: 1, totalPages });
+    }
     if (totalPages <= 1) {
         return rows;
     }
@@ -618,17 +623,25 @@ async function fetchAllSimpleSearchRows(address, category) {
             continue;
         }
         rows.push(...pagePayload.slice(1));
+        if (onProgress) {
+            onProgress({ loaded: rows.length, total: totalCount, page, totalPages });
+        }
     }
 
     return rows;
 }
 
-async function fetchAllAdvancedSearchRows(advanced, category, keyword = "") {
+async function fetchAllAdvancedSearchRows(advanced, category, keyword = "", options = {}) {
+    const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
     const firstParams = buildAdvancedOverviewParams(advanced, category, 1, 100, keyword);
     const firstRes = await fetch(`/api/insight/overview?${firstParams.toString()}`);
     const firstPayload = await firstRes.json();
     const rows = Array.isArray(firstPayload?.buildings) ? [...firstPayload.buildings] : [];
+    const totalCount = Number(firstPayload?.buildings_total_count || rows.length || 0);
     const totalPages = Number(firstPayload?.buildings_total_pages || 0);
+    if (onProgress) {
+        onProgress({ loaded: rows.length, total: totalCount, page: 1, totalPages });
+    }
     if (totalPages <= 1) {
         return rows;
     }
@@ -639,12 +652,15 @@ async function fetchAllAdvancedSearchRows(advanced, category, keyword = "") {
         const payload = await res.json();
         const pageRows = Array.isArray(payload?.buildings) ? payload.buildings : [];
         rows.push(...pageRows);
+        if (onProgress) {
+            onProgress({ loaded: rows.length, total: totalCount, page, totalPages });
+        }
     }
 
     return rows;
 }
 
-async function loadMainSearchMapItems(force = false) {
+async function loadMainSearchMapItems(force = false, options = {}) {
     if (currentSearchMode !== "building") {
         latestBuildingMapItems = [];
         latestBuildingMapQueryKey = getMainBuildingMapQueryKey();
@@ -671,8 +687,8 @@ async function loadMainSearchMapItems(force = false) {
 
     const fetchPromise = (async () => {
         const rows = hasAdvancedFilters()
-            ? await fetchAllAdvancedSearchRows(collectAdvancedFilters(), currentcategory, currentAddress)
-            : await fetchAllSimpleSearchRows(currentAddress, currentcategory);
+            ? await fetchAllAdvancedSearchRows(collectAdvancedFilters(), currentcategory, currentAddress, options)
+            : await fetchAllSimpleSearchRows(currentAddress, currentcategory, options);
 
         updateMainSearchMapItems(rows, { isFullSet: true, queryKey });
         return [...latestBuildingMapItems];
@@ -692,8 +708,15 @@ async function loadMainSearchMapItems(force = false) {
     return fetchPromise;
 }
 
-window.getMainSearchMapItems = function getMainSearchMapItems() {
-    return loadMainSearchMapItems(false);
+window.getMainSearchMapItems = function getMainSearchMapItems(options = {}) {
+    return loadMainSearchMapItems(false, options);
+};
+
+window.getMainSearchMapItemCount = function getMainSearchMapItemCount() {
+    if (currentSearchMode !== "building" || !hasExecutedBuildingSearch) return 0;
+    const count = Number(currentBuildingTotalCount);
+    if (Number.isFinite(count)) return Math.max(0, count);
+    return latestBuildingMapItems.length;
 };
 
 function renderCustomerCards(data) {
@@ -826,6 +849,7 @@ async function fetchBuildingsAdvanced(page, category) {
     pagination.innerHTML = '';
     loading.classList.remove('hidden');
     hasExecutedBuildingSearch = true;
+    currentBuildingTotalCount = 0;
 
     const params = new URLSearchParams();
     params.set('building_page', String(page));
@@ -882,6 +906,8 @@ async function fetchBuildingsAdvanced(page, category) {
 
         const items = Array.isArray(data?.buildings) ? data.buildings : [];
         if (!items.length) {
+            currentBuildingTotalCount = 0;
+            currentBuildingTotalPages = 0;
             updateMainSearchMapItems([]);
             document.getElementById("totalCount").innerText = "전체: 0건";
             list.innerHTML = '<div class="text-center text-slate-400 py-20">검색 결과가 없습니다.</div>';
@@ -889,9 +915,12 @@ async function fetchBuildingsAdvanced(page, category) {
         }
 
         currentBuildingTotalPages = Number(data?.buildings_total_pages || 0);
+        currentBuildingTotalCount = Number(data?.buildings_total_count || items.length);
         renderBuildingCards(items);
-        renderPagination(page, Number(data?.buildings_total_count || items.length), currentBuildingTotalPages);
+        renderPagination(page, currentBuildingTotalCount, currentBuildingTotalPages);
     } catch (err) {
+        currentBuildingTotalCount = 0;
+        currentBuildingTotalPages = 0;
         updateMainSearchMapItems([]);
         loading.classList.add('hidden');
         console.error(err);
@@ -909,6 +938,7 @@ async function searchCustomer(page = 1) {
 
     currentAddress = keyword;
     currentcategory = status;
+    currentBuildingTotalCount = 0;
 
     list.innerHTML = '';
     pagination.innerHTML = '';
@@ -958,6 +988,7 @@ async function fetchBuildings(page , category) {
     pagination.innerHTML = '';
     loading.classList.remove('hidden');
     updateMainSearchMapItems([]);
+    currentBuildingTotalCount = 0;
 
 
     try {
@@ -971,6 +1002,8 @@ async function fetchBuildings(page , category) {
         loading.classList.add('hidden');
 
         if (!data || data.length === 0) {
+            currentBuildingTotalCount = 0;
+            currentBuildingTotalPages = 0;
             updateMainSearchMapItems([]);
             list.innerHTML = '<div class="text-center text-slate-400 py-20">검색 결과가 없습니다.</div>';
             return;
@@ -979,10 +1012,13 @@ async function fetchBuildings(page , category) {
         renderBuildingCards(data.slice(1));
 
         const totalCount = data.length > 0 ? data[0].total_count : 0;
+        currentBuildingTotalCount = Number(totalCount || 0);
         currentBuildingTotalPages = totalCount > 0 ? Math.ceil(totalCount / BUILDING_PAGE_SIZE) : 0;
         renderPagination(page, totalCount, currentBuildingTotalPages);
 
     } catch (err) {
+        currentBuildingTotalCount = 0;
+        currentBuildingTotalPages = 0;
         updateMainSearchMapItems([]);
         loading.classList.add('hidden');
         console.error(err);

@@ -13,6 +13,7 @@
     const KAKAO_APP_KEY = (modalEl.dataset.kakaoAppKey || "").trim();
     const DEFAULT_CENTER = { lat: 37.5662952, lng: 126.9779451 };
     const HOVER_CLOSE_DELAY_MS = 180;
+    const LARGE_MAP_CONFIRM_THRESHOLD = 500;
 
     let sdkPromise = null;
     let map = null;
@@ -60,6 +61,37 @@
     function setMapTitle() {
         if (!titleEl) return;
         titleEl.textContent = "검색 결과 지도";
+    }
+
+    function confirmLargeMapRequest(itemCount) {
+        const count = Number(itemCount);
+        if (!Number.isFinite(count)) return true;
+        if (count < LARGE_MAP_CONFIRM_THRESHOLD) return true;
+        return window.confirm(
+            `지도에 표시할 주소가 ${count.toLocaleString()}건입니다.\n카카오 API 호출량이 많아질 수 있습니다.\n계속 진행하시겠습니까?`
+        );
+    }
+
+    function getKnownMapItemCount() {
+        if (typeof window.getMainSearchMapItemCount === "function") {
+            try {
+                const count = Number(window.getMainSearchMapItemCount());
+                if (Number.isFinite(count)) return Math.max(0, count);
+            } catch (error) {
+                console.error("failed to read main map item count", error);
+            }
+        }
+        return latestItems.length;
+    }
+
+    function setDataLoadingProgress(progress = {}) {
+        const loaded = Math.max(0, Number(progress.loaded) || 0);
+        const total = Math.max(0, Number(progress.total) || 0);
+        if (total > 0) {
+            setResult(`지도 데이터 가져오는 중... ${Math.min(loaded, total).toLocaleString()} / ${total.toLocaleString()}건`);
+            return;
+        }
+        setResult(`지도 데이터 가져오는 중... ${loaded.toLocaleString()}건`);
     }
 
     function setMapLinkInteractionActive(active) {
@@ -343,13 +375,13 @@
             .filter(Boolean);
     }
 
-    async function getItemsFromSource(explicitItems) {
+    async function getItemsFromSource(explicitItems, options = {}) {
         if (Array.isArray(explicitItems)) {
             return normalizeItems(explicitItems);
         }
         if (typeof window.getMainSearchMapItems === "function") {
             try {
-                const items = await Promise.resolve(window.getMainSearchMapItems());
+                const items = await Promise.resolve(window.getMainSearchMapItems(options));
                 return normalizeItems(items);
             } catch (error) {
                 console.error("failed to read main map items", error);
@@ -535,22 +567,33 @@
         setResult("검색 결과 주소를 좌표로 변환하지 못했습니다.");
     }
 
-    async function refreshMarkers(explicitItems) {
-        const sourceItems = await getItemsFromSource(explicitItems);
+    async function refreshMarkers(explicitItems, options = {}) {
+        const sourceItems = await getItemsFromSource(explicitItems, options);
         latestItems = normalizeItems(sourceItems);
-        if (!mapInitialized) return;
+        if (!mapInitialized || options.skipRender) return true;
         await renderMarkers(latestItems);
+        return true;
     }
 
     async function openMapModal() {
         setMapTitle();
-        modalEl.classList.remove("hidden");
-        modalEl.classList.add("flex");
-        setResult("지도를 불러오는 중입니다...");
+        const knownItemCount = getKnownMapItemCount();
+        if (!confirmLargeMapRequest(knownItemCount)) return;
 
         try {
+            modalEl.classList.remove("hidden");
+            modalEl.classList.add("flex");
+            setDataLoadingProgress({ loaded: 0, total: knownItemCount });
+
+            await refreshMarkers(undefined, {
+                skipRender: true,
+                onProgress: setDataLoadingProgress
+            });
+
+            setResult("카카오 지도를 불러오는 중입니다...");
             await initializeMap();
-            await refreshMarkers();
+            setResult("주소를 좌표로 변환하는 중입니다...");
+            await renderMarkers(latestItems);
             relayoutMap();
         } catch (error) {
             console.error(error);
