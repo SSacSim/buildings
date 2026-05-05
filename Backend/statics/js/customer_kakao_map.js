@@ -24,6 +24,8 @@
     let hasBoundsPoint = false;
     let mapInitialized = false;
     let refreshSequence = 0;
+    let activeOpenToken = 0;
+    let mapRequestController = null;
     let latestIntroItems = [];
     let latestMatchItems = [];
     let currentMapMode = "intro";
@@ -99,6 +101,63 @@
             return;
         }
         setResult(`지도 데이터 가져오는 중... ${loaded.toLocaleString()}건`);
+    }
+
+    function isAbortError(error) {
+        return error && error.name === "AbortError";
+    }
+
+    function abortActiveMapRequest() {
+        if (!mapRequestController) return;
+        mapRequestController.abort();
+        mapRequestController = null;
+    }
+
+    function clearMapState({ clearItems = false, recenter = false } = {}) {
+        refreshSequence += 1;
+        closeOpenedInfoWindow();
+        clearMarkerGroup(introMarkers);
+        resetBounds();
+        if (clearItems) {
+            latestIntroItems = [];
+            latestMatchItems = [];
+        }
+        if (recenter) {
+            fitBoundsOrCenter();
+        }
+    }
+
+    function beginMapRequest({ clearItems = false, recenter = false } = {}) {
+        activeOpenToken += 1;
+        abortActiveMapRequest();
+        clearMapState({ clearItems, recenter });
+
+        const controller = typeof AbortController === "function"
+            ? new AbortController()
+            : null;
+        mapRequestController = controller;
+        return {
+            token: activeOpenToken,
+            controller,
+            signal: controller ? controller.signal : undefined,
+        };
+    }
+
+    function isCurrentMapRequest(request) {
+        if (!request || request.token !== activeOpenToken) return false;
+        return !(request.signal && request.signal.aborted);
+    }
+
+    function finishMapRequest(request) {
+        if (request && mapRequestController === request.controller) {
+            mapRequestController = null;
+        }
+    }
+
+    function cancelMapWork({ clearItems = false, recenter = false } = {}) {
+        activeOpenToken += 1;
+        abortActiveMapRequest();
+        clearMapState({ clearItems, recenter });
     }
 
     function setMapLinkInteractionActive(active) {
@@ -399,6 +458,7 @@
                 const items = await Promise.resolve(window.getCustomerMatchMapItems(options));
                 return normalizeIntroItems(items);
             } catch (error) {
+                if (isAbortError(error)) throw error;
                 console.error("failed to read match map items", error);
             }
         }
@@ -589,6 +649,7 @@
         setMapMode(mode);
         const knownItemCount = getKnownMapItemCount(currentMapMode);
         if (!confirmLargeMapRequest(knownItemCount)) return;
+        const request = beginMapRequest({ clearItems: true, recenter: true });
 
         try {
             modalEl.classList.remove("hidden");
@@ -597,22 +658,30 @@
 
             await refreshIntroMarkers(currentMapMode, undefined, {
                 skipRender: true,
-                onProgress: setDataLoadingProgress
+                onProgress: setDataLoadingProgress,
+                signal: request.signal
             });
+            if (!isCurrentMapRequest(request)) return;
 
             setResult("카카오 지도를 불러오는 중입니다...");
             await initializeMap();
+            if (!isCurrentMapRequest(request)) return;
+
             const itemsToRender = currentMapMode === "match" ? latestMatchItems : latestIntroItems;
             setResult("주소를 좌표로 변환하는 중입니다...");
             await renderIntroMarkers(itemsToRender);
             relayoutMap();
         } catch (error) {
+            if (isAbortError(error)) return;
             console.error(error);
             setResult("카카오 지도 로딩에 실패했습니다. 앱 키 또는 네트워크 상태를 확인해 주세요.");
+        } finally {
+            finishMapRequest(request);
         }
     }
 
     function closeMapModal() {
+        cancelMapWork({ clearItems: true, recenter: true });
         modalEl.classList.add("hidden");
         modalEl.classList.remove("flex");
     }

@@ -62,6 +62,7 @@ let latestBuildingMapItems = [];
 let latestBuildingMapQueryKey = "";
 let latestBuildingMapCacheReady = false;
 let latestBuildingMapFetchPromise = null;
+let latestBuildingMapFetchSignal = null;
 let hasExecutedBuildingSearch = false;
 let isMainTitleRefreshing = false;
 
@@ -584,9 +585,11 @@ function buildAdvancedOverviewParams(advanced, category, page = 1, pageSize = 10
 
 async function fetchAllSimpleSearchRows(address, category, options = {}) {
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+    const signal = options.signal;
     const res = await fetch("/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal,
         body: JSON.stringify({
             address: String(address || ""),
             page: 1,
@@ -612,6 +615,7 @@ async function fetchAllSimpleSearchRows(address, category, options = {}) {
         const pageRes = await fetch("/search", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal,
             body: JSON.stringify({
                 address: String(address || ""),
                 page: page,
@@ -633,8 +637,9 @@ async function fetchAllSimpleSearchRows(address, category, options = {}) {
 
 async function fetchAllAdvancedSearchRows(advanced, category, keyword = "", options = {}) {
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+    const signal = options.signal;
     const firstParams = buildAdvancedOverviewParams(advanced, category, 1, 100, keyword);
-    const firstRes = await fetch(`/api/insight/overview?${firstParams.toString()}`);
+    const firstRes = await fetch(`/api/insight/overview?${firstParams.toString()}`, { signal });
     const firstPayload = await firstRes.json();
     const rows = Array.isArray(firstPayload?.buildings) ? [...firstPayload.buildings] : [];
     const totalCount = Number(firstPayload?.buildings_total_count || rows.length || 0);
@@ -648,7 +653,7 @@ async function fetchAllAdvancedSearchRows(advanced, category, keyword = "", opti
 
     for (let page = 2; page <= totalPages; page += 1) {
         const params = buildAdvancedOverviewParams(advanced, category, page, 100, keyword);
-        const res = await fetch(`/api/insight/overview?${params.toString()}`);
+        const res = await fetch(`/api/insight/overview?${params.toString()}`, { signal });
         const payload = await res.json();
         const pageRows = Array.isArray(payload?.buildings) ? payload.buildings : [];
         rows.push(...pageRows);
@@ -678,12 +683,18 @@ async function loadMainSearchMapItems(force = false, options = {}) {
     if (!force && latestBuildingMapCacheReady && latestBuildingMapQueryKey === queryKey) {
         return [...latestBuildingMapItems];
     }
-    if (!force && latestBuildingMapFetchPromise && latestBuildingMapQueryKey === queryKey) {
+    if (
+        !force
+        && latestBuildingMapFetchPromise
+        && latestBuildingMapQueryKey === queryKey
+        && !(latestBuildingMapFetchSignal && latestBuildingMapFetchSignal.aborted)
+    ) {
         return latestBuildingMapFetchPromise;
     }
 
     latestBuildingMapQueryKey = queryKey;
     latestBuildingMapCacheReady = false;
+    latestBuildingMapFetchSignal = options.signal || null;
 
     const fetchPromise = (async () => {
         const rows = hasAdvancedFilters()
@@ -694,6 +705,9 @@ async function loadMainSearchMapItems(force = false, options = {}) {
         return [...latestBuildingMapItems];
     })()
         .catch((error) => {
+            if (error && error.name === "AbortError") {
+                throw error;
+            }
             console.error("failed to fetch all map items", error);
             updateMainSearchMapItems([], { isFullSet: true, queryKey });
             return [];
@@ -701,6 +715,7 @@ async function loadMainSearchMapItems(force = false, options = {}) {
         .finally(() => {
             if (latestBuildingMapFetchPromise === fetchPromise) {
                 latestBuildingMapFetchPromise = null;
+                latestBuildingMapFetchSignal = null;
             }
         });
 

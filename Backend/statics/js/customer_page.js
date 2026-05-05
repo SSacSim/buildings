@@ -2823,6 +2823,7 @@ async function getCustomerMatchMapItems(options = {}) {
     if (!lastCustomerMatchQueryString) return [];
 
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+    const signal = options.signal;
     const baseParams = new URLSearchParams(lastCustomerMatchQueryString);
     baseParams.delete("page");
     baseParams.delete("page_size");
@@ -2832,7 +2833,7 @@ async function getCustomerMatchMapItems(options = {}) {
         const params = new URLSearchParams(baseParams);
         params.set("page", String(page));
         params.set("page_size", String(mapPageSize));
-        const res = await fetch(`/api/customer/match-search?${params.toString()}`);
+        const res = await fetch(`/api/customer/match-search?${params.toString()}`, { signal });
         if (!res.ok) throw new Error("match map search failed");
         const payload = await res.json();
         return parseCustomerMatchPayload(payload, page);
