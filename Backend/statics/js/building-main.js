@@ -487,11 +487,13 @@ function buildMainSearchMapItems(items) {
             const bdName = String(item?.bd_name || "").trim();
             const salePrice = String(item?.sale_price || "").trim();
             const detailUrl = bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : "";
+            const lat = Number(item?.lat ?? item?.kakao_lat);
+            const lng = Number(item?.lng ?? item?.kakao_lng);
             const key = `${bdNumber}|${address}`;
             if (seen.has(key)) return null;
             seen.add(key);
 
-            return {
+            const normalized = {
                 bd_number: bdNumber || null,
                 address: address,
                 bd_name: bdName,
@@ -499,6 +501,11 @@ function buildMainSearchMapItems(items) {
                 status: String(item?.status || "").trim(),
                 detail_url: detailUrl
             };
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                normalized.lat = lat;
+                normalized.lng = lng;
+            }
+            return normalized;
         })
         .filter(Boolean);
 }
@@ -586,50 +593,21 @@ function buildAdvancedOverviewParams(advanced, category, page = 1, pageSize = 10
 async function fetchAllSimpleSearchRows(address, category, options = {}) {
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
     const signal = options.signal;
-    const res = await fetch("/search", {
+    const res = await fetch("/api/building/map-items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal,
         body: JSON.stringify({
             address: String(address || ""),
-            page: 1,
             category: String(category || "")
         })
     });
-    const firstPayload = await res.json();
-    if (!Array.isArray(firstPayload) || firstPayload.length === 0) {
-        return [];
-    }
-
-    const rows = Array.isArray(firstPayload.slice(1)) ? firstPayload.slice(1) : [];
-    const totalCount = Number(firstPayload?.[0]?.total_count || 0);
-    const totalPages = totalCount > 0 ? Math.ceil(totalCount / BUILDING_PAGE_SIZE) : 0;
+    if (!res.ok) throw new Error("building map search failed");
+    const payload = await res.json();
+    const rows = Array.isArray(payload?.items) ? payload.items : [];
+    const totalCount = Number(payload?.total_count || rows.length || 0);
     if (onProgress) {
-        onProgress({ loaded: rows.length, total: totalCount, page: 1, totalPages });
-    }
-    if (totalPages <= 1) {
-        return rows;
-    }
-
-    for (let page = 2; page <= totalPages; page += 1) {
-        const pageRes = await fetch("/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            signal,
-            body: JSON.stringify({
-                address: String(address || ""),
-                page: page,
-                category: String(category || "")
-            })
-        });
-        const pagePayload = await pageRes.json();
-        if (!Array.isArray(pagePayload) || pagePayload.length <= 1) {
-            continue;
-        }
-        rows.push(...pagePayload.slice(1));
-        if (onProgress) {
-            onProgress({ loaded: rows.length, total: totalCount, page, totalPages });
-        }
+        onProgress({ loaded: rows.length, total: totalCount, page: 1, totalPages: 1 });
     }
 
     return rows;
@@ -638,28 +616,15 @@ async function fetchAllSimpleSearchRows(address, category, options = {}) {
 async function fetchAllAdvancedSearchRows(advanced, category, keyword = "", options = {}) {
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
     const signal = options.signal;
-    const firstParams = buildAdvancedOverviewParams(advanced, category, 1, 100, keyword);
-    const firstRes = await fetch(`/api/insight/overview?${firstParams.toString()}`, { signal });
-    const firstPayload = await firstRes.json();
-    const rows = Array.isArray(firstPayload?.buildings) ? [...firstPayload.buildings] : [];
-    const totalCount = Number(firstPayload?.buildings_total_count || rows.length || 0);
-    const totalPages = Number(firstPayload?.buildings_total_pages || 0);
+    const params = buildAdvancedOverviewParams(advanced, category, 1, 100, keyword);
+    params.set("map_only", "true");
+    const res = await fetch(`/api/insight/overview?${params.toString()}`, { signal });
+    if (!res.ok) throw new Error("advanced building map search failed");
+    const payload = await res.json();
+    const rows = Array.isArray(payload?.items) ? payload.items : [];
+    const totalCount = Number(payload?.total_count || rows.length || 0);
     if (onProgress) {
-        onProgress({ loaded: rows.length, total: totalCount, page: 1, totalPages });
-    }
-    if (totalPages <= 1) {
-        return rows;
-    }
-
-    for (let page = 2; page <= totalPages; page += 1) {
-        const params = buildAdvancedOverviewParams(advanced, category, page, 100, keyword);
-        const res = await fetch(`/api/insight/overview?${params.toString()}`, { signal });
-        const payload = await res.json();
-        const pageRows = Array.isArray(payload?.buildings) ? payload.buildings : [];
-        rows.push(...pageRows);
-        if (onProgress) {
-            onProgress({ loaded: rows.length, total: totalCount, page, totalPages });
-        }
+        onProgress({ loaded: rows.length, total: totalCount, page: 1, totalPages: 1 });
     }
 
     return rows;

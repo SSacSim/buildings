@@ -508,6 +508,7 @@
         let insightLastSearchUsedIntroBase = false;
         let insightLatestBuildingMapItems = [];
         let insightLatestBuildingMapTotalCount = 0;
+        let insightLatestMapQueryString = "";
         const INSIGHT_SECTOR_KEYS = [
             "types",
             "building_status",
@@ -685,7 +686,9 @@
                     const address = String(row?.address || "").trim();
                     if (!address) return null;
                     const bdNumber = String(row?.bd_number || "").trim();
-                    return {
+                    const lat = Number(row?.lat ?? row?.kakao_lat);
+                    const lng = Number(row?.lng ?? row?.kakao_lng);
+                    const normalized = {
                         bd_number: bdNumber || null,
                         bd_name: String(row?.bd_name || "").trim(),
                         address: address,
@@ -693,6 +696,11 @@
                         status: String(row?.status || "").trim(),
                         detail_url: bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : "",
                     };
+                    if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                        normalized.lat = lat;
+                        normalized.lng = lng;
+                    }
+                    return normalized;
                 })
                 .filter(Boolean);
             insightLatestBuildingMapItems = normalized;
@@ -705,7 +713,23 @@
             }));
         }
 
-        window.getMainSearchMapItems = function getMainSearchMapItemsFromInsight() {
+        window.getMainSearchMapItems = async function getMainSearchMapItemsFromInsight(options = {}) {
+            if (!insightLatestMapQueryString) {
+                return insightLatestBuildingMapItems;
+            }
+
+            const onProgress = typeof options.onProgress === "function" ? options.onProgress : null;
+            const params = new URLSearchParams(insightLatestMapQueryString);
+            params.set("map_only", "true");
+            const res = await fetch(`/api/insight/overview?${params.toString()}`, { signal: options.signal });
+            if (!res.ok) throw new Error("insight map search failed");
+            const payload = await res.json();
+            const items = Array.isArray(payload?.items) ? payload.items : [];
+            const totalCount = Number(payload?.total_count || items.length || 0);
+            if (onProgress) {
+                onProgress({ loaded: items.length, total: totalCount, page: 1, totalPages: 1 });
+            }
+            syncInsightMapItems(items, totalCount);
             return insightLatestBuildingMapItems;
         };
         window.getMainSearchMapItemCount = function getMainSearchMapItemCountFromInsight() {
@@ -1413,6 +1437,7 @@
             params.set("customer_page", String(insightCustomerPage));
             params.set("building_page", String(insightBuildingPage));
             params.set("page_size", String(INSIGHT_PAGE_SIZE));
+            insightLatestMapQueryString = params.toString();
 
             setEmptyRow(customerBody, 1, "조회 중 오류가 발생했습니다.");
             setEmptyRow(buildingBody, 1, "조회 중...");
@@ -1522,6 +1547,7 @@
                 renderInsightPagination("insightCustomerPagination", customerTotalPages, currentCustomerPage, "goInsightCustomerPage");
                 renderInsightPagination("insightBuildingPagination", buildingTotalPages, currentBuildingPage, "goInsightBuildingPage");
             } catch (e) {
+                insightLatestMapQueryString = "";
                 syncInsightMapItems([]);
                 setEmptyRow(customerBody, 1, "조회 중 오류가 발생했습니다.");
                 setEmptyRow(buildingBody, 1, "조회 중 오류가 발생했습니다.");
@@ -1568,6 +1594,7 @@
             setEmptyRow(document.getElementById("buildingBody"), 1, "조건을 입력하고 매칭 검색을 눌러주세요.");
             renderInsightPagination("insightCustomerPagination", 0, 1, "goInsightCustomerPage");
             renderInsightPagination("insightBuildingPagination", 0, 1, "goInsightBuildingPage");
+            insightLatestMapQueryString = "";
             syncInsightMapItems([]);
             selectedInsightBuildingIds.clear();
             insightLastSearchUsedIntroBase = false;

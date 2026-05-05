@@ -14,6 +14,7 @@
     const KAKAO_APP_KEY = (modalEl.dataset.kakaoAppKey || "").trim();
     const DEFAULT_CENTER = { lat: 37.5662952, lng: 126.9779451 };
     const LARGE_MAP_CONFIRM_THRESHOLD = 500;
+    const GEOCODE_CACHE_SAVE_BATCH_SIZE = 50;
 
     let sdkPromise = null;
     let map = null;
@@ -31,8 +32,11 @@
     let currentMapMode = "intro";
 
     const geocodeCache = new Map();
+    const pendingGeocodeCacheItems = [];
+    const pendingGeocodeCacheKeys = new Set();
     const introMarkers = [];
     const HOVER_CLOSE_DELAY_MS = 180;
+    let geocodeCacheFlushTimer = null;
 
     function escapeHtml(value) {
         return String(value || "")
@@ -426,17 +430,24 @@
                 const bdName = String(item?.bd_name || "").trim();
                 const salePrice = String(item?.sale_price || "").trim();
                 const detailUrl = String(item?.detail_url || "").trim() || (bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : "");
+                const lat = Number(item?.lat ?? item?.kakao_lat);
+                const lng = Number(item?.lng ?? item?.kakao_lng);
                 const key = `${bdNumber}|${address}`;
                 if (seen.has(key)) return null;
                 seen.add(key);
 
-                return {
+                const normalized = {
                     bd_number: bdNumber || null,
                     bd_name: bdName,
                     address: address,
                     sale_price: salePrice,
                     detail_url: detailUrl
                 };
+                if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                    normalized.lat = lat;
+                    normalized.lng = lng;
+                }
+                return normalized;
             })
             .filter(Boolean);
     }
@@ -506,6 +517,80 @@
                 resolve(payload);
             });
         });
+    }
+
+    function getCachedGeoFromItem(item) {
+        const lat = Number(item?.lat ?? item?.kakao_lat);
+        const lng = Number(item?.lng ?? item?.kakao_lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+        const payload = {
+            lat: lat,
+            lng: lng,
+            address_name: item.address
+        };
+        geocodeCache.set(item.address, payload);
+        return payload;
+    }
+
+    function scheduleGeocodeCacheFlush() {
+        if (geocodeCacheFlushTimer) return;
+        geocodeCacheFlushTimer = window.setTimeout(() => {
+            geocodeCacheFlushTimer = null;
+            void flushGeocodeCacheSaves();
+        }, 500);
+    }
+
+    async function flushGeocodeCacheSaves() {
+        if (!pendingGeocodeCacheItems.length) return;
+        if (geocodeCacheFlushTimer) {
+            window.clearTimeout(geocodeCacheFlushTimer);
+            geocodeCacheFlushTimer = null;
+        }
+
+        const items = pendingGeocodeCacheItems.splice(0, pendingGeocodeCacheItems.length);
+        pendingGeocodeCacheKeys.clear();
+        try {
+            await fetch("/api/building/geocode-cache", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ items })
+            });
+        } catch (error) {
+            console.error("failed to save geocode cache", error);
+        }
+    }
+
+    function queueGeocodeCacheSave(item, geo) {
+        const bdNumber = String(item?.bd_number || "").trim();
+        const address = String(item?.address || "").trim();
+        const lat = Number(geo?.lat);
+        const lng = Number(geo?.lng);
+        if (!bdNumber || !address || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        const key = `${bdNumber}|${address}`;
+        if (pendingGeocodeCacheKeys.has(key)) return;
+        pendingGeocodeCacheKeys.add(key);
+        pendingGeocodeCacheItems.push({
+            bd_number: bdNumber,
+            address: address,
+            lat: lat,
+            lng: lng,
+            status: "ok"
+        });
+        if (pendingGeocodeCacheItems.length >= GEOCODE_CACHE_SAVE_BATCH_SIZE) {
+            void flushGeocodeCacheSaves();
+            return;
+        }
+        scheduleGeocodeCacheFlush();
+    }
+
+    async function resolveItemGeo(item) {
+        const cachedGeo = getCachedGeoFromItem(item);
+        if (cachedGeo) return cachedGeo;
+
+        const geo = await geocodeAddress(item.address);
+        if (geo) queueGeocodeCacheSave(item, geo);
+        return geo;
     }
 
     function buildIntroInfoContent(item) {
@@ -593,12 +678,17 @@
         }
 
         const sequence = ++refreshSequence;
+        let processedCount = 0;
         let renderedCount = 0;
         let linkableCount = 0;
 
         for (const item of normalized) {
-            const geo = await geocodeAddress(item.address);
+            const geo = await resolveItemGeo(item);
             if (sequence !== refreshSequence) return;
+            processedCount += 1;
+            if (processedCount % 20 === 0 || processedCount === normalized.length) {
+                setResult(`주소를 좌표로 변환하는 중입니다... ${processedCount.toLocaleString()} / ${normalized.length.toLocaleString()}건`);
+            }
             if (!geo) continue;
 
             const position = new kakao.maps.LatLng(geo.lat, geo.lng);
@@ -623,6 +713,7 @@
 
             renderedCount += 1;
         }
+        void flushGeocodeCacheSaves();
 
         fitBoundsOrCenter();
         if (renderedCount > 0) {

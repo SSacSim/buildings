@@ -1,10 +1,13 @@
 import psycopg2
 import re
+import threading
 import yaml
 from pathlib import Path
 from collections import defaultdict
 
 SETTINGS_PATH = Path(__file__).resolve().parent.parent / "settings.yaml"
+_building_geocode_schema_ready = False
+_building_geocode_schema_lock = threading.Lock()
 
 
 def _load_settings():
@@ -43,6 +46,45 @@ def join_db(ip = "0.0.0.0") :
     )
     
     return conn
+
+
+def ensure_building_geocode_cache_columns(conn, cur=None):
+    global _building_geocode_schema_ready
+
+    if _building_geocode_schema_ready:
+        return
+
+    with _building_geocode_schema_lock:
+        if _building_geocode_schema_ready:
+            return
+
+        own_cursor = cur is None
+        cursor = cur or conn.cursor()
+        try:
+            cursor.execute(
+                """
+                ALTER TABLE building_info
+                ADD COLUMN IF NOT EXISTS kakao_lat DOUBLE PRECISION,
+                ADD COLUMN IF NOT EXISTS kakao_lng DOUBLE PRECISION,
+                ADD COLUMN IF NOT EXISTS kakao_geocoded_at TIMESTAMP,
+                ADD COLUMN IF NOT EXISTS kakao_geocode_status VARCHAR(30),
+                ADD COLUMN IF NOT EXISTS kakao_geocode_address TEXT;
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_building_info_kakao_geocode_lookup
+                ON building_info (bd_number, kakao_geocode_status);
+                """
+            )
+            conn.commit()
+            _building_geocode_schema_ready = True
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            if own_cursor:
+                cursor.close()
 
 
 # phone 형식만 추출 
@@ -214,6 +256,115 @@ def extract_simple_info(conn, address :str ,page : int , category : str) -> dict
     conn.close()
 
     return results
+
+
+def extract_simple_map_items(conn, address: str, category: str) -> dict:
+    ensure_building_geocode_cache_columns(conn)
+    cur = conn.cursor()
+    search_address = address or ""
+
+    decide_columns = [
+        "bi.location_decide",
+        "bi.price_decide",
+        "bi.yield_decide",
+        "bi.vacancy_decide",
+        "bi.limit_decide",
+        "bi.loan_decide",
+    ]
+
+    decide_conditions = []
+    decide_params = []
+    if search_address:
+        for i, ch in enumerate(search_address):
+            if i >= len(decide_columns):
+                break
+            if ch != "*":
+                decide_conditions.append(f"{decide_columns[i]} = %s")
+                decide_params.append(ch)
+
+    decide_sql = ""
+    if decide_conditions:
+        decide_sql = " OR (" + " AND ".join(decide_conditions) + ")"
+
+    phone_search = [search_address]
+    phone_conditions = []
+    phone_params = []
+    phone_columns = [
+        "bi.client_name",
+        "bi.mobile_phone",
+        "bi.email",
+        "bi.office_phone",
+        "bi.home_phone",
+        "bi.orientation",
+        "bm.memo",
+        "bm.etc_memo"
+    ]
+
+    for p in phone_search:
+        sub_conditions = []
+        for col in phone_columns:
+            sub_conditions.append(f"{col} LIKE %s")
+            phone_params.append(f"%{p}%")
+        phone_conditions.append("(" + " OR ".join(sub_conditions) + ")")
+
+    phone_sql = ""
+    if phone_conditions:
+        phone_sql = " OR (" + " OR ".join(phone_conditions) + ")"
+
+    sql = f"""
+            SELECT
+                bi.bd_number,
+                bi.bd_name,
+                bi.address,
+                bi.sale_price,
+                bm.status,
+                CASE
+                    WHEN bi.kakao_geocode_status = 'ok'
+                         AND COALESCE(TRIM(bi.kakao_geocode_address), '') = COALESCE(TRIM(bi.address), '')
+                    THEN bi.kakao_lat
+                    ELSE NULL
+                END AS lat,
+                CASE
+                    WHEN bi.kakao_geocode_status = 'ok'
+                         AND COALESCE(TRIM(bi.kakao_geocode_address), '') = COALESCE(TRIM(bi.address), '')
+                    THEN bi.kakao_lng
+                    ELSE NULL
+                END AS lng
+            FROM building_info bi
+            LEFT JOIN building_memo bm
+                ON bi.bd_number = bm.bd_number
+            WHERE (
+                    bi.address LIKE %s
+                    OR bi.bd_name LIKE %s
+                    OR bi.address_detail LIKE %s
+                    OR bi.nearby_station LIKE %s
+                    {phone_sql}
+                    {decide_sql}
+                )
+                AND (%s = '' OR bm.status = %s) AND bi.delete_flag = FALSE
+            ORDER BY
+                CASE COALESCE(bm.status, '')
+                    WHEN '완료' THEN 0
+                    WHEN '준비' THEN 1
+                    WHEN '보류' THEN 2
+                    WHEN '매각' THEN 3
+                    ELSE 99
+                END,
+                bi.update_time DESC,
+                bi.bd_number ASC
+            """
+
+    params = [
+        f"%{search_address}%", f"%{search_address}%", f"%{search_address}%", f"%{search_address}%"
+    ] + phone_params + decide_params + [category or "", category or ""]
+
+    try:
+        cur.execute(sql, params)
+        colnames = [desc[0] for desc in cur.description]
+        items = [dict(zip(colnames, row)) for row in cur.fetchall()]
+        return {"items": items, "total_count": len(items)}
+    finally:
+        cur.close()
 
 
 

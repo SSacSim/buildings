@@ -32,6 +32,38 @@ def _get_kakao_js_app_key() -> str:
     return str(app_settings.get("kakao_js_app_key", "") or "").strip()
 
 
+def _is_valid_lat_lng(lat: Any, lng: Any) -> bool:
+    try:
+        lat_value = float(lat)
+        lng_value = float(lng)
+    except (TypeError, ValueError):
+        return False
+    return -90 <= lat_value <= 90 and -180 <= lng_value <= 180
+
+
+def _format_customer_map_item(row: Dict[str, Any]) -> Dict[str, Any]:
+    bd_number = row.get("bd_number")
+    address = str(row.get("address") or "").strip()
+    item = {
+        "bd_number": bd_number,
+        "bd_name": row.get("bd_name") or "",
+        "address": address,
+        "sale_price": row.get("sale_price") or "",
+        "status": row.get("status") or "",
+        "detail_url": f"/detail/{bd_number}" if bd_number is not None and str(bd_number).strip() else "",
+    }
+
+    cached_address = str(row.get("kakao_geocode_address") or "").strip()
+    if row.get("kakao_geocode_status") == "ok" and cached_address == address:
+        lat = row.get("kakao_lat")
+        lng = row.get("kakao_lng")
+        if _is_valid_lat_lng(lat, lng):
+            item["lat"] = float(lat)
+            item["lng"] = float(lng)
+
+    return item
+
+
 def _ensure_customer_image_table(cur):
     cur.execute(
         """
@@ -1156,7 +1188,8 @@ def customer_match_search(
     customer_number: Optional[int] = Query(None),
     exclude_intro: bool = Query(False),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100)
+    page_size: int = Query(20, ge=1, le=100),
+    map_only: bool = Query(False),
 ):
     conn = None
     cur = None
@@ -1164,6 +1197,7 @@ def customer_match_search(
         conn = DB_utils.join_db()
         cur = conn.cursor()
         ensure_customer_intro_table(conn, cur)
+        DB_utils.ensure_building_geocode_cache_columns(conn, cur)
 
         sql = """
             SELECT
@@ -1172,7 +1206,8 @@ def customer_match_search(
                 bi.location_decide, bi.price_decide, bi.yield_decide, bi.vacancy_decide, bi.limit_decide, bi.loan_decide,
                 bi.land_area_pyeong, bi.gross_area_pyeong, bi.zoning_type, bi.approval_date, bi.elevator, bi.parking_capacity,
                 bi.is_new_site, bi.is_remodeling, bi.is_office_building, bi.is_investment, bi.is_development, bi.is_stable_holding,
-                bi.is_violation_checked, bi.update_time
+                bi.is_violation_checked, bi.update_time,
+                bi.kakao_lat, bi.kakao_lng, bi.kakao_geocode_status, bi.kakao_geocode_address
             FROM building_info bi
             LEFT JOIN building_memo bm
               ON bi.bd_number = bm.bd_number
@@ -1755,6 +1790,16 @@ def customer_match_search(
         )
 
         total_count = len(items)
+        if map_only:
+            map_items = [_format_customer_map_item(item) for item in items]
+            return {
+                "items": map_items,
+                "total_count": total_count,
+                "page": 1,
+                "page_size": total_count,
+                "total_pages": 1 if total_count > 0 else 0,
+            }
+
         total_pages = (total_count + page_size - 1) // page_size if total_count > 0 else 0
         safe_page = min(page, total_pages) if total_pages > 0 else 1
         offset = (safe_page - 1) * page_size

@@ -83,6 +83,7 @@ async def startup_background_jobs():
             """
         )
         conn.commit()
+        DB_utils.ensure_building_geocode_cache_columns(conn, cur)
     finally:
         if cur:
             cur.close()
@@ -2367,6 +2368,42 @@ def insight_page(request: Request):
     )
 
 
+def _is_valid_lat_lng(lat: Any, lng: Any) -> bool:
+    try:
+        lat_value = float(lat)
+        lng_value = float(lng)
+    except (TypeError, ValueError):
+        return False
+    return -90 <= lat_value <= 90 and -180 <= lng_value <= 180
+
+
+def _format_building_map_item(row: Dict[str, Any]) -> Dict[str, Any]:
+    bd_number = row.get("bd_number")
+    address = str(row.get("address") or "").strip()
+    item = {
+        "bd_number": bd_number,
+        "bd_name": row.get("bd_name") or "",
+        "address": address,
+        "sale_price": row.get("sale_price") or "",
+        "status": row.get("status") or "",
+        "detail_url": f"/detail/{bd_number}" if bd_number is not None and str(bd_number).strip() else "",
+    }
+
+    lat = row.get("lat")
+    lng = row.get("lng")
+    if lat is None or lng is None:
+        cached_address = str(row.get("kakao_geocode_address") or "").strip()
+        if row.get("kakao_geocode_status") == "ok" and cached_address == address:
+            lat = row.get("kakao_lat")
+            lng = row.get("kakao_lng")
+
+    if _is_valid_lat_lng(lat, lng):
+        item["lat"] = float(lat)
+        item["lng"] = float(lng)
+
+    return item
+
+
 @app.get("/api/insight/overview")
 def get_insight_overview(
     address: str = Query(""),
@@ -2411,12 +2448,14 @@ def get_insight_overview(
     customer_page: int = Query(1, ge=1),
     building_page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    map_only: bool = Query(False),
 ):
     conn = None
     cur = None
     try:
         conn = DB_utils.join_db()
         cur = conn.cursor()
+        DB_utils.ensure_building_geocode_cache_columns(conn, cur)
 
         type_map = {
             "NEW_SITE": "is_new_site",
@@ -2455,10 +2494,13 @@ def get_insight_overview(
 
         customer_sql += " ORDER BY update_time DESC, customer_number DESC"
 
-        cur.execute(customer_sql, tuple(customer_params))
-        customer_rows = cur.fetchall()
-        customer_cols = [desc[0] for desc in cur.description]
-        customers_raw = [dict(zip(customer_cols, row)) for row in customer_rows]
+        if map_only:
+            customers_raw = []
+        else:
+            cur.execute(customer_sql, tuple(customer_params))
+            customer_rows = cur.fetchall()
+            customer_cols = [desc[0] for desc in cur.description]
+            customers_raw = [dict(zip(customer_cols, row)) for row in customer_rows]
 
         selected_types_codes = [t.strip() for t in types.split(",") if t.strip()]
         selected_zoning_codes = [c.strip() for c in zoning_categories.split(",") if c.strip()]
@@ -2511,26 +2553,27 @@ def get_insight_overview(
         ]
 
         customers = []
-        for row in customers_raw:
-            cond = parse_json(row.get("match_conditions_json"))
+        if not map_only:
+            for row in customers_raw:
+                cond = parse_json(row.get("match_conditions_json"))
 
-            cond_types = cond.get("types") if isinstance(cond.get("types"), list) else []
+                cond_types = cond.get("types") if isinstance(cond.get("types"), list) else []
 
-            if selected_types_customer and not (set(selected_types_customer) & set(cond_types)):
-                continue
+                if selected_types_customer and not (set(selected_types_customer) & set(cond_types)):
+                    continue
 
-            range_ok = True
-            for cmin_key, cmax_key, qmin, qmax in range_keys:
-                cmin = to_num(cond.get(cmin_key))
-                cmax = to_num(cond.get(cmax_key))
-                if not range_overlap(qmin, qmax, cmin, cmax):
-                    range_ok = False
-                    break
-            if not range_ok:
-                continue
+                range_ok = True
+                for cmin_key, cmax_key, qmin, qmax in range_keys:
+                    cmin = to_num(cond.get(cmin_key))
+                    cmax = to_num(cond.get(cmax_key))
+                    if not range_overlap(qmin, qmax, cmin, cmax):
+                        range_ok = False
+                        break
+                if not range_ok:
+                    continue
 
-            row.pop("match_conditions_json", None)
-            customers.append(row)
+                row.pop("match_conditions_json", None)
+                customers.append(row)
 
         status_priority = {
             "집중": 0,
@@ -2539,7 +2582,8 @@ def get_insight_overview(
             "완료": 3,
         }
         # Keep existing order within each status group (stable sort).
-        customers.sort(key=lambda row: status_priority.get(str(row.get("status") or "").strip(), 99))
+        if not map_only:
+            customers.sort(key=lambda row: status_priority.get(str(row.get("status") or "").strip(), 99))
 
         building_sql = """
             SELECT
@@ -2560,7 +2604,11 @@ def get_insight_overview(
                 bi.zoning_type,
                 bi.approval_date,
                 bi.elevator,
-                bi.parking_capacity
+                bi.parking_capacity,
+                bi.kakao_lat,
+                bi.kakao_lng,
+                bi.kakao_geocode_status,
+                bi.kakao_geocode_address
             FROM building_info bi
             LEFT JOIN building_memo bm
               ON bi.bd_number = bm.bd_number
@@ -2942,6 +2990,13 @@ def get_insight_overview(
         building_cols = [desc[0] for desc in cur.description]
         buildings = [dict(zip(building_cols, row)) for row in building_rows]
 
+        if map_only:
+            map_items = [_format_building_map_item(row) for row in buildings]
+            return {
+                "items": map_items,
+                "total_count": len(map_items),
+            }
+
         customers_total_count = len(customers)
         buildings_total_count = len(buildings)
 
@@ -2983,6 +3038,105 @@ class SearchRequest(BaseModel):
     category : str
 
 
+
+
+class BuildingMapItemsRequest(BaseModel):
+    address: str = ""
+    category: str = ""
+
+
+class BuildingGeocodeCacheItem(BaseModel):
+    bd_number: Optional[int] = None
+    address: str
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    status: str = "ok"
+
+
+class BuildingGeocodeCachePayload(BaseModel):
+    items: List[BuildingGeocodeCacheItem]
+
+
+@app.post("/api/building/map-items")
+def get_building_map_items(req: BuildingMapItemsRequest):
+    conn = None
+    try:
+        conn = DB_utils.join_db()
+        payload = DB_utils.extract_simple_map_items(conn, req.address, req.category)
+        rows = payload.get("items", []) if isinstance(payload, dict) else []
+        items = [_format_building_map_item(row) for row in rows]
+        return {
+            "items": items,
+            "total_count": payload.get("total_count", len(items)) if isinstance(payload, dict) else len(items),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.post("/api/building/geocode-cache")
+def save_building_geocode_cache(payload: BuildingGeocodeCachePayload):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        DB_utils.ensure_building_geocode_cache_columns(conn, cur)
+
+        updated = 0
+        for entry in payload.items:
+            bd_number = entry.bd_number
+            address = (entry.address or "").strip()
+            status = (entry.status or "ok").strip().lower()
+            if bd_number is None or not address:
+                continue
+
+            if status == "ok" and _is_valid_lat_lng(entry.lat, entry.lng):
+                cur.execute(
+                    """
+                    UPDATE building_info
+                    SET kakao_lat = %s,
+                        kakao_lng = %s,
+                        kakao_geocoded_at = CURRENT_TIMESTAMP,
+                        kakao_geocode_status = 'ok',
+                        kakao_geocode_address = %s
+                    WHERE bd_number = %s
+                      AND COALESCE(TRIM(address), '') = %s
+                      AND delete_flag = FALSE
+                    """,
+                    (float(entry.lat), float(entry.lng), address, bd_number, address),
+                )
+                updated += max(cur.rowcount or 0, 0)
+            elif status in ("not_found", "failed"):
+                cur.execute(
+                    """
+                    UPDATE building_info
+                    SET kakao_lat = NULL,
+                        kakao_lng = NULL,
+                        kakao_geocoded_at = CURRENT_TIMESTAMP,
+                        kakao_geocode_status = %s,
+                        kakao_geocode_address = %s
+                    WHERE bd_number = %s
+                      AND COALESCE(TRIM(address), '') = %s
+                      AND delete_flag = FALSE
+                    """,
+                    (status, address, bd_number, address),
+                )
+                updated += max(cur.rowcount or 0, 0)
+
+        conn.commit()
+        return {"updated": updated}
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.post("/search")

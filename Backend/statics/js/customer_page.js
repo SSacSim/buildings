@@ -2807,14 +2807,21 @@ function normalizeCustomerMatchMapItems(items) {
             const bdNumber = String(item?.bd_number || "").trim();
             const bdName = String(item?.bd_name || "").trim();
             const salePrice = String(item?.sale_price || "").trim();
+            const lat = Number(item?.lat ?? item?.kakao_lat);
+            const lng = Number(item?.lng ?? item?.kakao_lng);
 
-            return {
+            const normalized = {
                 bd_number: bdNumber || null,
                 address: address,
                 bd_name: bdName,
                 sale_price: salePrice,
                 detail_url: bdNumber ? `/detail/${encodeURIComponent(bdNumber)}` : ""
             };
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                normalized.lat = lat;
+                normalized.lng = lng;
+            }
+            return normalized;
         })
         .filter(Boolean);
 }
@@ -2827,34 +2834,15 @@ async function getCustomerMatchMapItems(options = {}) {
     const baseParams = new URLSearchParams(lastCustomerMatchQueryString);
     baseParams.delete("page");
     baseParams.delete("page_size");
+    baseParams.set("map_only", "true");
 
-    const mapPageSize = 100;
-    const loadPage = async (page) => {
-        const params = new URLSearchParams(baseParams);
-        params.set("page", String(page));
-        params.set("page_size", String(mapPageSize));
-        const res = await fetch(`/api/customer/match-search?${params.toString()}`, { signal });
-        if (!res.ok) throw new Error("match map search failed");
-        const payload = await res.json();
-        return parseCustomerMatchPayload(payload, page);
-    };
-
-    const firstPage = await loadPage(1);
-    const totalPages = Math.max(1, Number(firstPage.totalPages) || 1);
-    const totalCount = Number(firstPage.totalCount) || 0;
-    let allItems = Array.isArray(firstPage.items) ? [...firstPage.items] : [];
+    const res = await fetch(`/api/customer/match-search?${baseParams.toString()}`, { signal });
+    if (!res.ok) throw new Error("match map search failed");
+    const payload = await res.json();
+    const allItems = Array.isArray(payload?.items) ? payload.items : [];
+    const totalCount = Number(payload?.total_count || allItems.length || 0);
     if (onProgress) {
-        onProgress({ loaded: allItems.length, total: totalCount, page: 1, totalPages });
-    }
-
-    for (let page = 2; page <= totalPages; page += 1) {
-        const current = await loadPage(page);
-        if (Array.isArray(current.items) && current.items.length) {
-            allItems = allItems.concat(current.items);
-        }
-        if (onProgress) {
-            onProgress({ loaded: allItems.length, total: totalCount, page, totalPages });
-        }
+        onProgress({ loaded: allItems.length, total: totalCount, page: 1, totalPages: 1 });
     }
 
     const normalized = normalizeCustomerMatchMapItems(allItems);
