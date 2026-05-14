@@ -8,6 +8,7 @@ const CUSTOMER_MATCH_PAGE_SIZE = 20;
 const INTRO_BUILDING_SEARCH_PAGE_SIZE = 30;
 const INTRO_BUILDING_SEARCH_PAGE_GROUP_SIZE = 5;
 const selectedMatchBuildingIds = new Set();
+let customSearchSelectedBuildings = [];
 let introSearchKeyword = "";
 let currentIntroManagerName = "";
 let lastCustomerMatchQueryString = "";
@@ -1651,12 +1652,20 @@ function updateOwnedField(rowId, key, value) {
 }
 
 function openBuildingSearchModal(kind, rowId, initialKeyword = "", autoSearch = false) {
+    const isCustomSearch = kind === "custom";
     pickingContext = { kind, rowId };
     const modalEl = document.getElementById("buildingSearchModal");
     modalEl.classList.remove("hidden");
     modalEl.classList.add("flex");
 
+    const customPanel = document.getElementById("customSearchSelectedPanel");
+    if (customPanel) customPanel.classList.toggle("hidden", !isCustomSearch);
+
+    const searchBtn = document.getElementById("buildingSearchBtn");
+    if (searchBtn) searchBtn.textContent = isCustomSearch ? "주소 검색" : "검색";
+
     const keywordEl = document.getElementById("buildingSearchInput");
+    keywordEl.placeholder = isCustomSearch ? "주소 또는 건물명 검색 후 추가" : "주소 또는 건물명 검색";
     keywordEl.value = String(initialKeyword || "");
     keywordEl.focus();
     keywordEl.select();
@@ -1664,6 +1673,7 @@ function openBuildingSearchModal(kind, rowId, initialKeyword = "", autoSearch = 
     const resultBody = document.getElementById("buildingSearchResultBody");
     resultBody.innerHTML = "";
     renderBuildingSearchPagination(0, 1, 0);
+    if (isCustomSearch) renderCustomSearchSelectedBuildings();
 
     if (autoSearch && keywordEl.value.trim()) {
         searchBuildingsForIntro(1);
@@ -1674,8 +1684,98 @@ function closeBuildingSearchModal() {
     const modalEl = document.getElementById("buildingSearchModal");
     modalEl.classList.add("hidden");
     modalEl.classList.remove("flex");
+    const customPanel = document.getElementById("customSearchSelectedPanel");
+    if (customPanel) customPanel.classList.add("hidden");
     pickingContext = null;
     renderBuildingSearchPagination(0, 1, 0);
+}
+
+function openCustomMatchSearchModal() {
+    openBuildingSearchModal("custom", "", "", false);
+}
+
+function normalizeCustomSearchBuilding(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const parsedBdNumber = parseBdNumber(raw.bd_number);
+    if (parsedBdNumber === null) return null;
+    return {
+        bd_number: parsedBdNumber,
+        address: String(raw.address || "").trim(),
+        bd_name: String(raw.bd_name || "").trim(),
+        sale_price: formatThousandsInputValue(raw.sale_price ?? ""),
+        price_per_pyeong: formatThousandsInputValue(raw.price_per_pyeong ?? ""),
+    };
+}
+
+function isCustomSearchBuildingSelected(bdNumber) {
+    const target = parseBdNumber(bdNumber);
+    if (target === null) return false;
+    return customSearchSelectedBuildings.some(item => parseBdNumber(item.bd_number) === target);
+}
+
+function addCustomSearchSelectedBuilding(raw) {
+    const building = normalizeCustomSearchBuilding(raw);
+    if (!building || isCustomSearchBuildingSelected(building.bd_number)) {
+        renderCustomSearchSelectedBuildings();
+        return;
+    }
+    customSearchSelectedBuildings.push(building);
+    renderCustomSearchSelectedBuildings();
+}
+
+function removeCustomSearchSelectedBuilding(bdNumber) {
+    const target = parseBdNumber(bdNumber);
+    if (target === null) return;
+    customSearchSelectedBuildings = customSearchSelectedBuildings.filter(item => parseBdNumber(item.bd_number) !== target);
+    renderCustomSearchSelectedBuildings();
+}
+
+function clearCustomSearchSelectedBuildings() {
+    customSearchSelectedBuildings = [];
+    renderCustomSearchSelectedBuildings();
+}
+
+function renderCustomSearchSelectedBuildings() {
+    const countEl = document.getElementById("customSearchSelectedCount");
+    const listEl = document.getElementById("customSearchSelectedList");
+    const downloadBtn = document.getElementById("customSearchDownloadBtn");
+    const clearBtn = document.getElementById("customSearchClearBtn");
+    const count = customSearchSelectedBuildings.length;
+
+    if (countEl) countEl.textContent = `${count.toLocaleString()}건`;
+    if (downloadBtn) downloadBtn.disabled = count === 0;
+    if (clearBtn) clearBtn.disabled = count === 0;
+    if (!listEl) return;
+
+    if (!count) {
+        listEl.innerHTML = '<div class="py-4 text-center text-[12px] text-slate-400">주소 검색 후 선택한 매물이 여기에 쌓입니다.</div>';
+        return;
+    }
+
+    listEl.innerHTML = customSearchSelectedBuildings.map((item, index) => `
+        <div class="bg-white border border-slate-200 rounded-xl px-3 py-2 text-[12px] text-slate-700">
+            <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                        <span class="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">${index + 1}. ID: ${escapeMatchHistoryHtml(item.bd_number)}</span>
+                        <span class="font-bold text-slate-700">${escapeMatchHistoryHtml(item.bd_name || "건물명 없음")}</span>
+                    </div>
+                    <div class="text-slate-600 truncate">주소: ${escapeMatchHistoryHtml(item.address || "-")}</div>
+                    <div class="text-slate-500">매매가: ${escapeMatchHistoryHtml(item.sale_price || "-")} · 평단가: ${escapeMatchHistoryHtml(item.price_per_pyeong || "-")}</div>
+                </div>
+                <div class="flex shrink-0 items-center gap-2">
+                    <button type="button" onclick="openBuildingDetailFromSearch(${Number(item.bd_number)})"
+                        class="text-blue-600 hover:underline font-semibold">상세</button>
+                    <button type="button" onclick="removeCustomSearchSelectedBuilding(${Number(item.bd_number)})"
+                        class="text-red-500 hover:underline font-semibold">제거</button>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+
+function toInlineJsonArg(value) {
+    return escapeMatchHistoryHtml(JSON.stringify(String(value ?? "")));
 }
 
 function renderBuildingSearchPagination(totalCount = 0, currentPage = 1, totalPages = 0) {
@@ -1769,25 +1869,31 @@ async function searchBuildingsForIntro(page = 1) {
             return;
         }
 
-        resultBody.innerHTML = items.map(item => `
+        const isCustomSearch = pickingContext?.kind === "custom";
+        resultBody.innerHTML = items.map(item => {
+            const bdNumber = Number(item.bd_number);
+            const safeBdNumber = Number.isFinite(bdNumber) ? bdNumber : 0;
+            const selectLabel = isCustomSearch ? "추가" : "선택";
+            return `
             <tr class="border-t border-slate-100 hover:bg-slate-50">
                 <td class="p-2 text-center">
                     <button type="button"
-                        onclick="openBuildingDetailFromSearch(${item.bd_number})"
+                        onclick="openBuildingDetailFromSearch(${safeBdNumber})"
                         class="text-blue-600 hover:text-blue-800 hover:underline font-semibold">
-                        ${item.bd_number}
+                        ${escapeMatchHistoryHtml(item.bd_number || "-")}
                     </button>
                 </td>
-                <td class="p-2">${item.address || "-"}</td>
-                <td class="p-2">${item.bd_name || "-"}</td>
-                <td class="p-2 text-right">${item.sale_price || "-"}</td>
-                <td class="p-2 text-right">${item.price_per_pyeong || "-"}</td>
+                <td class="p-2">${escapeMatchHistoryHtml(item.address || "-")}</td>
+                <td class="p-2">${escapeMatchHistoryHtml(item.bd_name || "-")}</td>
+                <td class="p-2 text-right">${escapeMatchHistoryHtml(item.sale_price || "-")}</td>
+                <td class="p-2 text-right">${escapeMatchHistoryHtml(item.price_per_pyeong || "-")}</td>
                 <td class="p-2 text-center">
-                    <button type="button" onclick="selectBuildingForCurrentRow(${item.bd_number}, '${(item.address || "").replace(/'/g, "&#39;")}', '${(item.bd_name || "").replace(/'/g, "&#39;")}', '${(item.sale_price || "").replace(/'/g, "&#39;")}', '${(item.price_per_pyeong || "").replace(/'/g, "&#39;")}')"
-                        class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] hover:bg-emerald-700">선택</button>
+                    <button type="button" onclick="selectBuildingForCurrentRow(${safeBdNumber}, ${toInlineJsonArg(item.address)}, ${toInlineJsonArg(item.bd_name)}, ${toInlineJsonArg(item.sale_price)}, ${toInlineJsonArg(item.price_per_pyeong)})"
+                        class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] hover:bg-emerald-700">${selectLabel}</button>
                 </td>
             </tr>
-        `).join("");
+        `;
+        }).join("");
         renderBuildingSearchPagination(totalCount, currentPage, totalPages);
     } catch (err) {
         console.error(err);
@@ -1850,6 +1956,15 @@ function selectBuildingForCurrentRow(bdNumber, address, bdName, salePrice, price
         row.address = address;
         row.bd_name = bdName;
         renderOwnedRows();
+    } else if (pickingContext.kind === "custom") {
+        addCustomSearchSelectedBuilding({
+            bd_number: bdNumber,
+            address,
+            bd_name: bdName,
+            sale_price: salePrice,
+            price_per_pyeong: pricePerPyeong,
+        });
+        return;
     }
 
     closeBuildingSearchModal();
@@ -2888,24 +3003,28 @@ function toggleMatchBuildingSelection(bdNumber, checked) {
     refreshCustomerMatchDownloadButton();
 }
 
-async function downloadSelectedMatchPpt() {
-    const ids = Array.from(selectedMatchBuildingIds);
-    if (!ids.length) {
-        alert("먼저 매칭 결과에서 건물을 선택해 주세요.");
+async function downloadMatchPptByBuildingIds(ids, emptyMessage) {
+    const normalizedIds = Array.from(new Set((ids || [])
+        .map(id => Number(id))
+        .filter(id => Number.isFinite(id))));
+
+    if (!normalizedIds.length) {
+        alert(emptyMessage || "먼저 매칭 결과에서 건물을 선택해 주세요.");
         return;
     }
+
     try {
         const res = await fetch("/api/building/compare-ppt", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ bd_numbers: ids })
+            body: JSON.stringify({ bd_numbers: normalizedIds })
         });
         if (!res.ok) throw new Error("download failed");
 
         const blob = await res.blob();
         const cd = res.headers.get("content-disposition") || "";
         const filenameStarMatch = cd.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-        const filenameMatch = cd.match(/filename\s*=\s*\"?([^\";]+)\"?/i);
+        const filenameMatch = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
         const filename = filenameStarMatch
             ? decodeURIComponent(filenameStarMatch[1])
             : (filenameMatch ? decodeURIComponent(filenameMatch[1]) : `[ERA]매물비교_${Date.now()}.pptx`);
@@ -2921,6 +3040,20 @@ async function downloadSelectedMatchPpt() {
         console.error(err);
         alert("매칭결과 자료 다운로드 중 오류가 발생했습니다.");
     }
+}
+
+async function downloadSelectedMatchPpt() {
+    await downloadMatchPptByBuildingIds(
+        Array.from(selectedMatchBuildingIds),
+        "먼저 매칭 결과에서 건물을 선택해 주세요."
+    );
+}
+
+async function downloadCustomSearchMatchPpt() {
+    await downloadMatchPptByBuildingIds(
+        customSearchSelectedBuildings.map(item => item.bd_number),
+        "먼저 커스텀 검색에서 건물을 선택해 주세요."
+    );
 }
 
 function renderCustomerMatchPagination(totalPages, currentPage) {
@@ -3582,11 +3715,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
     }
 
+    const customSearchDownloadBtn = document.getElementById("customSearchDownloadBtn");
+    if (customSearchDownloadBtn) {
+        customSearchDownloadBtn.addEventListener("click", downloadCustomSearchMatchPpt);
+    }
+    const customSearchClearBtn = document.getElementById("customSearchClearBtn");
+    if (customSearchClearBtn) {
+        customSearchClearBtn.addEventListener("click", clearCustomSearchSelectedBuildings);
+    }
+    renderCustomSearchSelectedBuildings();
+
     initializeMatchSectorToggles();
 
     const customerMatchSearchBtn = document.getElementById("customerMatchSearchBtn");
     if (customerMatchSearchBtn) {
         customerMatchSearchBtn.addEventListener("click", () => searchCustomerMatchBuildings(1));
+    }
+    const openCustomerCustomSearchBtn = document.getElementById("openCustomerCustomSearchBtn");
+    if (openCustomerCustomSearchBtn) {
+        openCustomerCustomSearchBtn.addEventListener("click", openCustomMatchSearchModal);
     }
     const customerMatchHistoryBtn = document.getElementById("customerMatchHistoryBtn");
     if (customerMatchHistoryBtn) {
