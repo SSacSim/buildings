@@ -8,6 +8,7 @@ import secrets
 import time
 import threading
 import requests
+from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_DOWN
 from urllib.parse import quote, unquote
 from xml.etree import ElementTree as ET
@@ -80,6 +81,12 @@ async def startup_background_jobs():
             """
             ALTER TABLE building_memo
             ADD COLUMN IF NOT EXISTS owned_properties_json TEXT;
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE building_info
+            ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT FALSE;
             """
         )
         conn.commit()
@@ -2404,6 +2411,79 @@ def _format_building_map_item(row: Dict[str, Any]) -> Dict[str, Any]:
     return item
 
 
+def _parse_history_write_time(raw_value: Any) -> Optional[datetime]:
+    text = re.sub(r"\s+", " ", str(raw_value or "").strip())
+    if not text:
+        return None
+
+    matched = re.match(
+        r"^(\d{2,4})-(\d{1,2})-(\d{1,2})(?:\s+(오전|오후))?(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?",
+        text,
+    )
+    if matched:
+        year = int(matched.group(1))
+        if year < 100:
+            year += 2000
+        month = int(matched.group(2))
+        day = int(matched.group(3))
+        period = matched.group(4)
+        hour = int(matched.group(5) or 0)
+        minute = int(matched.group(6) or 0)
+        second = int(matched.group(7) or 0)
+        if period == "오후" and hour < 12:
+            hour += 12
+        elif period == "오전" and hour == 12:
+            hour = 0
+        try:
+            return datetime(year, month, day, hour, minute, second)
+        except ValueError:
+            return None
+
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%y-%m-%d %H:%M", "%Y-%m-%d", "%y-%m-%d"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _format_favorite_building_item(row: Dict[str, Any]) -> Dict[str, Any]:
+    item = _format_building_map_item(row)
+    item.update(
+        {
+            "bd_number": row.get("bd_number"),
+            "address": row.get("address") or "",
+            "bd_name": row.get("bd_name") or "",
+            "sale_price": row.get("sale_price") or "",
+            "last_call_date": row.get("last_call_date") or "",
+            "grade_text": "".join(
+                str(value or "N" if value not in ("", None, "선택") else "N")
+                for value in [
+                    row.get("location_decide"),
+                    row.get("price_decide"),
+                    row.get("yield_decide"),
+                    row.get("vacancy_decide"),
+                    row.get("limit_decide"),
+                    row.get("loan_decide"),
+                ]
+            ),
+            "types": {
+                "신축부지": bool(row.get("is_new_site")),
+                "리모델링": bool(row.get("is_remodeling")),
+                "사옥형": bool(row.get("is_office_building")),
+                "수익형": bool(row.get("is_investment")),
+                "개발/전환": bool(row.get("is_development")),
+                "보유안정": bool(row.get("is_stable_holding")),
+            },
+        }
+    )
+    return item
+
+
 @app.get("/api/insight/overview")
 def get_insight_overview(
     address: str = Query(""),
@@ -2434,6 +2514,7 @@ def get_insight_overview(
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
     building_status: str = Query(""),
+    favorite_only: bool = Query(False),
     violation_flag: str = Query(""),
     customer_status: str = Query(""),
     location_decide: str = Query(""),
@@ -2879,6 +2960,9 @@ def get_insight_overview(
             building_sql += " AND COALESCE(bm.status, '') = %s"
             building_params.append(normalized_building_status)
 
+        if favorite_only:
+            building_sql += " AND COALESCE(bi.is_favorite, FALSE) = TRUE"
+
         normalized_violation_flag = (violation_flag or "").strip().upper()
         if normalized_violation_flag == "O":
             building_sql += " AND COALESCE(bi.is_violation_checked, FALSE) = TRUE"
@@ -3072,6 +3156,145 @@ def get_building_map_items(req: BuildingMapItemsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
+        if conn:
+            conn.close()
+
+
+@app.get("/api/buildings/favorites")
+def get_favorite_buildings(q: str = Query("")):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        DB_utils.ensure_building_geocode_cache_columns(conn, cur)
+
+        keyword = (q or "").strip()
+        params: List[Any] = []
+        keyword_sql = ""
+        if keyword:
+            keyword_like = f"%{keyword}%"
+            keyword_sql = """
+                AND (
+                    COALESCE(bi.address, '') ILIKE %s
+                    OR COALESCE(bi.address_detail, '') ILIKE %s
+                    OR COALESCE(bi.bd_name, '') ILIKE %s
+                )
+            """
+            params.extend([keyword_like, keyword_like, keyword_like])
+
+        cur.execute(
+            f"""
+            SELECT
+                bi.bd_number,
+                bi.bd_name,
+                bi.address,
+                bi.sale_price,
+                bm.status,
+                bi.location_decide,
+                bi.price_decide,
+                bi.yield_decide,
+                bi.vacancy_decide,
+                bi.limit_decide,
+                bi.loan_decide,
+                bi.is_new_site,
+                bi.is_remodeling,
+                bi.is_office_building,
+                bi.is_investment,
+                bi.is_development,
+                bi.is_stable_holding,
+                bi.kakao_lat,
+                bi.kakao_lng,
+                bi.kakao_geocode_status,
+                bi.kakao_geocode_address,
+                wh.wh_number,
+                wh.write_time
+            FROM building_info bi
+            LEFT JOIN building_memo bm
+              ON bi.bd_number = bm.bd_number
+            LEFT JOIN working_history wh
+              ON bi.bd_number = wh.bd_number
+             AND wh.delete_flag = FALSE
+            WHERE bi.delete_flag = FALSE
+              AND COALESCE(bi.is_favorite, FALSE) = TRUE
+              {keyword_sql}
+            ORDER BY bi.update_time DESC, bi.bd_number DESC, wh.wh_number DESC
+            """,
+            tuple(params),
+        )
+
+        columns = [desc[0] for desc in cur.description]
+        grouped: Dict[int, Dict[str, Any]] = {}
+        history_candidates: Dict[int, List[Tuple[int, datetime, int, str]]] = {}
+        for row in cur.fetchall():
+            record = dict(zip(columns, row))
+            bd_number = record.get("bd_number")
+            if bd_number is None:
+                continue
+            bd_key = int(bd_number)
+            if bd_key not in grouped:
+                grouped[bd_key] = record
+            write_time = str(record.get("write_time") or "").strip()
+            if not write_time:
+                continue
+            parsed = _parse_history_write_time(write_time)
+            wh_number = int(record.get("wh_number") or 0)
+            history_candidates.setdefault(bd_key, []).append(
+                (1 if parsed else 0, parsed or datetime.min, wh_number, write_time)
+            )
+
+        items: List[Dict[str, Any]] = []
+        for bd_key, row in grouped.items():
+            candidates = history_candidates.get(bd_key) or []
+            if candidates:
+                row["last_call_date"] = max(candidates, key=lambda item: (item[0], item[1], item[2]))[3]
+            else:
+                row["last_call_date"] = ""
+            items.append(_format_favorite_building_item(row))
+
+        return {"items": items, "total_count": len(items)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+@app.delete("/api/buildings/favorites/{bd_number:int}")
+def remove_favorite_building(bd_number: int):
+    conn = None
+    cur = None
+    try:
+        conn = DB_utils.join_db()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            UPDATE building_info
+            SET is_favorite = FALSE
+            WHERE bd_number = %s
+              AND delete_flag = FALSE
+            RETURNING bd_number
+            """,
+            (bd_number,),
+        )
+        updated = cur.fetchone()
+        if not updated:
+            raise HTTPException(status_code=404, detail="building not found")
+        conn.commit()
+        return {"ok": True, "bd_number": int(updated[0])}
+    except HTTPException:
+        if conn:
+            conn.rollback()
+        raise
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if cur:
+            cur.close()
         if conn:
             conn.close()
 
@@ -3378,6 +3601,7 @@ class BuildingCreate(BaseModel):
     is_investment :bool
     is_development :bool
     is_stable_holding :bool
+    is_favorite :bool = False
     is_violation_checked :bool = False
 
     memo :str 
@@ -3473,6 +3697,7 @@ async def create_building(data: BuildingCreate):
         'is_investment' :data.is_investment,
         'is_development' :data.is_development,
         'is_stable_holding' :data.is_stable_holding,
+        'is_favorite' :data.is_favorite,
         'is_violation_checked' :data.is_violation_checked
     }
 
@@ -3701,6 +3926,7 @@ async def update_building(bd_id: int, data: BuildingCreate):
         'is_investment' :data.is_investment,
         'is_development' :data.is_development,
         'is_stable_holding' :data.is_stable_holding,
+        'is_favorite' :data.is_favorite,
         'is_violation_checked' :data.is_violation_checked
     }
 

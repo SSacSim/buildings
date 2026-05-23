@@ -30,3 +30,10 @@ Backend/ppt/module/configuration.yaml
 
 
 Backend/backup/backup_state.json
+
+# Local/untracked workspace artifacts
+.claude/
+DB/build_ad_source_learning.py
+api_keys.local.json
+buildings.code-workspace
+registry_pdf_merged_current_only_20260427/

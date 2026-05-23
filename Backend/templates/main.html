@@ -23,6 +23,12 @@
                 🏢 건물 정보 대시보드
             </h1>
             <div class="flex items-center gap-2 shrink-0">
+                <button id="favoriteBuildingListBtn"
+                        type="button"
+                        style="order:-1;"
+                        class="inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-500 px-4 py-3 text-sm font-extrabold leading-none text-white shadow-sm hover:bg-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-200">
+                    관심 물건
+                </button>
                 <button id="openMainKakaoMapBtn" style="display:none;"
                         type="button"
                         aria-label="검색 결과 카카오 지도 보기"
@@ -95,7 +101,7 @@
     </div>
 
     <div class="space-y-2 text-[12px] text-slate-700">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
             <span class="w-16 font-semibold shrink-0">유형 조건:</span>
             <label><input type="checkbox" name="matchType" value="NEW_SITE"> 신축부지</label>
             <label><input type="checkbox" name="matchType" value="REMODELING"> 리모델링</label>
@@ -111,6 +117,9 @@
                 <option value="매각">매각</option>
                 <option value="보류">보류</option>
             </select>
+            <label class="ml-2 flex items-center gap-1 font-semibold text-amber-700">
+                <input id="matchFavoriteOnly" type="checkbox" class="accent-amber-500"> 관심물건
+            </label>
         </div>
 
         <div class="flex items-center gap-3">
@@ -255,6 +264,52 @@
                     class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
                 확인
             </button>
+        </div>
+    </div>
+</div>
+
+<div id="favoriteBuildingListModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/45 px-4">
+    <div class="w-[95vw] max-w-[1180px] max-h-[86vh] overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl">
+        <div class="flex items-center justify-between gap-2 bg-slate-800 px-3 py-2 text-white">
+            <div class="text-sm font-bold">관심물건 리스트</div>
+            <div class="flex items-center gap-1">
+                <button id="favoriteListKakaoBtn" type="button"
+                        class="rounded bg-yellow-400 px-3 py-1 text-[12px] font-black text-slate-900 hover:bg-yellow-300">
+                    카카오
+                </button>
+                <input id="favoriteListSearchInput" type="text"
+                       class="h-7 w-52 rounded border border-slate-600 px-2 text-[12px] text-slate-800 outline-none"
+                       placeholder="주소/건물명 검색">
+                <button id="favoriteListSearchBtn" type="button"
+                        class="rounded bg-slate-700 px-2 py-1 text-[12px] font-bold hover:bg-slate-600">
+                    [검색]
+                </button>
+                <button id="favoriteListAddBtn" type="button"
+                        class="rounded bg-slate-700 px-2 py-1 text-[12px] font-bold hover:bg-slate-600">
+                    [+ 추가]
+                </button>
+                <button id="favoriteListCloseBtn" type="button"
+                        class="ml-1 h-7 w-7 rounded bg-slate-700 text-sm font-bold hover:bg-slate-600">
+                    ×
+                </button>
+            </div>
+        </div>
+        <div class="max-h-[calc(86vh-44px)] overflow-auto bg-slate-50">
+            <table class="w-full min-w-[1000px] border-collapse text-[12px]">
+                <thead class="sticky top-0 z-10 bg-slate-100 text-slate-700">
+                    <tr class="border-b border-slate-300">
+                        <th class="w-14 border-r border-white px-2 py-2 font-bold">검색</th>
+                        <th class="w-14 border-r border-white px-2 py-2 font-bold">제거</th>
+                        <th class="border-r border-white px-2 py-2 font-bold">주소</th>
+                        <th class="w-44 border-r border-white px-2 py-2 font-bold">건물명</th>
+                        <th class="w-32 border-r border-white px-2 py-2 font-bold">매매가</th>
+                        <th class="w-36 border-r border-white px-2 py-2 font-bold">최종통화일</th>
+                        <th class="w-64 border-r border-white px-2 py-2 font-bold">유형</th>
+                        <th class="w-24 px-2 py-2 font-bold">등급</th>
+                    </tr>
+                </thead>
+                <tbody id="favoriteBuildingListBody" class="divide-y divide-white bg-slate-100"></tbody>
+            </table>
         </div>
     </div>
 </div>

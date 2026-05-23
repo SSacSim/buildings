@@ -776,7 +776,7 @@ def run(bd_number):
         gi12_13 =f"승용 {safe(gi12)}대 / 비상 {safe(gi13)}대"
 
     new_gi15 = safe(gi15).split(".")
-    if len(new_gi15) > 1 :
+    if len(new_gi15) > 2 :
         result_gi15 = f"{new_gi15[0]}년 {new_gi15[1]}월 {new_gi15[2]}일"
     else:
         result_gi15 = safe(gi15)

@@ -133,6 +133,10 @@
                     </label>
                 </div>
             </div>
+            <label class="flex items-center gap-1.5 ml-0 md:ml-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-[12px] text-amber-800 font-bold cursor-pointer whitespace-nowrap">
+                <input type="checkbox" id="is_favorite" name="is_favorite" class="w-3.5 h-3.5 accent-amber-500">
+                <span>관심물건</span>
+            </label>
 
         </div>
         <div class="flex flex-wrap items-center justify-end gap-2">
@@ -2888,6 +2892,7 @@
             'is_investment', 
             'is_development', 
             'is_stable_holding',
+            'is_favorite',
             'is_violation_checked'
         ];
         // 체크박스는 저장 시 true/false를 명시적으로 보내기 위해 DOM checked 값을 사용

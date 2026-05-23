@@ -63,6 +63,8 @@ let latestBuildingMapQueryKey = "";
 let latestBuildingMapCacheReady = false;
 let latestBuildingMapFetchPromise = null;
 let latestBuildingMapFetchSignal = null;
+let mainMapOverrideItems = null;
+let favoriteBuildingListRows = [];
 let hasExecutedBuildingSearch = false;
 let isMainTitleRefreshing = false;
 
@@ -409,6 +411,7 @@ function collectAdvancedFilters() {
         parking_min: numeric('matchParkingMin'),
         elevator_option: get('matchElevatorOption'),
         building_status: get('matchBuildingStatus'),
+        favorite_only: document.getElementById('matchFavoriteOnly')?.checked ? 'true' : '',
         violation_option: get('matchViolationOption'),
         location_decide: get('matchLocationDecide'),
         price_decide: get('matchPriceDecide'),
@@ -512,6 +515,9 @@ function buildMainSearchMapItems(items) {
 
 function updateMainSearchMapItems(items, options = {}) {
     const { isFullSet = false, queryKey = "" } = options;
+    if (!options.keepMapOverride) {
+        mainMapOverrideItems = null;
+    }
     latestBuildingMapItems = buildMainSearchMapItems(items);
     if (queryKey) {
         latestBuildingMapQueryKey = queryKey;
@@ -568,6 +574,7 @@ function buildAdvancedOverviewParams(advanced, category, page = 1, pageSize = 10
     if (advanced.road_width_min) params.set("road_width_min", advanced.road_width_min);
     if (advanced.parking_min) params.set("parking_min", advanced.parking_min);
     if (advanced.elevator_option) params.set("elevator_option", advanced.elevator_option);
+    if (advanced.favorite_only) params.set("favorite_only", "true");
 
     const mergedBuildingStatus = (advanced.building_status && advanced.building_status !== "?勳泊")
         ? advanced.building_status
@@ -689,15 +696,191 @@ async function loadMainSearchMapItems(force = false, options = {}) {
 }
 
 window.getMainSearchMapItems = function getMainSearchMapItems(options = {}) {
+    if (Array.isArray(mainMapOverrideItems)) {
+        return [...mainMapOverrideItems];
+    }
     return loadMainSearchMapItems(false, options);
 };
 
 window.getMainSearchMapItemCount = function getMainSearchMapItemCount() {
+    if (Array.isArray(mainMapOverrideItems)) {
+        return mainMapOverrideItems.length;
+    }
     if (currentSearchMode !== "building" || !hasExecutedBuildingSearch) return 0;
     const count = Number(currentBuildingTotalCount);
     if (Number.isFinite(count)) return Math.max(0, count);
     return latestBuildingMapItems.length;
 };
+
+function escapeMainHtml(value) {
+    return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+}
+
+function showFavoriteBuildingListModal() {
+    const modal = document.getElementById("favoriteBuildingListModal");
+    if (!modal) return;
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+}
+
+function hideFavoriteBuildingListModal() {
+    const modal = document.getElementById("favoriteBuildingListModal");
+    if (!modal) return;
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+}
+
+function getFavoriteListTypeHtml(types) {
+    const labels = ["신축부지", "리모델링", "사옥형", "수익형", "개발/전환", "보유안정"];
+    return labels.map((label) => {
+        const checked = Boolean(types && types[label]);
+        return `
+            <label class="inline-flex items-center gap-1 whitespace-nowrap">
+                <input type="checkbox" class="accent-blue-600" disabled ${checked ? "checked" : ""}>
+                <span>${label}</span>
+            </label>
+        `;
+    }).join("");
+}
+
+function renderFavoriteBuildingRows(rows) {
+    const body = document.getElementById("favoriteBuildingListBody");
+    if (!body) return;
+
+    const items = Array.isArray(rows) ? rows : [];
+    favoriteBuildingListRows = items;
+
+    if (!items.length) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="8" class="bg-white px-4 py-10 text-center text-sm text-slate-400">
+                    관심물건이 없습니다.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    body.innerHTML = items.map((item) => {
+        const bdNumber = Number(item.bd_number);
+        const safeBdNumber = Number.isFinite(bdNumber) ? bdNumber : 0;
+        const address = escapeMainHtml(item.address || "");
+        const bdName = escapeMainHtml(item.bd_name || "");
+        const salePrice = escapeMainHtml(item.sale_price || "");
+        const lastCallDate = escapeMainHtml(item.last_call_date || "");
+        const gradeText = escapeMainHtml(item.grade_text || "");
+        return `
+            <tr class="bg-slate-100 hover:bg-blue-50">
+                <td class="border-r border-white px-1.5 py-1.5 text-center">
+                    <button type="button" onclick="goToDetail('${safeBdNumber}')"
+                            class="rounded bg-blue-600 px-2 py-1 text-[11px] font-bold text-white hover:bg-blue-700">
+                        검색
+                    </button>
+                </td>
+                <td class="border-r border-white px-1.5 py-1.5 text-center">
+                    <button type="button" onclick="removeFavoriteBuilding(${safeBdNumber})"
+                            class="rounded bg-red-500 px-2 py-1 text-[11px] font-bold text-white hover:bg-red-600">
+                        제거
+                    </button>
+                </td>
+                <td class="border-r border-white px-2 py-1.5">
+                    <button type="button" onclick="goToDetail('${safeBdNumber}')"
+                            class="block w-full rounded border border-slate-200 bg-white px-2 py-1 text-left text-slate-700 hover:border-blue-300 hover:text-blue-600">
+                        ${address || "-"}
+                    </button>
+                </td>
+                <td class="border-r border-white px-2 py-1.5">
+                    <button type="button" onclick="goToDetail('${safeBdNumber}')"
+                            class="block w-full rounded border border-slate-200 bg-white px-2 py-1 text-left text-slate-700 hover:border-blue-300 hover:text-blue-600">
+                        ${bdName || "-"}
+                    </button>
+                </td>
+                <td class="border-r border-white px-2 py-1.5 text-right font-semibold">${salePrice || "-"}</td>
+                <td class="border-r border-white px-2 py-1.5 text-center font-bold text-blue-600">${lastCallDate}</td>
+                <td class="border-r border-white px-2 py-1.5">
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-700">
+                        ${getFavoriteListTypeHtml(item.types)}
+                    </div>
+                </td>
+                <td class="px-2 py-1.5 text-center font-black text-blue-700">${gradeText || "-"}</td>
+            </tr>
+        `;
+    }).join("");
+}
+
+async function loadFavoriteBuildingList() {
+    const body = document.getElementById("favoriteBuildingListBody");
+    const input = document.getElementById("favoriteListSearchInput");
+    const keyword = String(input?.value || "").trim();
+    if (body) {
+        body.innerHTML = `
+            <tr>
+                <td colspan="8" class="bg-white px-4 py-10 text-center text-sm text-slate-400">
+                    관심물건을 불러오는 중...
+                </td>
+            </tr>
+        `;
+    }
+
+    const params = new URLSearchParams();
+    if (keyword) params.set("q", keyword);
+    const url = params.toString() ? `/api/buildings/favorites?${params.toString()}` : "/api/buildings/favorites";
+
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error("favorite list failed");
+        const payload = await res.json();
+        renderFavoriteBuildingRows(Array.isArray(payload?.items) ? payload.items : []);
+    } catch (error) {
+        console.error(error);
+        if (body) {
+            body.innerHTML = `
+                <tr>
+                    <td colspan="8" class="bg-white px-4 py-10 text-center text-sm text-red-500">
+                        관심물건을 불러오지 못했습니다.
+                    </td>
+                </tr>
+            `;
+        }
+    }
+}
+
+async function openFavoriteBuildingList() {
+    showFavoriteBuildingListModal();
+    await loadFavoriteBuildingList();
+}
+
+async function removeFavoriteBuilding(bdNumber) {
+    const safeBdNumber = Number(bdNumber);
+    if (!Number.isFinite(safeBdNumber) || safeBdNumber <= 0) return;
+    if (!confirm("이 물건을 관심물건 리스트에서 제거하시겠습니까?")) return;
+
+    try {
+        const res = await fetch(`/api/buildings/favorites/${safeBdNumber}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("remove favorite failed");
+        favoriteBuildingListRows = favoriteBuildingListRows.filter((item) => Number(item.bd_number) !== safeBdNumber);
+        renderFavoriteBuildingRows(favoriteBuildingListRows);
+    } catch (error) {
+        console.error(error);
+        alert("관심물건 제거 중 오류가 발생했습니다.");
+    }
+}
+
+function openFavoriteBuildingKakaoMap() {
+    const rows = Array.isArray(favoriteBuildingListRows) ? favoriteBuildingListRows : [];
+    if (!rows.length) {
+        alert("지도에 표시할 관심물건이 없습니다.");
+        return;
+    }
+    mainMapOverrideItems = buildMainSearchMapItems(rows);
+    hideFavoriteBuildingListModal();
+    document.getElementById("openMainKakaoMapBtn")?.click();
+}
 
 function renderCustomerCards(data) {
     const list = document.getElementById('addressList');
@@ -862,6 +1045,7 @@ async function fetchBuildingsAdvanced(page, category) {
     if (advanced.road_width_min) params.set('road_width_min', advanced.road_width_min);
     if (advanced.parking_min) params.set('parking_min', advanced.parking_min);
     if (advanced.elevator_option) params.set('elevator_option', advanced.elevator_option);
+    if (advanced.favorite_only) params.set('favorite_only', 'true');
     const mergedBuildingStatus = (advanced.building_status && advanced.building_status !== '전체')
         ? advanced.building_status
         : (category || '');
@@ -1244,6 +1428,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const advResetBtn = document.getElementById('advancedFilterResetBtn');
     if (advResetBtn) advResetBtn.addEventListener('click', resetAdvancedFilters);
 
+    const favoriteListBtn = document.getElementById('favoriteBuildingListBtn');
+    if (favoriteListBtn) favoriteListBtn.addEventListener('click', openFavoriteBuildingList);
+
+    const favoriteListCloseBtn = document.getElementById('favoriteListCloseBtn');
+    if (favoriteListCloseBtn) favoriteListCloseBtn.addEventListener('click', hideFavoriteBuildingListModal);
+
+    const favoriteListSearchBtn = document.getElementById('favoriteListSearchBtn');
+    if (favoriteListSearchBtn) favoriteListSearchBtn.addEventListener('click', loadFavoriteBuildingList);
+
+    const favoriteListSearchInput = document.getElementById('favoriteListSearchInput');
+    if (favoriteListSearchInput) {
+        favoriteListSearchInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            loadFavoriteBuildingList();
+        });
+    }
+
+    const favoriteListAddBtn = document.getElementById('favoriteListAddBtn');
+    if (favoriteListAddBtn) favoriteListAddBtn.addEventListener('click', CreateBuilding);
+
+    const favoriteListKakaoBtn = document.getElementById('favoriteListKakaoBtn');
+    if (favoriteListKakaoBtn) favoriteListKakaoBtn.addEventListener('click', openFavoriteBuildingKakaoMap);
+
+    const favoriteListModal = document.getElementById('favoriteBuildingListModal');
+    if (favoriteListModal) {
+        favoriteListModal.addEventListener('click', (event) => {
+            if (event.target === favoriteListModal) hideFavoriteBuildingListModal();
+        });
+    }
+
     document.addEventListener('click', (event) => {
         const panel = document.getElementById('advancedFilterPanel');
         const toggle = document.getElementById('advancedFilterToggle');
@@ -1251,5 +1465,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (panel.classList.contains('-translate-x-full')) return;
         if (panel.contains(event.target) || toggle.contains(event.target)) return;
         closeAdvancedFilterPanel();
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        hideFavoriteBuildingListModal();
     });
 });

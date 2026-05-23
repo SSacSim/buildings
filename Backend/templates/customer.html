@@ -236,7 +236,7 @@
                     <p class="text-[12px] text-blue-600 font-bold">[매수 조건 - 실제 매칭 필드]</p>
                     
                     <div class="space-y-1.5 text-[13px] text-slate-700">
-                        <div class="flex items-center gap-2">
+                        <div class="flex flex-wrap items-center gap-2">
                             <span class="font-bold min-w-[70px]" data-match-sector="types">유형 조건:</span>
                             <div class="flex gap-3">
                                 <label class="flex items-center gap-1"><input type="checkbox" name="matchType" value="신축부지"> 신축부지</label>
@@ -254,6 +254,10 @@
                                 <option value="매각">매각</option>
                                 <option value="보류">보류</option>
                             </select>
+                            <span class="font-bold min-w-[70px] ml-3" data-match-sector="favorite">관심물건:</span>
+                            <label class="flex items-center gap-1 text-amber-700 font-semibold">
+                                <input id="matchFavoriteOnly" type="checkbox" class="accent-amber-500"> 관심물건만
+                            </label>
                             <span class="text-[11px] text-slate-400 ml-2">[중복선택 가능]</span>
                         </div>
 

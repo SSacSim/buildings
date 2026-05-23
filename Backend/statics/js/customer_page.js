@@ -24,6 +24,7 @@ let matchSectorToggleInitialized = false;
 const MATCH_SECTOR_KEY_FALLBACK = [
     "types",
     "building_status",
+    "favorite",
     "grade",
     "zoning",
     "usage",
@@ -2123,6 +2124,7 @@ function collectMatchConditions() {
         elevator_option: document.getElementById("matchElevatorOption")?.value || "",
         parking_min: document.getElementById("matchParkingMin")?.value || "",
         building_status: document.getElementById("matchBuildingStatus")?.value || "전체",
+        favorite_only: Boolean(document.getElementById("matchFavoriteOnly")?.checked),
         violation_option: document.getElementById("matchViolationOption")?.value || "전체",
         location_decide: document.getElementById("matchLocationDecide")?.value || "",
         price_decide: document.getElementById("matchPriceDecide")?.value || "",
@@ -2173,6 +2175,8 @@ function applyMatchConditions(saved) {
     setInputValue("matchElevatorOption", saved.elevator_option);
     setInputValue("matchParkingMin", saved.parking_min);
     setInputValue("matchBuildingStatus", saved.building_status || "전체");
+    const favoriteOnlyInput = document.getElementById("matchFavoriteOnly");
+    if (favoriteOnlyInput) favoriteOnlyInput.checked = saved.favorite_only === true || saved.favorite_only === "true";
     setInputValue("matchViolationOption", saved.violation_option || "전체");
     setInputValue("matchLocationDecide", saved.location_decide);
     setInputValue("matchPriceDecide", saved.price_decide);
@@ -2339,6 +2343,8 @@ function hasAnyMatchConditionValue(conditions) {
     if (!conditions || typeof conditions !== "object") return false;
     return Object.entries(conditions).some(([key, value]) => {
         if (Array.isArray(value)) return value.length > 0;
+        if (key === "favorite_only") return value === true || value === "true";
+        if (typeof value === "boolean") return value === true;
         if (key === "building_status" || key === "violation_option") return value && value !== "전체";
         return String(value ?? "").trim() !== "";
     });
@@ -2350,6 +2356,7 @@ function formatMatchHistorySummary(item) {
     if (c.address) parts.push(`주소:${c.address}`);
     if (c.business_area) parts.push(`상권:${c.business_area}`);
     if (Array.isArray(c.types) && c.types.length) parts.push(`유형:${c.types.join(",")}`);
+    if (c.favorite_only === true || c.favorite_only === "true") parts.push("관심물건");
     if (c.min_price || c.max_price) parts.push(`매매가:${c.min_price || "-"}~${c.max_price || "-"}`);
     if (c.min_yield) parts.push(`수익률>=${c.min_yield}%`);
     if (parts.length === 0) parts.push("조건 값 없음");
@@ -2371,6 +2378,7 @@ function getMatchHistoryDetailRows(conditions) {
     return [
         ["유형", Array.isArray(c.types) && c.types.length ? c.types.join(", ") : "-"],
         ["건물상태", c.building_status || "전체"],
+        ["관심물건", c.favorite_only === true || c.favorite_only === "true" ? "관심물건만" : "-"],
         ["등급조건", [
             c.location_decide || "입지",
             c.price_decide || "가격",
@@ -2427,6 +2435,7 @@ function getMatchHistoryCompareRows(conditions) {
     return [
         ["유형", Array.isArray(c.types) && c.types.length ? c.types.join(", ") : ""],
         ["건물상태", nonDefault(c.building_status, ["전체"])],
+        ["관심물건", c.favorite_only === true || c.favorite_only === "true" ? "관심물건만" : ""],
         ["등급조건", decideValues.join(" / ")],
         ["용도지역", Array.isArray(c.zoning_categories) && c.zoning_categories.length ? c.zoning_categories.join(", ") : ""],
         ["건축용도", Array.isArray(c.usage_categories) && c.usage_categories.length ? c.usage_categories.join(", ") : ""],
@@ -3348,6 +3357,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     const elevatorOptionInput = document.getElementById("matchElevatorOption");
     const parkingMinInput = document.getElementById("matchParkingMin");
     const buildingStatusInput = document.getElementById("matchBuildingStatus");
+    const favoriteOnlyInput = document.getElementById("matchFavoriteOnly");
     const violationOptionInput = document.getElementById("matchViolationOption");
     const locationDecideInput = document.getElementById("matchLocationDecide");
     const priceDecideInput = document.getElementById("matchPriceDecide");
@@ -3412,6 +3422,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     const roadWidthMin = roadWidthMinRaw ? Number(roadWidthMinRaw) : null;
     const parkingMin = parkingMinRaw ? Number(parkingMinRaw) : null;
     const buildingStatus = (buildingStatusInput?.value || "전체").trim();
+    const favoriteOnly = Boolean(favoriteOnlyInput?.checked);
     const violationOption = (violationOptionInput?.value || "전체").trim().toUpperCase();
     const locationDecide = (locationDecideInput?.value || "").trim();
     const priceDecide = (priceDecideInput?.value || "").trim();
@@ -3451,6 +3462,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     const hasParkingMin = isMatchSectorActive("parking") && parkingMin !== null && !Number.isNaN(parkingMin);
 
     const hasBuildingStatus = isMatchSectorActive("building_status") && buildingStatus && buildingStatus !== "전체";
+    const hasFavoriteOnly = isMatchSectorActive("favorite") && favoriteOnly;
     const hasViolationOption = isMatchSectorActive("violation") && violationOption && violationOption !== "전체";
     const hasLocationDecide = isMatchSectorActive("grade") && Boolean(locationDecide);
     const hasPriceDecide = isMatchSectorActive("grade") && Boolean(priceDecide);
@@ -3490,6 +3502,7 @@ async function searchCustomerMatchBuildings(page = 1) {
         || hasElevatorOption
         || hasParkingMin
         || hasBuildingStatus
+        || hasFavoriteOnly
         || hasViolationOption
         || hasLocationDecide
         || hasPriceDecide
@@ -3539,6 +3552,7 @@ async function searchCustomerMatchBuildings(page = 1) {
     if (hasElevatorOption) params.set("elevator_option", elevatorOption);
     if (hasParkingMin) params.set("parking_min", String(parkingMin));
     if (hasBuildingStatus) params.set("building_status", buildingStatus);
+    if (hasFavoriteOnly) params.set("favorite_only", "true");
     if (hasViolationOption) params.set("violation_flag", violationOption);
     if (hasLocationDecide) params.set("location_decide", locationDecide);
     if (hasPriceDecide) params.set("price_decide", priceDecide);

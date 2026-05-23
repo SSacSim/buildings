@@ -1174,6 +1174,7 @@ def customer_match_search(
     road_width_min: Optional[float] = Query(None),
     elevator_option: str = Query(""),
     building_status: str = Query(""),
+    favorite_only: bool = Query(False),
     violation_flag: str = Query(""),
     location_decide: str = Query(""),
     price_decide: str = Query(""),
@@ -1493,6 +1494,9 @@ def customer_match_search(
             sql += " AND COALESCE(bm.status, '') = %s"
             params.append(normalized_building_status)
 
+        if favorite_only:
+            sql += " AND COALESCE(bi.is_favorite, FALSE) = TRUE"
+
         normalized_violation_flag = (violation_flag or "").strip().upper()
         if normalized_violation_flag == "O":
             sql += " AND COALESCE(bi.is_violation_checked, FALSE) = TRUE"
@@ -1600,6 +1604,7 @@ def customer_match_search(
         has_road_width = road_width_min is not None
         has_elevator_option = normalized_elevator_option in ("있음", "없음")
         has_building_status = normalized_building_status and normalized_building_status != "전체"
+        has_favorite_only = bool(favorite_only)
         has_location_decide = bool(normalized_location_decide)
         has_price_decide = bool(normalized_price_decide)
         has_yield_decide = bool(normalized_yield_decide)
@@ -1632,6 +1637,7 @@ def customer_match_search(
             or has_road_width
             or has_elevator_option
             or has_building_status
+            or has_favorite_only
             or has_location_decide
             or has_price_decide
             or has_yield_decide

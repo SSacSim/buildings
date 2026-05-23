@@ -81,6 +81,10 @@
                         <option value="완료">완료</option>
                         <option value="보류">보류</option>
                     </select>
+                    <span id="matchFavoriteLabel" class="font-bold min-w-[70px] ml-3">관심물건:</span>
+                    <label class="flex items-center gap-1 text-amber-700 font-semibold">
+                        <input id="matchFavoriteOnly" type="checkbox" class="accent-amber-500"> 관심물건만
+                    </label>
                 </div>
 
                 <div class="flex items-center gap-2 flex-wrap">
@@ -512,6 +516,7 @@
         const INSIGHT_SECTOR_KEYS = [
             "types",
             "building_status",
+            "favorite",
             "customer_status",
             "grade",
             "zoning",
@@ -565,6 +570,7 @@
             return {
                 types: () => typeInput?.closest("div")?.querySelector("span.font-bold") || null,
                 building_status: () => findPreviousBoldSpan(document.getElementById("matchBuildingStatus")),
+                favorite: () => document.getElementById("matchFavoriteLabel"),
                 customer_status: () => findPreviousBoldSpan(document.getElementById("matchCustomerStatus")),
                 grade: () => findPreviousBoldSpan(document.getElementById("matchLocationDecide")),
                 zoning: () => zoningInput?.closest("div")?.querySelector("span.font-bold") || null,
@@ -1352,6 +1358,7 @@
             const cashHoldPercent = cashHoldPercentRaw ? Number(cashHoldPercentRaw) : null;
             const elevatorOption = (document.getElementById("matchElevatorOption")?.value || "").trim();
             const buildingStatus = (document.getElementById("matchBuildingStatus")?.value || "전체").trim();
+            const favoriteOnly = Boolean(document.getElementById("matchFavoriteOnly")?.checked);
             const violationOption = (document.getElementById("matchViolationOption")?.value || "전체").trim().toUpperCase();
             const customerStatus = (document.getElementById("matchCustomerStatus")?.value || "전체").trim();
             const locationDecide = (document.getElementById("matchLocationDecide")?.value || "").trim();
@@ -1413,6 +1420,7 @@
             if (isInsightSectorActive("cash_hold") && cashHoldPercent !== null && !Number.isNaN(cashHoldPercent)) params.set("cash_hold_percent", String(cashHoldPercent));
             if (isInsightSectorActive("elevator") && elevatorOption) params.set("elevator_option", elevatorOption);
             if (isInsightSectorActive("building_status") && buildingStatus && buildingStatus !== "전체") params.set("building_status", buildingStatus);
+            if (isInsightSectorActive("favorite") && favoriteOnly) params.set("favorite_only", "true");
             if (isInsightSectorActive("violation") && violationOption && violationOption !== "전체") params.set("violation_flag", violationOption);
             if (isInsightSectorActive("customer_status") && customerStatus && customerStatus !== "전체") params.set("customer_status", customerStatus);
             if (isInsightSectorActive("grade") && locationDecide) params.set("location_decide", locationDecide);
