@@ -1613,6 +1613,229 @@
         }
     }
 
+    const AUTO_HISTORY_TYPE_FIELDS = [
+        { key: "is_office_building", label: "사옥형" },
+        { key: "is_remodeling", label: "리모델링" },
+        { key: "is_new_site", label: "신축부지" },
+        { key: "is_investment", label: "수익형" },
+        { key: "is_development", label: "개발/전환" },
+        { key: "is_stable_holding", label: "보유안정" }
+    ];
+
+    const AUTO_HISTORY_FIELD_DEFS = [
+        { key: "status", label: "상태", kind: "text" },
+        { key: "__types", label: "유형", kind: "types" },
+        { key: "is_favorite", label: "관심물건", kind: "boolean" },
+        { key: "location_decide", label: "입지", kind: "text", emptyValues: ["", "선택", "0", "0.0", "NaN", "-"] },
+        { key: "price_decide", label: "가격", kind: "text", emptyValues: ["", "선택", "0", "0.0", "NaN", "-"] },
+        { key: "yield_decide", label: "수익률 판단", kind: "text", emptyValues: ["", "선택", "0", "0.0", "NaN", "-"] },
+        { key: "vacancy_decide", label: "명도", kind: "text", emptyValues: ["", "선택", "0", "0.0", "NaN", "-"] },
+        { key: "limit_decide", label: "제한", kind: "text", emptyValues: ["", "선택", "0", "0.0", "NaN", "-"] },
+        { key: "loan_decide", label: "대출 상태", kind: "text", emptyValues: ["", "선택", "0", "0.0", "NaN", "-"] },
+        { key: "bd_name", label: "건물명", kind: "text" },
+        { key: "address", label: "주소", kind: "text" },
+        { key: "address_detail", label: "상세주소", kind: "text" },
+        { key: "nearby_station", label: "주변역", kind: "text" },
+        { key: "site_location", label: "상권", kind: "text" },
+        { key: "deposit_price", label: "입금가", kind: "text" },
+        { key: "other_sale_price", label: "기타 매매가", kind: "text" },
+        { key: "sale_price", label: "매매가", kind: "text" },
+        { key: "yield_rate", label: "수익률", kind: "text" },
+        { key: "security_deposit", label: "보증금", kind: "text" },
+        { key: "price_per_pyeong", label: "토지면적당 단가", kind: "text" },
+        { key: "monthly_rent_fee", label: "월임대료", kind: "text" },
+        { key: "price_per_total_floor_area", label: "연면적당 단가", kind: "text" },
+        { key: "maintenance_fee", label: "관리비", kind: "text" },
+        { key: "maintenance_expense", label: "관리비 지출", kind: "text" },
+        { key: "loan_status", label: "대출현황", kind: "text" },
+        { key: "client_name", label: "고객명", kind: "text" },
+        { key: "mobile_phone", label: "연락처", kind: "text" },
+        { key: "email", label: "이메일", kind: "text" },
+        { key: "office_phone", label: "회사전화", kind: "text" },
+        { key: "home_phone", label: "자택전화", kind: "text" },
+        { key: "orientation", label: "기타전화", kind: "text" },
+        { key: "etc_memo", label: "비고", kind: "text" },
+        { key: "memo", label: "통합 상세 메모", kind: "text" },
+        { key: "owned_properties_json", label: "보유 부동산", kind: "owned" }
+    ];
+
+    let detailAutoHistoryInitialState = {};
+
+    function toAutoHistoryBool(value) {
+        return value === true || value === "true" || value === 1 || value === "1" || value === "on" || value === "ON";
+    }
+
+    function compactAutoHistoryText(value, maxLength = 120) {
+        const text = String(value || "").replace(/\s+/g, " ").trim();
+        if (text.length <= maxLength) return text;
+        return `${text.slice(0, maxLength - 3)}...`;
+    }
+
+    function normalizeAutoHistoryText(value, def = {}) {
+        const text = String(normalizeTextValue(value ?? "") ?? "").trim();
+        const emptyValues = def.emptyValues || ["", "0", "0.0", "NaN", "-"];
+        if (emptyValues.includes(text)) return "";
+        return text;
+    }
+
+    function parseAutoHistoryOwnedRows(value) {
+        let parsed = value;
+        if (typeof value === "string") {
+            try {
+                parsed = value ? JSON.parse(value) : [];
+            } catch (e) {
+                parsed = [];
+            }
+        }
+
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .map(row => ({
+                bd_number: row?.bd_number !== null && row?.bd_number !== undefined ? String(row.bd_number).trim() : "",
+                address: String(row?.address || "").trim(),
+                bd_name: String(row?.bd_name || "").trim()
+            }))
+            .filter(row => row.bd_number || row.address || row.bd_name);
+    }
+
+    function formatAutoHistoryOwnedValue(value) {
+        const rows = parseAutoHistoryOwnedRows(value);
+        if (!rows.length) return { display: "", compare: "" };
+
+        const names = rows.map(row => row.bd_name || row.address || row.bd_number).filter(Boolean);
+        const preview = names.slice(0, 2).join(", ");
+        const suffix = rows.length > 2 ? ` 외 ${rows.length - 2}건` : "";
+        const display = preview ? `${rows.length}건 (${preview}${suffix})` : `${rows.length}건`;
+        return {
+            display,
+            compare: JSON.stringify(rows)
+        };
+    }
+
+    function getAutoHistoryTypeLabels(source = {}) {
+        return AUTO_HISTORY_TYPE_FIELDS
+            .filter(item => toAutoHistoryBool(source?.[item.key]))
+            .map(item => item.label);
+    }
+
+    function formatAutoHistoryValue(def, value, source = {}) {
+        if (def.kind === "types") {
+            const labels = getAutoHistoryTypeLabels(source);
+            return {
+                display: labels.join(", "),
+                compare: labels.join("|")
+            };
+        }
+
+        if (def.kind === "boolean") {
+            const display = toAutoHistoryBool(value) ? "ON" : "OFF";
+            return { display, compare: display };
+        }
+
+        if (def.kind === "owned") {
+            return formatAutoHistoryOwnedValue(value);
+        }
+
+        const text = normalizeAutoHistoryText(value, def);
+        if (!text) return { display: "", compare: "" };
+        return {
+            display: compactAutoHistoryText(text),
+            compare: text
+        };
+    }
+
+    function hasAutoHistoryOriginalValue(def, source) {
+        if (!source || typeof source !== "object") return false;
+
+        if (def.kind === "types") {
+            return getAutoHistoryTypeLabels(source).length > 0;
+        }
+
+        if (!Object.prototype.hasOwnProperty.call(source, def.key)) return false;
+
+        if (def.kind === "boolean") {
+            const value = source[def.key];
+            return value !== null && value !== undefined && String(value).trim() !== "";
+        }
+
+        return formatAutoHistoryValue(def, source[def.key], source).compare !== "";
+    }
+
+    function readAutoHistoryDomValue(key) {
+        if (key === "owned_properties_json") {
+            return serializeDetailOwnedRows();
+        }
+
+        const element = document.getElementById(key);
+        if (!element) return undefined;
+        if (element.type === "checkbox") return Boolean(element.checked);
+        return element.value;
+    }
+
+    function buildAutoHistoryDomSource() {
+        const source = {};
+        AUTO_HISTORY_TYPE_FIELDS.forEach(item => {
+            source[item.key] = readAutoHistoryDomValue(item.key);
+        });
+        AUTO_HISTORY_FIELD_DEFS.forEach(def => {
+            if (def.kind !== "types") {
+                source[def.key] = readAutoHistoryDomValue(def.key);
+            }
+        });
+        return source;
+    }
+
+    function captureAutoHistoryState(source = {}, originalSource = source) {
+        return AUTO_HISTORY_FIELD_DEFS.reduce((state, def) => {
+            const value = def.kind === "types" ? null : source?.[def.key];
+            state[def.key] = {
+                ...formatAutoHistoryValue(def, value, source),
+                hasOriginal: hasAutoHistoryOriginalValue(def, originalSource)
+            };
+            return state;
+        }, {});
+    }
+
+    function resetDetailAutoHistoryInitialState(originalSource = null) {
+        detailAutoHistoryInitialState = captureAutoHistoryState(
+            buildAutoHistoryDomSource(),
+            originalSource
+        );
+    }
+
+    function setDetailAutoHistoryInitialStateFromData(data) {
+        detailAutoHistoryInitialState = captureAutoHistoryState(data, data);
+    }
+
+    function formatAutoHistoryChangeLine(def, previous, next) {
+        if (!previous?.hasOriginal && !next.display) return "";
+
+        const afterText = next.display || "(없음)";
+        if (previous?.hasOriginal) {
+            const beforeText = previous.display || "(없음)";
+            return `${def.label} : ${beforeText} -> ${afterText}`;
+        }
+        return `${def.label} : ${afterText}`;
+    }
+
+    function buildAutoHistoryEntry(updatedData) {
+        const nextState = captureAutoHistoryState(updatedData, updatedData);
+        const lines = AUTO_HISTORY_FIELD_DEFS.map(def => {
+            const previous = detailAutoHistoryInitialState[def.key] || { display: "", compare: "", hasOriginal: false };
+            const next = nextState[def.key] || { display: "", compare: "", hasOriginal: false };
+            if (previous.compare === next.compare) return "";
+            return formatAutoHistoryChangeLine(def, previous, next);
+        }).filter(Boolean);
+
+        if (!lines.length) return null;
+
+        return {
+            writer: getDefaultHistoryWriter() || "자동기록",
+            write_time: formatHistoryWriteTime(new Date()),
+            memo: lines.join("\n")
+        };
+    }
+
     const DETAIL_OWNED_BUILDING_SEARCH_PAGE_SIZE = 30;
     const DETAIL_OWNED_BUILDING_SEARCH_PAGE_GROUP_SIZE = 5;
     let detailCustomerInfoTab = "customer";
@@ -2200,6 +2423,15 @@
             .replace(/>/g, "&gt;");
     }
 
+    function escapeHistoryHtml(value) {
+        return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     function applyDefaultHistoryWriterToOpenInputs() {
         const defaultWriter = getDefaultHistoryWriter();
         if (!defaultWriter) return;
@@ -2705,12 +2937,14 @@
     async function loadBuildingDetail() {
         const pathSegments = window.location.pathname.split('/');
         const bd_number = pathSegments[pathSegments.length - 1];
+        let loadedInfoData = null;
 
         try {
             const res = await fetch(`/api/building/${bd_number}`);
             const item = await res.json();
             
             if (item.info_data) {
+                loadedInfoData = item.info_data;
                 Object.entries(item.info_data).forEach(([key, value]) => {
                     
                     // --- 다중 선택 필드(용도, 구조 등) 공통 처리 ---
@@ -2867,6 +3101,7 @@
         renderNearbyStation2RowsFromHidden();
         renderViolationRowsFromHidden();
         PREVIEW_SECTION_ORDER.forEach(renderMainBox);
+        resetDetailAutoHistoryInitialState(loadedInfoData);
     }
     // 페이지가 열리면 로그인 사용자 정보 + Detail 정보를 순서대로 로드
     window.onload = async () => {
@@ -2924,8 +3159,12 @@
         /* ===============================
         진행 이력
         =============================== */
-        updatedData.history_data = getCurrentHistoryData();
         updatedData.owned_properties_json = serializeDetailOwnedRows();
+        const currentHistoryData = getCurrentHistoryData();
+        const autoHistoryEntry = buildAutoHistoryEntry(updatedData);
+        updatedData.history_data = autoHistoryEntry
+            ? [autoHistoryEntry, ...currentHistoryData]
+            : currentHistoryData;
 
         /* ===============================
         이미지 메타 정보 (개수만)
@@ -2957,6 +3196,10 @@
 
             const result = await res.json();
             const savedBdNumber = isNew ? result.bd_number : bd_number;
+            if (autoHistoryEntry) {
+                renderHistoryItem(autoHistoryEntry, { prepend: true });
+            }
+            setDetailAutoHistoryInitialStateFromData(updatedData);
 
             // ✅ JSON 저장 성공 후 이미지 업로드
             await uploadBuildingImages(savedBdNumber);
@@ -3322,9 +3565,11 @@
         const defaultWriter = getDefaultHistoryWriter();
         const resolvedWriter = String(writer || "").trim() || defaultWriter;
         const safeWriter = escapeHistoryWriterAttr(resolvedWriter);
+        const safeTime = escapeHistoryHtml(time);
+        const safeContent = escapeHistoryHtml(content);
         return `
             <div class="flex justify-between items-center font-bold text-emerald-700 mb-2">
-                <span>${time}</span>
+                <span>${safeTime}</span>
                 <div class="flex gap-1.5 items-center">
                     <input type="text"
                         value="${safeWriter}"
@@ -3346,18 +3591,19 @@
             <textarea
                 placeholder="진행 내용을 입력하세요..."
                 class="h_memo w-full max-w-full p-2 bg-white border border-slate-300 outline-none text-[12px] resize-y overflow-auto rounded-md h-16 min-h-[4rem] shadow-inner"
-            >${content}</textarea>
+            >${safeContent}</textarea>
         `;
     }
+
+    function formatHistoryWriteTime(date = new Date()) {
+        return `${date.getFullYear().toString().slice(-2)}-${(date.getMonth()+1)
+            .toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')} ${date.getHours() >= 12 ? '오후' : '오전'} ${date.getHours() % 12 || 12}:${date.getMinutes().toString().padStart(2, '0')}`;
+    }
+
     // 1. 행 추가 함수
     function addHistoryRow() {
         const historyList = document.getElementById('history-list');
-        const now = new Date();
-
-        const dateStr = `${now.getFullYear().toString().slice(-2)}-${(now.getMonth()+1)
-            .toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}
-            ${now.getHours() >= 12 ? '오후' : '오전'}
-            ${now.getHours() % 12 || 12}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const dateStr = formatHistoryWriteTime(new Date());
 
         const newRow = document.createElement('div');
         newRow.className =
@@ -3382,19 +3628,22 @@
         }
 
         row.className = "history-row py-2 border-b border-slate-200 group";
+        const safeTime = escapeHistoryHtml(time);
+        const safeWriter = escapeHistoryHtml(writer);
+        const safeContent = escapeHistoryHtml(content);
 
         row.innerHTML = `
             <div class="flex justify-between font-bold text-blue-600">
                 <div class="flex items-center gap-2">
-                    <span class="h_time">${time}</span>
+                    <span class="h_time">${safeTime}</span>
                     <button type="button" onclick="editHistory(this)"
                         class="text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[수정]</button>
                     <button type="button" onclick="deleteHistory(this)"
                         class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[삭제]</button>
                 </div>
-                <span class="h_writer">${writer}</span>
+                <span class="h_writer">${safeWriter}</span>
             </div>
-            <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${content}</p>
+            <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${safeContent}</p>
         `;
 
         try {
@@ -3449,7 +3698,7 @@
 
     
     // 서버에서 받아온 데이터를 화면에 뿌려주는 함수
-    function renderHistoryItem(data) {
+    function renderHistoryItem(data, options = {}) {
         const historyList = document.getElementById('history-list');
         const newRow = document.createElement('div');
         
@@ -3459,21 +3708,27 @@
         const writer = data.writer || '알 수 없음';
         const time = data.write_time || '';
         const memo = data.memo || '';
+        const safeWriter = escapeHistoryHtml(writer);
+        const safeTime = escapeHistoryHtml(time);
+        const safeMemo = escapeHistoryHtml(memo);
 
         newRow.innerHTML = `
             <div class="flex justify-between font-bold text-blue-600">
                 <div class="flex items-center gap-2">
-                    <span class="h_time">${time}</span>
+                    <span class="h_time">${safeTime}</span>
                     <button type="button" onclick="editHistory(this)" class="text-blue-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[수정]</button>
                     <button type="button" onclick="deleteHistory(this)" class="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity text-[10px]">[삭제]</button>
                 </div>
-                <span class="h_writer">${writer}</span>
+                <span class="h_writer">${safeWriter}</span>
             </div>
-            <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${memo}</p>
+            <p class="whitespace-pre-line h_memo mt-1 text-slate-700 leading-relaxed text-[12px]">${safeMemo}</p>
         `;
 
-        historyList.appendChild(newRow); 
-        // 만약 최신글이 위로 오게 하고 싶다면 appendChild 대신 insertBefore(newRow, historyList.firstChild)를 사용하세요.
+        if (options.prepend && historyList.firstChild) {
+            historyList.insertBefore(newRow, historyList.firstChild);
+        } else {
+            historyList.appendChild(newRow);
+        }
     }
 
     let introCustomerRows = [];
